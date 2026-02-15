@@ -1,0 +1,6 @@
+[submodule "api"]
+	path = api
+	url = git@github.com:RalphBrabante/biz-assistant-api-service-v3.git
+[submodule "client"]
+	path = client
+	url = git@github.com:RalphBrabante/biz-assistant-client-v3.git
