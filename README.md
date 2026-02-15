@@ -1,42 +1,220 @@
-# Docker Workspace Scaffold
+# Biz Assistant Workspace v3
 
-This workspace includes the following services:
-- MySQL
-- Node.js + Express API
-- RabbitMQ (AMQP)
-- Redis
-- Angular client
-- Nginx reverse proxy
+Dockerized full-stack workspace for Biz Assistant with a reverse-proxied Angular client, Express API, MySQL, Redis, RabbitMQ, and optional phpMyAdmin in dev mode.
 
-## Quick Start
+## What This Repository Contains
 
-1. Copy env file:
+This repository is the **workspace/orchestration repo**.
+
+- `api/` is a git submodule: `git@github.com:RalphBrabante/biz-assistant-api-service-v3.git`
+- `client/` is a git submodule: `git@github.com:RalphBrabante/biz-assistant-client-v3.git`
+- root repo (this one): `git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git`
+
+## Stack
+
+- **Client**: Angular 18 (standalone/component-based), Bootstrap 5, Bootstrap Icons
+- **API**: Node.js + Express + Sequelize + MySQL
+- **Infra**: Nginx, MySQL 8.4, Redis 7, RabbitMQ 3 (management UI)
+- **Dev DB UI**: phpMyAdmin (enabled via dev override compose file)
+
+## Architecture
+
+- Nginx listens on `http://localhost`
+- Nginx routes:
+  - `/` -> Angular client (`client:4200`)
+  - `/api/*` -> API (`api:3000`)
+  - `/db/` -> phpMyAdmin (`phpmyadmin:80`) in dev compose mode only
+- API connects to:
+  - MySQL (`mysql:3306`)
+  - Redis (`redis:6379`)
+  - RabbitMQ (`amqp:5672`)
+
+## Prerequisites
+
+- Docker Desktop (or Docker Engine + Compose v2)
+- Git
+- Open ports: `80`, `3000`, `3306`, `6379`, `5672`, `15672`
+
+## First-Time Setup
+
+1. Clone workspace and submodules:
+
+```bash
+git clone git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git
+cd biz-assistant-worskpace-v3
+git submodule update --init --recursive
+```
+
+2. Create env file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Build and start all services:
+3. Start containers:
 
 ```bash
 docker compose up --build
 ```
 
-Dev mode with phpMyAdmin at `/db`:
+## Run Modes
+
+### Standard Mode
+
+```bash
+docker compose up --build
+```
+
+### Dev Mode (with phpMyAdmin at `/db`)
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-3. Access services:
-- App via Nginx: http://localhost
-- phpMyAdmin via Nginx (dev override): http://localhost/db/
-- API direct: http://localhost:3000
-- API health: http://localhost:3000/health
-- RabbitMQ management: http://localhost:15672
-- MySQL: localhost:3306
-- Redis: localhost:6379
+## Service URLs
+
+- App (via Nginx): `http://localhost`
+- API (direct): `http://localhost:3000`
+- API health: `http://localhost:3000/health`
+- RabbitMQ management: `http://localhost:15672`
+- phpMyAdmin (dev mode only): `http://localhost/db/`
+- MySQL host port: `localhost:3306`
+- Redis host port: `localhost:6379`
+
+## Default Credentials / Environment
+
+From `.env.example`:
+
+- MySQL root password: `rootpassword`
+- MySQL DB: `appdb`
+- MySQL user/password: `appuser` / `apppassword`
+- RabbitMQ user/password: `guest` / `guest`
+
+## Database Lifecycle
+
+When API container starts, it runs:
+
+1. `npm install`
+2. `npm run db:create` (non-fatal if already exists)
+3. `npm run db:migrate`
+4. `npm run dev`
+
+This is configured in `docker-compose.yml` under API `command`.
+
+## Useful Commands
+
+### Start / Stop
+
+```bash
+# Start (detached)
+docker compose up -d --build
+
+# Stop
+docker compose down
+
+# Stop and remove volumes (destructive)
+docker compose down -v
+```
+
+### Logs
+
+```bash
+docker compose logs -f
+docker compose logs -f api
+docker compose logs -f client
+docker compose logs -f mysql
+```
+
+### Rebuild a single service
+
+```bash
+docker compose up -d --build api
+docker compose up -d --build client
+```
+
+### Execute commands inside containers
+
+```bash
+docker compose exec api sh
+docker compose exec client sh
+docker compose exec mysql sh
+```
+
+## Submodule Workflow
+
+If `api` or `client` looks empty or detached:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+To pull latest in submodules:
+
+```bash
+cd api && git pull
+cd ../client && git pull
+```
+
+Then commit submodule pointer updates in root repo:
+
+```bash
+cd ..
+git add api client
+git commit -m "Update api/client submodule pointers"
+git push
+```
+
+## Postman Collection
+
+- Workspace collection file: `postman/gimo-api.postman_collection.json`
+
+## Troubleshooting
+
+### 1) MySQL fails with `Failed to initialize DD Storage Engine`
+
+Usually a corrupted or incompatible MySQL data volume.
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+If using dev override, apply both files in commands.
+
+### 2) `Cannot connect to /db`
+
+Use dev compose mode:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+### 3) API says models are not ready
+
+Wait until MySQL healthcheck passes and migrations complete, then retry.
+
+### 4) Client reflects stale UI
+
+```bash
+docker compose up -d --build client
+```
+
+## Repository Layout
+
+```text
+.
+├── api/                     # API submodule (Express + Sequelize)
+├── client/                  # Client submodule (Angular)
+├── nginx/                   # Nginx configs (standard + dev)
+├── postman/                 # Postman collection
+├── docker-compose.yml       # Base stack
+├── docker-compose.dev.yml   # Dev overrides (phpMyAdmin + dev nginx)
+└── .env.example
+```
 
 ## Notes
-- Nginx proxies `/` to Angular (`client:4200`) and `/api/*` to Express (`api:3000`).
-- Angular is configured for containerized dev mode (`ng serve --host 0.0.0.0`).
+
+- `api/node_modules` is volume-mounted (`api_node_modules`) for faster containerized dev.
+- MySQL data is persisted in Docker volume `mysql_data`.
+- Redis and RabbitMQ data are also persisted via named volumes.
