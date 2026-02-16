@@ -119,7 +119,7 @@ services:
     volumes:
       - ./client:/usr/src/app
       - client_node_modules:/usr/src/app/node_modules
-    command: sh -c "npm run build -- --configuration production --watch"
+    command: sh -c "npm install --no-audit --fund=false --include=optional && npm install --no-save @rollup/rollup-linux-x64-gnu && npm run build -- --configuration production --watch"
     mem_limit: 320m
     cpus: 0.20
     networks:
