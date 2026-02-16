@@ -23,6 +23,8 @@ coverage/
 
 # Node modules in root (if any)
 node_modules/
+package-lock.json
+**/package-lock.json
 
 # Docker local overrides
 docker-compose.override.yml
