@@ -1,28 +1,4 @@
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-appdb}
-      MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
-    expose:
-      - "3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/conf.d/my.cnf:/etc/mysql/conf.d/zzz-tuned.cnf:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    mem_limit: 384m
-    cpus: 0.45
-    networks:
-      - backend
-
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -75,11 +51,11 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=256}
       PORT: 3000
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_USER: ${MYSQL_USER:-appuser}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
-      DB_NAME: ${MYSQL_DATABASE:-appdb}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
       REDIS_URL: redis://redis:6379
       AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@amqp:5672
       DB_POOL_MAX: ${DB_POOL_MAX:-4}
@@ -88,16 +64,32 @@ services:
       DB_POOL_IDLE_MS: ${DB_POOL_IDLE_MS:-5000}
       DB_POOL_EVICT_MS: ${DB_POOL_EVICT_MS:-1000}
       DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-20000}
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-true}
+      DB_LOG_SQL: ${DB_LOG_SQL:-false}
       JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-1mb}
       REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-10000}
       HTTP_KEEPALIVE_TIMEOUT_MS: ${HTTP_KEEPALIVE_TIMEOUT_MS:-5000}
       HTTP_HEADERS_TIMEOUT_MS: ${HTTP_HEADERS_TIMEOUT_MS:-6000}
       HTTP_REQUEST_TIMEOUT_MS: ${HTTP_REQUEST_TIMEOUT_MS:-30000}
+      APP_NAME: ${APP_NAME:-Biz Assistant}
+      APP_BASE_URL: ${APP_BASE_URL:-https://localhost}
+      RESET_PASSWORD_PATH: ${RESET_PASSWORD_PATH:-/reset-password}
+      PASSWORD_RESET_EXPIRES_MINUTES: ${PASSWORD_RESET_EXPIRES_MINUTES:-30}
+      VERIFY_EMAIL_PATH: ${VERIFY_EMAIL_PATH:-/verify-email}
+      VERIFY_EMAIL_EXPIRES_MINUTES: ${VERIFY_EMAIL_EXPIRES_MINUTES:-60}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Biz Assistant}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@bizassistant.local}
+      SMTP2GO_API_KEY: ${SMTP2GO_API_KEY:-}
+      SMTP2GO_API_URL: ${SMTP2GO_API_URL:-https://api.smtp2go.com/v3/email/send}
     expose:
       - "3000"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
       amqp:
@@ -105,7 +97,7 @@ services:
     volumes:
       - ./api/uploads:/usr/src/app/uploads
       - api_node_modules:/usr/src/app/node_modules
-    command: sh -c "(npm run db:create || true) && npm run db:migrate && npm run start"
+    command: sh -c "npm run db:migrate && npm run start"
     mem_limit: 320m
     cpus: 0.35
     ulimits:
@@ -153,7 +145,6 @@ services:
 
 volumes:
   api_node_modules:
-  mysql_data:
   redis_data:
   rabbitmq_data:
 

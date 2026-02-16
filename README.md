@@ -1,267 +1,376 @@
 # Biz Assistant Workspace v3
 
-Dockerized full-stack workspace for Biz Assistant with a reverse-proxied Angular client, Express API, MySQL, Redis, RabbitMQ, and optional phpMyAdmin in dev mode.
+Dockerized full-stack workspace for Biz Assistant with:
 
-## What This Repository Contains
+- Angular client
+- Node.js/Express API
+- MySQL, Redis, RabbitMQ
+- Nginx reverse proxy
+- Optional phpMyAdmin in development
 
-This repository is the **workspace/orchestration repo**.
+This README includes a full production deployment guide for a DigitalOcean Ubuntu instance.
 
-- `api/` is a git submodule: `git@github.com:RalphBrabante/biz-assistant-api-service-v3.git`
-- `client/` is a git submodule: `git@github.com:RalphBrabante/biz-assistant-client-v3.git`
-- root repo (this one): `git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git`
+## Repository Scope
+
+This repository is the orchestration workspace:
+
+- `api/` submodule: `git@github.com:RalphBrabante/biz-assistant-api-service-v3.git`
+- `client/` submodule: `git@github.com:RalphBrabante/biz-assistant-client-v3.git`
+- root repo: `git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git`
 
 ## Stack
 
-- **Client**: Angular 18 (standalone/component-based), Bootstrap 5, Bootstrap Icons
-- **API**: Node.js + Express + Sequelize + MySQL
-- **Infra**: Nginx, MySQL 8.4, Redis 7, RabbitMQ 3 (management UI)
-- **Dev DB UI**: phpMyAdmin (enabled via dev override compose file)
+- Client: Angular 18 (standalone/component-based), Bootstrap 5
+- API: Node.js, Express, Sequelize
+- Database: MySQL 8.4
+- Cache: Redis 7
+- Queue: RabbitMQ 3
+- Reverse proxy: Nginx 1.27
 
 ## Architecture
 
-- Nginx listens on `http://localhost`
+- Public traffic goes to Nginx on `80/443`.
 - Nginx routes:
-  - `/` -> Angular client (`client:4200`)
-  - `/api/*` -> API (`api:3000`)
-  - `/db/` -> phpMyAdmin (`phpmyadmin:80`) in dev compose mode only
-- API connects to:
-  - MySQL (`mysql:3306`)
-  - Redis (`redis:6379`)
-  - RabbitMQ (`amqp:5672`)
+  - `/` -> client
+  - `/api/*` -> API
+  - `/uploads/*` -> API uploads
+  - `/db/` -> phpMyAdmin (dev compose only)
+- In production compose:
+  - only Nginx publishes ports
+  - Redis/RabbitMQ/API stay internal on Docker networks
+  - API connects to an external managed MySQL database via `DB_*` env vars
 
-## Prerequisites
-
-- Docker Desktop (or Docker Engine + Compose v2)
-- Git
-- Open ports: `80`, `3000`, `3306`, `6379`, `5672`, `15672`
-
-## First-Time Setup
-
-1. Clone workspace and submodules:
+## Quick Start (Local Dev)
 
 ```bash
 git clone git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git
 cd biz-assistant-worskpace-v3
 git submodule update --init --recursive
-```
-
-2. Create env file:
-
-```bash
 cp .env.example .env
-```
-
-3. Start containers:
-
-```bash
 docker compose up --build
 ```
 
-## Run Modes
-
-### Standard Mode
-
-```bash
-docker compose up --build
-```
-
-### Dev Mode (with phpMyAdmin at `/db`)
+Dev mode with phpMyAdmin:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-### Production Mode (Optimized for 1 vCPU hosts)
+## Production Mode
+
+Production env filename:
+
+- Use `.env.production` (in the workspace root).
+- Start from template: `cp .env.production.example .env.production`
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
-This mode applies:
+Production profile includes:
 
-- smaller Sequelize pool defaults
-- MySQL low-memory tuning (`mysql/conf.d/my.cnf`)
-- Redis memory cap + LRU eviction (`redis/redis.conf`)
-- API production runtime (no nodemon)
-- conservative CPU/memory limits per service
-- Nginx gzip + timeout tuning
-- internal backend network isolation:
-  - MySQL, Redis, RabbitMQ, and API run on `backend` network
-  - MySQL/Redis/RabbitMQ/API are **not published** to host ports
-- only Nginx is exposed publicly on port `80`
-- Nginx can be configured for Cloudflare Origin SSL on ports `80` and `443`
+- lower memory/CPU service limits for small instances
+- external managed database support (no local MySQL container)
+- Redis memory/eviction config (`redis/redis.conf`)
+- API production startup (`npm run start`)
+- backend network isolation
 
-### Cloudflare Origin SSL (Production)
+## Full DigitalOcean Deployment Guide
 
-This workspace supports Cloudflare Origin Certificates with nginx in production compose mode.
+### 1) Create the Droplet
 
-1. In Cloudflare dashboard, generate an Origin Certificate for your domain.
-2. Save the files as:
-   - `nginx/certs/fullchain.pem`
-   - `nginx/certs/privkey.pem`
-3. Start/restart production stack:
+Recommended minimum:
+
+- Ubuntu 24.04 LTS
+- 2 GB RAM / 1 vCPU (1 GB can work but is tight)
+- 50+ GB SSD
+- Region close to users
+- Add your SSH public key during create
+
+### 2) Point Domain/DNS
+
+If using Cloudflare:
+
+- Add an `A` record to your droplet public IP.
+- Keep proxy enabled (orange cloud) if you want Cloudflare protection.
+
+### 3) SSH and Base Server Hardening
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build nginx
+ssh root@<your_server_ip>
+apt update && apt upgrade -y
+timedatectl set-timezone Asia/Manila
 ```
 
-4. In Cloudflare SSL/TLS settings, set encryption mode to **Full (strict)**.
-
-Notes:
-- `docker-compose.prod.yml` publishes both `80` and `443`.
-- Port `80` is redirected to HTTPS by nginx.
-- Certificate files are git-ignored by default.
-
-## Service URLs
-
-- App (via Nginx): `http://localhost`
-- API (direct): `http://localhost:3000`
-- API health: `http://localhost:3000/health`
-- RabbitMQ management: `http://localhost:15672`
-- phpMyAdmin (dev mode only): `http://localhost/db/`
-- MySQL host port: `localhost:3306`
-- Redis host port: `localhost:6379`
-
-## Default Credentials / Environment
-
-From `.env.example`:
-
-- MySQL root password: `rootpassword`
-- MySQL DB: `appdb`
-- MySQL user/password: `appuser` / `apppassword`
-- RabbitMQ user/password: `guest` / `guest`
-
-## Database Lifecycle
-
-When API container starts, it runs:
-
-1. `npm install`
-2. `npm run db:create` (non-fatal if already exists)
-3. `npm run db:migrate`
-4. `npm run dev`
-
-This is configured in `docker-compose.yml` under API `command`.
-
-In production override mode (`docker-compose.prod.yml`), API starts with:
-
-1. `npm run db:create` (non-fatal if already exists)
-2. `npm run db:migrate`
-3. `npm run start`
-
-## Useful Commands
-
-### Start / Stop
+Create deploy user:
 
 ```bash
-# Start (detached)
-docker compose up -d --build
-
-# Stop
-docker compose down
-
-# Stop and remove volumes (destructive)
-docker compose down -v
+adduser deploy
+usermod -aG sudo deploy
+rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
 ```
 
-### Logs
+Switch user:
 
 ```bash
-docker compose logs -f
-docker compose logs -f api
-docker compose logs -f client
-docker compose logs -f mysql
+su - deploy
 ```
 
-### Rebuild a single service
+### 4) Configure Firewall
 
 ```bash
-docker compose up -d --build api
-docker compose up -d --build client
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
+sudo ufw status
 ```
 
-### Execute commands inside containers
+Do not expose MySQL/Redis/RabbitMQ ports publicly in production.
+
+### 5) Install Docker + Compose Plugin
 
 ```bash
-docker compose exec api sh
-docker compose exec client sh
-docker compose exec mysql sh
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+newgrp docker
+docker --version
+docker compose version
 ```
 
-## Submodule Workflow
+### 6) Clone Workspace and Submodules
 
-If `api` or `client` looks empty or detached:
+If your repos are private, add a deploy SSH key first (`~/.ssh/id_ed25519`) and add it in GitHub.
 
 ```bash
-git submodule sync --recursive
+cd ~
+git clone git@github.com:RalphBrabante/biz-assistant-worskpace-v3.git
+cd biz-assistant-worskpace-v3
 git submodule update --init --recursive
 ```
 
-To pull latest in submodules:
+### 7) Configure Environment
 
 ```bash
-cd api && git pull
-cd ../client && git pull
+cp .env.example .env
+nano .env
 ```
 
-Then commit submodule pointer updates in root repo:
+At minimum, change:
+
+- `RABBITMQ_DEFAULT_USER`
+- `RABBITMQ_DEFAULT_PASS`
+
+For production on DigitalOcean, use a dedicated file:
 
 ```bash
-cd ..
-git add api client
-git commit -m "Update api/client submodule pointers"
-git push
+cp .env.production.example .env.production
+nano .env.production
 ```
 
-## Postman Collection
+Set real secure values at minimum:
 
-- Workspace collection file: `postman/gimo-api.postman_collection.json`
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
+- `RABBITMQ_DEFAULT_USER`
+- `RABBITMQ_DEFAULT_PASS`
+
+Password reset/email variables (required for real email delivery):
+
+- `APP_BASE_URL` (example: `https://your-domain.com`)
+- `RESET_PASSWORD_PATH` (default: `/reset-password`)
+- `PASSWORD_RESET_EXPIRES_MINUTES` (default: `30`)
+- `VERIFY_EMAIL_PATH` (default: `/verify-email`)
+- `VERIFY_EMAIL_EXPIRES_MINUTES` (default: `60`)
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM_NAME`
+- `SMTP_FROM_EMAIL`
+- `SMTP2GO_API_KEY`
+- `SMTP2GO_API_URL` (default: `https://api.smtp2go.com/v3/email/send`)
+
+SMTP2GO quick setup:
+
+- Set `SMTP2GO_API_KEY` to your SMTP2GO API key.
+- Keep `SMTP_FROM_EMAIL` as a verified sender/domain in SMTP2GO.
+- When `SMTP2GO_API_KEY` is set, API email sending uses SMTP2GO API automatically.
+- If `SMTP2GO_API_KEY` is empty, the system falls back to standard SMTP settings.
+
+### 8) Configure Cloudflare Origin SSL (Recommended)
+
+Generate Origin Certificate in Cloudflare dashboard, then save:
+
+- `nginx/certs/fullchain.pem`
+- `nginx/certs/privkey.pem`
+
+These are mounted to nginx and used by `nginx/default.ssl.conf`.
+
+In Cloudflare SSL/TLS:
+
+- Set mode to **Full (strict)**.
+
+### 9) Start Production Stack
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f nginx
+```
+
+### 10) Seed System Data
+
+Run seeders explicitly (safe to rerun; they are idempotent):
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api npx sequelize-cli db:seed --seed src/seeders/20260215016000-seed-rbac-and-default-user.js
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api npx sequelize-cli db:seed --seed src/seeders/20260216007000-seed-tax-types.js
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api npx sequelize-cli db:seed --seed src/seeders/20260216009000-seed-withholding-tax-types.js
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api npx sequelize-cli db:seed --seed src/seeders/20260216024000-seed-ralph-superuser.js
+```
+
+Notes:
+
+- Withholding tax seed requires organizations to exist.
+- Roles/permissions and seeded tax records are marked system data and protected from deletion.
+- Your external DB user must have schema/table migration and DML privileges.
+
+### 11) Validate Deployment
+
+```bash
+curl -I http://<your-domain>
+curl -I https://<your-domain>
+curl -s https://<your-domain>/api/v1/health
+```
+
+If Cloudflare is enabled, verify HTTPS and redirects from HTTP.
+
+### 12) Routine Update Procedure
+
+```bash
+cd ~/biz-assistant-worskpace-v3
+git pull
+git submodule sync --recursive
+git submodule update --init --recursive --remote
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+### 13) Backups (Recommended)
+
+Use your managed database provider backup/snapshot tooling for DB backups.
+For app-side persistence, back up docker volumes such as `rabbitmq_data`, `redis_data`, and uploaded files.
+
+### 14) Optional: Auto-start on Reboot
+
+Docker restart policies are already `unless-stopped`. Also enable docker:
+
+```bash
+sudo systemctl enable docker
+```
+
+## Service Access
+
+Development mode:
+
+- App: `http://localhost`
+- API direct: `http://localhost:3000`
+- RabbitMQ UI: `http://localhost:15672`
+- phpMyAdmin: `http://localhost/db/` (dev compose only)
+
+Production mode:
+
+- Public app/API entrypoint: `https://<your-domain>` via nginx
+- Internal services are not publicly exposed
+
+## Useful Commands
+
+Start/stop:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml down
+```
+
+Logs:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f api
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f nginx
+```
+
+Run migrations manually:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api npm run db:migrate
+```
+
+Use `.env.production` in production to keep credentials/environment separated.
+
+## Postman
+
+- `postman/gimo-api.postman_collection.json`
 
 ## Troubleshooting
 
-### 1) MySQL fails with `Failed to initialize DD Storage Engine`
+### Database connection issues in production
 
-Usually a corrupted or incompatible MySQL data volume.
+Verify external DB settings in `.env.production`:
+
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_SSL` / `DB_SSL_REJECT_UNAUTHORIZED` (if provider requires TLS)
+
+### SSL certificate not loading
+
+- Confirm files exist:
+  - `nginx/certs/fullchain.pem`
+  - `nginx/certs/privkey.pem`
+- Check nginx logs:
 
 ```bash
-docker compose down -v
-docker compose up --build
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f nginx
 ```
 
-If using dev override, apply both files in commands.
+### API reports `Database models are not ready yet`
 
-### 2) `Cannot connect to /db`
-
-Use dev compose mode:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-```
-
-### 3) API says models are not ready
-
-Wait until MySQL healthcheck passes and migrations complete, then retry.
-
-### 4) Client reflects stale UI
+- Confirm external DB is reachable from droplet and credentials are valid.
+- Check:
 
 ```bash
-docker compose up -d --build client
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f api
 ```
 
 ## Repository Layout
 
 ```text
 .
-├── api/                     # API submodule (Express + Sequelize)
-├── client/                  # Client submodule (Angular)
-├── nginx/                   # Nginx configs (standard + dev)
+├── api/                     # API submodule
+├── client/                  # Client submodule
+├── mysql/                   # MySQL config (used by local/dev compose)
+├── redis/                   # Redis production tuning config
+├── nginx/                   # Nginx configs + cert mount path
 ├── postman/                 # Postman collection
-├── docker-compose.yml       # Base stack
-├── docker-compose.dev.yml   # Dev overrides (phpMyAdmin + dev nginx)
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── docker-compose.prod.yml
 └── .env.example
 ```
-
-## Notes
-
-- `api/node_modules` is volume-mounted (`api_node_modules`) for faster containerized dev.
-- MySQL data is persisted in Docker volume `mysql_data`.
-- Redis and RabbitMQ data are also persisted via named volumes.
