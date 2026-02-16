@@ -39,6 +39,8 @@ This repository is the orchestration workspace:
   - only Nginx publishes ports
   - Redis/RabbitMQ/API stay internal on Docker networks
   - API connects to an external managed MySQL database via `DB_*` env vars
+  - Angular client is built as static files by a one-time `client-build` profile service
+  - Nginx serves static files from `client/dist/angular-client/browser`
 
 ## Quick Start (Local Dev)
 
@@ -64,7 +66,8 @@ Production env filename:
 - Start from template: `cp .env.production.example .env.production`
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile build run --rm client-build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d api redis amqp nginx
 ```
 
 Production profile includes:
@@ -229,9 +232,16 @@ In Cloudflare SSL/TLS:
 ### 9) Start Production Stack
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile build run --rm client-build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d api redis amqp nginx
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.yml logs -f nginx
+```
+
+Validate client static output:
+
+```bash
+ls -lah client/dist/angular-client/browser
 ```
 
 ### 10) Seed System Data
@@ -265,10 +275,12 @@ If Cloudflare is enabled, verify HTTPS and redirects from HTTP.
 
 ```bash
 cd ~/biz-assistant-worskpace-v3
-git pull
+git pull origin main
 git submodule sync --recursive
-git submodule update --init --recursive --remote
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+git submodule update --init --recursive
+git submodule foreach --recursive 'git fetch origin && git checkout main && git pull origin main'
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile build run --rm client-build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d api redis amqp nginx
 ```
 
 ### 13) Backups (Recommended)
@@ -303,7 +315,8 @@ Production mode:
 Start/stop:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile build run --rm client-build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d api redis amqp nginx
 docker compose --env-file .env.production -f docker-compose.prod.yml down
 ```
 
@@ -358,6 +371,18 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs -f ngi
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml logs -f api
+```
+
+### Nginx returns 403 on `/`
+
+- Usually means Angular static build output is missing.
+- Build client assets and verify `index.html` exists:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile build run --rm client-build
+ls -lah client/dist/angular-client/browser
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d nginx
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx ls -lah /usr/share/nginx/html
 ```
 
 ## Repository Layout

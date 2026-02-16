@@ -107,30 +107,26 @@ services:
       - frontend
       - backend
 
-  client:
+  client-build:
     build:
       context: ./client
-    container_name: angular-client
-    restart: unless-stopped
+    container_name: angular-client-builder
+    profiles: ["build"]
+    restart: "no"
     environment:
       CHOKIDAR_USEPOLLING: "false"
-    depends_on:
-      - api
     volumes:
       - ./client:/usr/src/app
       - client_node_modules:/usr/src/app/node_modules
-    command: sh -c "npm install --no-audit --fund=false --include=optional && npm install --no-save @rollup/rollup-linux-x64-gnu && npm run build -- --configuration production --watch"
+    command: sh -c "npm install --no-audit --fund=false --include=optional && npm install --no-save @rollup/rollup-linux-x64-gnu && npm run build -- --configuration production"
     mem_limit: 320m
     cpus: 0.20
-    networks:
-      - frontend
 
   nginx:
     image: nginx:1.27-alpine
     container_name: nginx
     restart: unless-stopped
     depends_on:
-      - client
       - api
     ports:
       - "80:80"
