@@ -26,3 +26,8 @@ node_modules/
 
 # Docker local overrides
 docker-compose.override.yml
+
+# TLS certs (Cloudflare origin)
+nginx/certs/*
+!nginx/certs/.gitkeep
+!nginx/certs/README.md

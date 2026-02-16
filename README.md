@@ -88,7 +88,29 @@ This mode applies:
 - internal backend network isolation:
   - MySQL, Redis, RabbitMQ, and API run on `backend` network
   - MySQL/Redis/RabbitMQ/API are **not published** to host ports
-  - only Nginx is exposed publicly on port `80`
+- only Nginx is exposed publicly on port `80`
+- Nginx can be configured for Cloudflare Origin SSL on ports `80` and `443`
+
+### Cloudflare Origin SSL (Production)
+
+This workspace supports Cloudflare Origin Certificates with nginx in production compose mode.
+
+1. In Cloudflare dashboard, generate an Origin Certificate for your domain.
+2. Save the files as:
+   - `nginx/certs/fullchain.pem`
+   - `nginx/certs/privkey.pem`
+3. Start/restart production stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build nginx
+```
+
+4. In Cloudflare SSL/TLS settings, set encryption mode to **Full (strict)**.
+
+Notes:
+- `docker-compose.prod.yml` publishes both `80` and `443`.
+- Port `80` is redirected to HTTPS by nginx.
+- Certificate files are git-ignored by default.
 
 ## Service URLs
 
