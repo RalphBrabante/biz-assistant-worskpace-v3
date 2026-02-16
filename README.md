@@ -71,6 +71,25 @@ docker compose up --build
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
+### Production Mode (Optimized for 1 vCPU hosts)
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+This mode applies:
+
+- smaller Sequelize pool defaults
+- MySQL low-memory tuning (`mysql/conf.d/my.cnf`)
+- Redis memory cap + LRU eviction (`redis/redis.conf`)
+- API production runtime (no nodemon)
+- conservative CPU/memory limits per service
+- Nginx gzip + timeout tuning
+- internal backend network isolation:
+  - MySQL, Redis, RabbitMQ, and API run on `backend` network
+  - MySQL/Redis/RabbitMQ/API are **not published** to host ports
+  - only Nginx is exposed publicly on port `80`
+
 ## Service URLs
 
 - App (via Nginx): `http://localhost`
@@ -100,6 +119,12 @@ When API container starts, it runs:
 4. `npm run dev`
 
 This is configured in `docker-compose.yml` under API `command`.
+
+In production override mode (`docker-compose.prod.yml`), API starts with:
+
+1. `npm run db:create` (non-fatal if already exists)
+2. `npm run db:migrate`
+3. `npm run start`
 
 ## Useful Commands
 
