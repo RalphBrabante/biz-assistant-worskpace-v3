@@ -116,9 +116,10 @@ services:
       CHOKIDAR_USEPOLLING: "false"
     depends_on:
       - api
-    command: npm run start -- --host 0.0.0.0 --configuration production
-    expose:
-      - "4200"
+    volumes:
+      - ./client:/usr/src/app
+      - client_node_modules:/usr/src/app/node_modules
+    command: sh -c "npm run build -- --configuration production --watch"
     mem_limit: 320m
     cpus: 0.20
     networks:
@@ -137,6 +138,7 @@ services:
     volumes:
       - ./nginx/default.ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      - ./client/dist/angular-client/browser:/usr/share/nginx/html:ro
     mem_limit: 96m
     cpus: 0.10
     networks:
@@ -144,6 +146,7 @@ services:
 
 volumes:
   api_node_modules:
+  client_node_modules:
   redis_data:
   rabbitmq_data:
 
