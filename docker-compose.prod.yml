@@ -92,7 +92,7 @@ services:
       redis:
         condition: service_healthy
       amqp:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ./api/uploads:/usr/src/app/uploads
       - api_node_modules:/usr/src/app/node_modules
