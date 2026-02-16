@@ -209,8 +209,8 @@ SMTP2GO quick setup:
 
 - Set `SMTP2GO_API_KEY` to your SMTP2GO API key.
 - Keep `SMTP_FROM_EMAIL` as a verified sender/domain in SMTP2GO.
-- When `SMTP2GO_API_KEY` is set, API email sending uses SMTP2GO API automatically.
-- If `SMTP2GO_API_KEY` is empty, the system falls back to standard SMTP settings.
+- In production (`NODE_ENV=production`), SMTP2GO API key is required and SMTP fallback is disabled.
+- In non-production environments, SMTP fallback remains available when `SMTP2GO_API_KEY` is empty.
 
 ### 8) Configure Cloudflare Origin SSL (Recommended)
 
