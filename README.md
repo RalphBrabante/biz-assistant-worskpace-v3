@@ -199,11 +199,6 @@ Password reset/email variables (required for real email delivery):
 - `PASSWORD_RESET_EXPIRES_MINUTES` (default: `30`)
 - `VERIFY_EMAIL_PATH` (default: `/verify-email`)
 - `VERIFY_EMAIL_EXPIRES_MINUTES` (default: `60`)
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
-- `SMTP_USER`
-- `SMTP_PASS`
 - `SMTP_FROM_NAME`
 - `SMTP_FROM_EMAIL`
 - `SMTP2GO_API_KEY`
@@ -213,8 +208,9 @@ SMTP2GO quick setup:
 
 - Set `SMTP2GO_API_KEY` to your SMTP2GO API key.
 - Keep `SMTP_FROM_EMAIL` as a verified sender/domain in SMTP2GO.
-- In production (`NODE_ENV=production`), SMTP2GO API key is required and SMTP fallback is disabled.
-- In non-production environments, SMTP fallback remains available when `SMTP2GO_API_KEY` is empty.
+- You can leave `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` empty in production.
+- SMTP2GO API key is required in both development and production.
+- SMTP credentials fallback is disabled; if `SMTP2GO_API_KEY` is empty, email sending fails by design.
 
 ### 8) Configure Cloudflare Origin SSL (Recommended)
 
