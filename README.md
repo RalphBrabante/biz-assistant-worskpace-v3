@@ -72,6 +72,7 @@ Production profile includes:
 - lower memory/CPU service limits for small instances
 - external managed database support (no local MySQL container)
 - Redis memory/eviction config (`redis/redis.conf`)
+- RabbitMQ memory/disk guardrails via config file (`rabbitmq/rabbitmq.conf`)
 - API production startup (`npm run start`)
 - backend network isolation
 
