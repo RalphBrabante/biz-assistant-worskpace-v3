@@ -118,7 +118,7 @@ services:
     volumes:
       - ./client:/usr/src/app
       - client_node_modules:/usr/src/app/node_modules
-    command: sh -c "npm install --no-audit --fund=false --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration production"
+    command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration production"
     mem_limit: 320m
     cpus: 0.20
 

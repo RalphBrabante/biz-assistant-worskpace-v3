@@ -105,7 +105,7 @@ services:
     volumes:
       - ./client:/usr/src/app
       - /usr/src/app/node_modules
-    command: sh -c "npm install --no-audit --fund=false --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration development --watch"
+    command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration development --watch"
     expose:
       - "4200"
 
