@@ -86,6 +86,10 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@bizassistant.local}
       SMTP2GO_API_KEY: ${SMTP2GO_API_KEY:-}
       SMTP2GO_API_URL: ${SMTP2GO_API_URL:-https://api.smtp2go.com/v3/email/send}
+      GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
+      GOOGLE_DRIVE_REDIRECT_URI: ${GOOGLE_DRIVE_REDIRECT_URI:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
     expose:
       - "3000"
     depends_on:
