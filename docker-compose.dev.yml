@@ -2,6 +2,7 @@ services:
   mysql:
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./mysql/conf.d/my.cnf:/etc/mysql/conf.d/my.cnf:ro
 
   phpmyadmin:
     image: phpmyadmin:5-apache
