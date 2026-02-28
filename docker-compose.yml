@@ -1,7 +1,7 @@
 services:
-  mysql:
+  biz-assitant-mysql:
     image: mysql:8.4
-    container_name: mysql
+    container_name: biz-assitant-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
@@ -19,9 +19,9 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
+  biz-assitant-redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: biz-assitant-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -33,9 +33,9 @@ services:
       timeout: 5s
       retries: 10
 
-  amqp:
+  biz-assitant-amqp:
     image: rabbitmq:3-management-alpine
-    container_name: amqp
+    container_name: biz-assitant-amqp
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
@@ -51,20 +51,20 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
+  biz-assitant-api:
     build:
       context: ./api
-    container_name: node-express
+    container_name: biz-assitant-api
     restart: unless-stopped
     environment:
       PORT: 3000
-      DB_HOST: mysql
+      DB_HOST: biz-assitant-mysql
       DB_PORT: 3306
       DB_USER: ${MYSQL_USER:-appuser}
       DB_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
       DB_NAME: ${MYSQL_DATABASE:-appdb}
-      REDIS_URL: redis://redis:6379
-      AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@amqp:5672
+      REDIS_URL: redis://biz-assitant-redis:6379
+      AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@biz-assitant-amqp:5672
       APP_NAME: ${APP_NAME:-Biz Assistant}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
       RESET_PASSWORD_PATH: ${RESET_PASSWORD_PATH:-/reset-password}
@@ -83,26 +83,26 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      mysql:
+      biz-assitant-mysql:
         condition: service_healthy
-      redis:
+      biz-assitant-redis:
         condition: service_healthy
-      amqp:
+      biz-assitant-amqp:
         condition: service_healthy
     volumes:
       - ./api:/usr/src/app
       - api_node_modules:/usr/src/app/node_modules
     command: sh -c "npm install && (npm run db:create || true) && npm run db:migrate && npm run dev"
 
-  client:
+  biz-assitant-client:
     build:
       context: ./client
-    container_name: angular-client
+    container_name: biz-assitant-client
     restart: unless-stopped
     environment:
       CHOKIDAR_USEPOLLING: "true"
     depends_on:
-      - api
+      - biz-assitant-api
     volumes:
       - ./client:/usr/src/app
       - /usr/src/app/node_modules
@@ -110,13 +110,13 @@ services:
     expose:
       - "4200"
 
-  nginx:
+  biz-assitant-nginx:
     image: nginx:1.27-alpine
-    container_name: nginx
+    container_name: biz-assitant-nginx
     restart: unless-stopped
     depends_on:
-      - client
-      - api
+      - biz-assitant-client
+      - biz-assitant-api
     ports:
       - "80:80"
     volumes:

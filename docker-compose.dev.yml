@@ -1,35 +1,35 @@
 services:
-  mysql:
+  biz-assitant-mysql:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/conf.d/my.cnf:/etc/mysql/conf.d/my.cnf:ro
 
-  phpmyadmin:
+  biz-assitant-phpmyadmin:
     image: phpmyadmin:5-apache
-    container_name: phpmyadmin
+    container_name: biz-assitant-phpmyadmin
     restart: unless-stopped
     environment:
-      PMA_HOST: mysql
+      PMA_HOST: biz-assitant-mysql
       PMA_PORT: 3306
       PMA_USER: ${MYSQL_USER:-appuser}
       PMA_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
       PMA_ABSOLUTE_URI: http://localhost/db/
     depends_on:
-      mysql:
+      biz-assitant-mysql:
         condition: service_healthy
     expose:
       - "80"
 
-  client:
+  biz-assitant-client:
     environment:
       CHOKIDAR_USEPOLLING: "true"
     command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run start -- --host 0.0.0.0 --configuration development --poll 1000"
 
-  nginx:
+  biz-assitant-nginx:
     depends_on:
-      - client
-      - api
-      - phpmyadmin
+      - biz-assitant-client
+      - biz-assitant-api
+      - biz-assitant-phpmyadmin
     volumes:
       - ./nginx/default.dev.conf:/etc/nginx/conf.d/default.conf:ro
 

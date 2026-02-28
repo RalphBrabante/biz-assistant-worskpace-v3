@@ -1,7 +1,7 @@
 services:
-  redis:
+  biz-assitant-redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: biz-assitant-redis
     restart: unless-stopped
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     expose:
@@ -19,9 +19,9 @@ services:
     networks:
       - backend
 
-  amqp:
+  biz-assitant-amqp:
     image: rabbitmq:3-management-alpine
-    container_name: amqp
+    container_name: biz-assitant-amqp
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
@@ -41,10 +41,10 @@ services:
     networks:
       - backend
 
-  api:
+  biz-assitant-api:
     build:
       context: ./api
-    container_name: node-express
+    container_name: biz-assitant-api
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -55,8 +55,8 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      REDIS_URL: redis://redis:6379
-      AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@amqp:5672
+      REDIS_URL: redis://biz-assitant-redis:6379
+      AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@biz-assitant-amqp:5672
       DB_POOL_MAX: ${DB_POOL_MAX:-4}
       DB_POOL_MIN: ${DB_POOL_MIN:-0}
       DB_POOL_ACQUIRE_MS: ${DB_POOL_ACQUIRE_MS:-20000}
@@ -93,9 +93,9 @@ services:
     expose:
       - "3000"
     depends_on:
-      redis:
+      biz-assitant-redis:
         condition: service_healthy
-      amqp:
+      biz-assitant-amqp:
         condition: service_started
     volumes:
       - ./api/uploads:/usr/src/app/uploads
@@ -111,10 +111,10 @@ services:
       - frontend
       - backend
 
-  client-build:
+  biz-assitant-client-build:
     build:
       context: ./client
-    container_name: angular-client-builder
+    container_name: biz-assitant-client-build
     profiles: ["build"]
     restart: "no"
     environment:
@@ -126,12 +126,12 @@ services:
     mem_limit: 320m
     cpus: 0.20
 
-  nginx:
+  biz-assitant-nginx:
     image: nginx:1.27-alpine
-    container_name: nginx
+    container_name: biz-assitant-nginx
     restart: unless-stopped
     depends_on:
-      - api
+      - biz-assitant-api
     ports:
       - "80:80"
       - "443:443"
