@@ -119,12 +119,13 @@ services:
     restart: "no"
     environment:
       CHOKIDAR_USEPOLLING: "false"
+      NODE_OPTIONS: ${CLIENT_BUILD_NODE_OPTIONS:---max-old-space-size=1024}
     volumes:
       - ./client:/usr/src/app
       - client_node_modules:/usr/src/app/node_modules
-    command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration production"
-    mem_limit: 320m
-    cpus: 0.20
+    command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration production --source-map=false"
+    mem_limit: 1536m
+    cpus: 0.60
 
   biz-assitant-nginx:
     image: nginx:1.27-alpine
