@@ -42,8 +42,7 @@ services:
       - backend
 
   biz-assitant-api:
-    build:
-      context: ./api
+    image: ghcr.io/ralphbrabante/biz-assistant-api:latest
     container_name: biz-assitant-api
     restart: unless-stopped
     environment:
@@ -98,8 +97,7 @@ services:
       biz-assitant-amqp:
         condition: service_started
     volumes:
-      - ./api/uploads:/usr/src/app/uploads
-      - api_node_modules:/usr/src/app/node_modules
+      - api_uploads:/usr/src/app/uploads
     command: sh -c "npm run db:migrate && npm run start"
     mem_limit: 320m
     cpus: 0.35
@@ -111,24 +109,8 @@ services:
       - frontend
       - backend
 
-  biz-assitant-client-build:
-    build:
-      context: ./client
-    container_name: biz-assitant-client-build
-    profiles: ["build"]
-    restart: "no"
-    environment:
-      CHOKIDAR_USEPOLLING: "false"
-      NODE_OPTIONS: ${CLIENT_BUILD_NODE_OPTIONS:---max-old-space-size=1024}
-    volumes:
-      - ./client:/usr/src/app
-      - client_node_modules:/usr/src/app/node_modules
-    command: sh -c "npm install --no-audit --no-fund --include=optional && ARCH=$$(uname -m) && if [ \"$$ARCH\" = \"aarch64\" ] || [ \"$$ARCH\" = \"arm64\" ]; then npm install --no-save @rollup/rollup-linux-arm64-gnu; else npm install --no-save @rollup/rollup-linux-x64-gnu; fi && npm run build -- --configuration production --source-map=false"
-    mem_limit: 1536m
-    cpus: 0.60
-
   biz-assitant-nginx:
-    image: nginx:1.27-alpine
+    image: ghcr.io/ralphbrabante/biz-assistant-nginx:latest
     container_name: biz-assitant-nginx
     restart: unless-stopped
     depends_on:
@@ -139,15 +121,13 @@ services:
     volumes:
       - ./nginx/default.ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
-      - ./client/dist/angular-client/browser:/usr/share/nginx/html:ro
     mem_limit: 96m
     cpus: 0.10
     networks:
       - frontend
 
 volumes:
-  api_node_modules:
-  client_node_modules:
+  api_uploads:
   redis_data:
   rabbitmq_data:
 
