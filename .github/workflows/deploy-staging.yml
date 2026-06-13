@@ -48,7 +48,7 @@ jobs:
       - name: Build Angular client
         working-directory: client
         run: |
-          npm ci --no-audit --no-fund --include=optional
+          npm install --no-audit --no-fund --include=optional
           npm install --no-save @rollup/rollup-linux-x64-gnu
           npm run build -- --configuration production --source-map=false
 
