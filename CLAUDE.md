@@ -457,6 +457,16 @@ Cloudflare handles public HTTPS termination; Nginx uses origin certs for the Clo
 
 ---
 
+## Terminology: "Data Pages"
+
+When the user says **"data pages"**, they mean any page that displays a filterable data table — i.e., the listing/index pages where records can be searched, filtered, sorted, and paginated. This includes:
+
+`/orders`, `/items`, `/expenses`, `/customers`, `/vendors`, `/users`, `/sales-invoices`, `/roles`, `/permissions`, `/reports`, `/licenses`
+
+Any future listing page with a data table is also a data page by definition.
+
+---
+
 ## UI Standard: Data Page Filter Card
 
 Every data listing page (`/orders`, `/items`, `/expenses`, `/customers`, `/vendors`, `/users`, `/sales-invoices`, etc.) **must** use the following filter card layout. Do not deviate from this structure.
@@ -553,3 +563,79 @@ orderStatusLabel(value: string): string   // maps raw value → "Friendly Label"
 | `/vendors` | search |
 | `/users` | search |
 | `/sales-invoices` | search, status, payment status, date range, sort |
+
+---
+
+## UI Standard: Form Loading State (CRUD Modals)
+
+Every create/edit modal form **must** show a loading overlay and disable fields while the request is in progress.
+
+### Required pattern for every modal-body containing a form
+
+```html
+<div class="modal-body pt-3 position-relative">
+  <!-- Loading overlay — shown while submitting -->
+  <div *ngIf="submitting()" class="modal-loading-overlay">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </div>
+
+  <!-- Error alert (if applicable) -->
+  <div *ngIf="someError()" class="alert alert-danger ...">{{ someError() }}</div>
+
+  <!-- Form — dims and blocks interaction during submission -->
+  <form ... [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+    ...fields...
+  </form>
+</div>
+```
+
+- Use `creatingVendor()` or the relevant signal if the form uses a different submission signal than `submitting()`
+- For modals without a `<form>` tag (ngModel-based), apply `[class.pe-none]` and `[class.opacity-50]` to the outer wrapper `<div class="row g-3">`
+- The CSS for `.modal-loading-overlay` lives in `client/src/styles.css`
+- The submit button is already disabled via `[disabled]="submitting()"` — do not remove that
+
+---
+
+## UI Standard: Form Field Validation
+
+When adding validation to form fields, follow this pattern:
+
+- **Error/warning icon**: place a Bootstrap Icon inside the field at the right edge using `position-absolute` (right side of the input)
+- **Error message**: display as a tooltip-style popup (not inline text below the field)
+- Use `is-invalid` class on the input to trigger Bootstrap's red border
+- The icon should be `bi-exclamation-circle-fill text-danger` for errors, `bi-exclamation-triangle-fill text-warning` for warnings
+- Show the icon only when the field has been touched and is invalid
+
+### Pattern
+
+```html
+<div class="position-relative">
+  <input class="form-control pe-5" [class.is-invalid]="isFieldInvalid('fieldName')"
+         formControlName="fieldName" />
+  <div *ngIf="isFieldInvalid('fieldName')" class="field-validation-icon"
+       [title]="getFieldError('fieldName')" appTooltip>
+    <i class="bi bi-exclamation-circle-fill text-danger"></i>
+  </div>
+</div>
+```
+
+```css
+/* In styles.css */
+.field-validation-icon {
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: default;
+  pointer-events: auto;
+  z-index: 5;
+}
+```
+
+### Rules
+- Always use `pe-5` on the input so text doesn't overlap the icon
+- Use `appTooltip` directive with `[title]="errorMessage"` for the popup
+- Never show raw `<div class="invalid-feedback">` text below the field — use the tooltip pattern instead
+- Validate on `touched` state, not `dirty` (so errors show after user leaves the field, not while typing)
