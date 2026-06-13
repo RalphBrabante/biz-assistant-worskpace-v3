@@ -1,0 +1,36 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: develop
+
+# Prevent concurrent staging deployments
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.STAGING_DEPLOY_PATH }}
+            bash scripts/deploy.sh staging ${{ github.event.inputs.branch || 'develop' }}
