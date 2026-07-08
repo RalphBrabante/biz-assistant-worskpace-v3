@@ -2,6 +2,8 @@
 
 This file is loaded automatically by Claude Code on every prompt. It documents the full application context so Claude understands the system without re-exploring the codebase each time.
 
+Before handling any prompt request, check `AI-REQUEST-GUIDE.md` first. It is the main routing guide for which project Markdown references must be read before planning or editing.
+
 ---
 
 ## What This Application Is
@@ -17,6 +19,8 @@ This file is loaded automatically by Claude Code on every prompt. It documents t
 - Real-time notifications via WebSocket/Socket.io
 - License management (expiry tracking and notifications)
 - Email notifications (SMTP2GO)
+
+Tax and calculation work must start with `TAX-CALCULATION-REQUEST-INTENT.md`, then the relevant tax reference: `PH-TAX-RECEIPT-REFERENCE.md` for VAT/EWT flows and `PH-NON-VAT-PERCENTAGE-TAX-IMPLEMENTATION.md` for non-VAT percentage-tax flows. Keep tax behavior inline with those Markdown files before changing frontend, backend, reports, or seeded tax types.
 
 ---
 

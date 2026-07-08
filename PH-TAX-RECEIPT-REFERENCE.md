@@ -2,6 +2,10 @@
 
 This document captures the standard Philippine BIR-compliant receipt structure, VAT computation rules, withholding tax (EWT) mechanics, and how they map to the GIMO Biz Assistant data models. It serves as the single source of truth for implementing accurate sales and expense recording.
 
+For tax/calculation request scoping, start with [TAX-CALCULATION-REQUEST-INTENT.md](TAX-CALCULATION-REQUEST-INTENT.md) so implementation stays aligned with the correct VAT, non-VAT, percentage-tax, or withholding-tax path.
+
+For non-VAT businesses using percentage tax, check [PH-NON-VAT-PERCENTAGE-TAX-IMPLEMENTATION.md](PH-NON-VAT-PERCENTAGE-TAX-IMPLEMENTATION.md) before implementing calculations. Do not apply VAT extraction formulas (`/ 1.12`, `12/112`, or `* 0.12`) to percentage-tax transactions.
+
 ---
 
 ## 1. Receipt Analysis (Source Image)
@@ -230,7 +234,7 @@ Section: Auto-Computed Breakdown (read-only display)
 
 ## 8. Key Rules to Remember
 
-1. **VAT is always 12%** in the Philippines (as of 2026).
+1. **Standard VAT is 12%** for VAT-registered calculations in the Philippines (as of 2026); non-VAT percentage-tax businesses use separate percentage-tax rules.
 2. **VAT-inclusive to exclusive:** Divide by 1.12 (not multiply by 0.88).
 3. **VAT extraction formula:** `VAT = Amount * (12/112)` or equivalently `Amount / 1.12 * 0.12`.
 4. **Discounts before VAT:** SC/PWD and promo discounts are applied to the VAT-exclusive amount BEFORE recomputing VAT.
