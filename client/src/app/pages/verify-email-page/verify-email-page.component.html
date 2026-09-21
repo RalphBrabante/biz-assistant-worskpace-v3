@@ -1,0 +1,52 @@
+<main class="auth-bg min-h-screen flex items-center py-12">
+  <div class="mx-auto w-full max-w-7xl px-6">
+    <div class="flex justify-center">
+      <div class="w-full md:w-[83.3333%] lg:w-[50.0%] xl:w-[41.6667%]">
+        <section class="ui-card shadow-dialog rounded-xl overflow-hidden">
+          <div class="px-6 py-4 hero-strip flex justify-between items-center">
+            <strong>Biz Assistant</strong>
+            <button
+              type="button"
+              class="ui-btn ui-btn-sm ui-btn-outline-light"
+              (click)="toggleTheme()"
+              [title]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"
+            >
+              <i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()"></i>
+            </button>
+          </div>
+
+          <div class="ui-card-body p-6 md:p-12">
+            <h1 class="text-2xl font-semibold tracking-tight font-bold mb-1">Verify email</h1>
+            <p class="text-muted mb-6">Confirm your account to continue.</p>
+
+            <div class="mb-4">
+              <label class="ui-form-label font-semibold" for="token">Verification Token</label>
+              <input
+                id="token"
+                type="text"
+                class="ui-form-control"
+                [(ngModel)]="token"
+                [readonly]="loading"
+              />
+            </div>
+
+            <div class="grid gap-2">
+              <button class="ui-btn ui-btn-primary" type="button" (click)="verify()" [disabled]="loading || !token">
+                {{ loading ? 'Verifying...' : 'Verify Email' }}
+              </button>
+              <a routerLink="/login" class="ui-btn ui-btn-outline-secondary">Back to Login</a>
+            </div>
+
+            <div *ngIf="error" class="ui-alert ui-alert-danger mt-6 mb-0">{{ error }}</div>
+            <div *ngIf="success" class="ui-alert ui-alert-success mt-6 mb-0">
+              <div>{{ success }}</div>
+              <button class="ui-btn ui-btn-success ui-btn-sm mt-2" type="button" (click)="goToLogin()">
+                Go to Login
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>

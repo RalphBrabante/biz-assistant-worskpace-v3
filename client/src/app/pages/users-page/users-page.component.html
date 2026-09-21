@@ -1,0 +1,286 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Identity</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Users</h1>
+        <p class="text-muted mb-0">Manage accounts, statuses, and verification flags.</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="ui-btn ui-btn-outline-dark" (click)="load()" [disabled]="loading()">
+          {{ loading() ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create User</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+
+    <!-- Row 1: Search -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <div class="col-span-12 md:col-span-5">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
+        <div class="relative">
+          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <input type="text" class="ui-form-control pl-12" [class.pr-12]="filter()" placeholder="Name, email, role..." [ngModel]="filter()" (ngModelChange)="onFilterChange($event)" />
+          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Secondary controls -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</span>
+          <select class="ui-form-select border-l-0" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+            <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view"><i class="bi bi-table"></i></button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view"><i class="bi bi-grid-3x2-gap"></i></button>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-center justify-between md:justify-end gap-4">
+        <div class="text-xs text-muted leading-snug">
+          <span class="font-semibold text-ink">{{ total }}</span> users &nbsp;&middot;&nbsp;
+          Page <span class="font-semibold text-ink">{{ page }}</span> / <span class="font-semibold text-ink">{{ totalPages }}</span>
+        </div>
+        <button class="ui-btn ui-btn-sm flex items-center gap-2" [class.ui-btn-outline-secondary]="!hasActiveFilters" [class.ui-btn-outline-danger]="hasActiveFilters" type="button" (click)="clearFilters()" [disabled]="!hasActiveFilters">
+          <i class="bi bi-x-circle"></i> Clear
+          <span *ngIf="activeFilterCount > 0" class="ui-badge ui-badge-danger rounded-full leading-none">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active filter chips -->
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+      <span class="text-xs text-muted font-semibold mr-1">Active:</span>
+      <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onFilterChange('')" aria-label="Close dialog"></button>
+      </span>
+    </div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th *ngIf="isSuperuser">Organization</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Email Verified</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="loading()">
+          <td [attr.colspan]="isSuperuser ? 8 : 7" class="text-center py-12 border-0">
+            <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>
+            <span class="text-muted text-xs">Loading...</span>
+          </td>
+        </tr>
+        <tr *ngIf="!loading() && filteredRows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 8 : 7" class="text-center text-muted py-6">No users found.</td>
+        </tr>
+
+        <tr *ngFor="let row of filteredRows(); trackBy: trackById">
+          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
+          <td class="font-semibold">{{ row.firstName }} {{ row.lastName }}</td>
+          <td>{{ row.email }}</td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="userRoleBadgeClass(row.role)">
+              {{ row.role || '-' }}
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="userStatusBadgeClass(row.status)">
+              {{ row.status || '-' }}
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="verificationBadgeClass(row.isEmailVerified)">
+              {{ row.isEmailVerified ? 'Yes' : 'No' }}
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="activeBadgeClass(row.isActive)">
+              {{ row.isActive ? 'Yes' : 'No' }}
+            </span>
+          </td>
+          <td class="text-right">
+            <div class="table-actions-inline">
+              <a
+                class="ui-btn ui-btn-sm ui-btn-outline-primary"
+                [routerLink]="['/users', row.id]"
+                appTooltip
+                title="Open User Details"
+              >
+                <i class="bi bi-person-vcard"></i>
+              </a>
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                type="button"
+                [disabled]="deletingId() === row.id"
+                (click)="removeUser(row.id)"
+                appTooltip
+                title="Delete"
+              >
+                <i class="bi bi-trash3"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+    <div class="text-xs text-muted">Showing {{ rows().length }} of {{ total }} users</div>
+    <div class="ui-btn-group">
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(1)" [disabled]="loading() || page <= 1">First</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1">Prev</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages">Next</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages">Last</button>
+    </div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isCreateModalOpen()"
+  *ngIf="isCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create New User</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div *ngIf="createModalError()" class="ui-alert ui-alert-danger mb-4">
+          {{ createModalError() }}
+        </div>
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createUserForm" (ngSubmit)="createUser()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">First Name</label>
+            <input class="ui-form-control" formControlName="firstName" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Last Name</label>
+            <input class="ui-form-control" formControlName="lastName" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Email</label>
+            <input type="email" class="ui-form-control" formControlName="email" />
+          </div>
+
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Password Generator <span class="text-danger">*</span></label>
+            <div class="ui-input-group">
+              <input type="text" class="ui-form-control" formControlName="password" placeholder="Generate or enter password" />
+              <button class="ui-btn ui-btn-outline-primary" type="button" (click)="generateCreatePassword()" appTooltip title="Generate Password">
+                <i class="bi bi-magic"></i>
+              </button>
+            </div>
+            <div class="ui-form-text">This password is temporary. User will receive an email to set a new password.</div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Organization <span class="text-danger">*</span></label>
+            <ng-container *ngIf="isSuperuser; else fixedOrganizationField">
+              <select class="ui-form-select" formControlName="organizationId" [disabled]="createOptionsLoading()">
+                <option value="">Select organization</option>
+                <option *ngFor="let organization of createOrganizationOptions()" [value]="organization.id">
+                  {{ organizationOptionLabel(organization) }}
+                </option>
+              </select>
+            </ng-container>
+            <ng-template #fixedOrganizationField>
+              <input class="ui-form-control" [value]="currentOrganizationId || 'No organization on logged in user'" readonly />
+            </ng-template>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Roles <span class="text-danger">*</span></label>
+            <div class="border rounded-lg p-2 role-checklist bg-subtle">
+              <div *ngIf="createOptionsLoading()" class="text-xs text-muted">Loading roles...</div>
+              <div *ngIf="!createOptionsLoading() && createRoleOptions().length === 0" class="text-xs text-muted">
+                No roles available
+              </div>
+              <div class="ui-form-check mb-1" *ngFor="let role of createRoleOptions()">
+                <input
+                  class="ui-form-check-input"
+                  type="checkbox"
+                  [id]="'create-role-' + role.id"
+                  [checked]="isCreateRoleSelected(role.id)"
+                  (change)="toggleCreateRoleSelection(role.id, $any($event.target).checked)"
+                />
+                <label class="ui-form-check-label text-xs" [for]="'create-role-' + role.id">
+                  {{ roleOptionLabel(role) }}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Status</label>
+            <input class="ui-form-control" formControlName="status" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Phone</label>
+            <input class="ui-form-control" formControlName="phone" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Country</label>
+            <select class="ui-form-select" formControlName="country">
+              <option *ngFor="let country of countryOptions" [value]="country">{{ country }}</option>
+            </select>
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Address</label>
+            <input class="ui-form-control" formControlName="addressLine1" />
+          </div>
+
+          <div class="col-span-12 md:col-span-4 flex items-end">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isEmailVerified" />
+              <label class="ui-form-check-label">Email Verified</label>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-4 flex items-end">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createUser()">
+          {{ submitting() ? 'Creating...' : 'Create User' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

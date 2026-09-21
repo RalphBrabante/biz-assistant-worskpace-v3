@@ -1,0 +1,217 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Access Control</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Permission Management</h1>
+        <p class="text-muted mb-0">Manage resources and actions with modal-based creation flow.</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="ui-btn ui-btn-outline-dark" (click)="load()" [disabled]="loading()">
+          {{ loading() ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create Permission</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label font-semibold">Filter permissions</label>
+        <input
+          type="text"
+          class="ui-form-control"
+          placeholder="Search by name, code, resource, action"
+          [ngModel]="filter()"
+          (ngModelChange)="onFilterChange($event)"
+        />
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label font-semibold">Rows per page</label>
+        <select class="ui-form-select" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+          <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+        </select>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-table"></i>
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
+            <i class="bi bi-grid-3x2-gap"></i>
+          </button>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="stat-chip">
+          <div class="stat-label">Total Permissions</div>
+          <div class="stat-value">{{ total }}</div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="stat-chip">
+          <div class="stat-label">Page</div>
+          <div class="stat-value">{{ page }} / {{ totalPages }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th>Name</th>
+          <th>Code</th>
+          <th>Resource</th>
+          <th>Action</th>
+          <th>System</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="!loading() && filteredRows().length === 0">
+          <td colspan="7" class="text-center text-muted py-6">No permissions found.</td>
+        </tr>
+
+        <tr *ngFor="let row of filteredRows(); trackBy: trackById">
+          <ng-container *ngIf="editingId !== row.id; else editRow">
+            <td class="font-semibold">{{ row.name }}</td>
+            <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
+            <td>{{ row.resource }}</td>
+            <td>{{ row.action }}</td>
+            <td>{{ row.isSystem ? 'Yes' : 'No' }}</td>
+            <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="startEdit(row)" appTooltip title="Edit">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                  type="button"
+                  [disabled]="deletingId() === row.id"
+                  (click)="removePermission(row.id)"
+                  appTooltip
+                  title="Delete"
+                >
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-template #editRow>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['name']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['code']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['resource']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['action']" /></td>
+            <td>
+              <div class="ui-form-check">
+                <input class="ui-form-check-input" type="checkbox" [(ngModel)]="editForm['isSystem']" />
+              </div>
+            </td>
+            <td>
+              <div class="ui-form-check">
+                <input class="ui-form-check-input" type="checkbox" [(ngModel)]="editForm['isActive']" />
+              </div>
+            </td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveEdit()" appTooltip title="Save">
+                  <i class="bi bi-floppy2"></i>
+                </button>
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelEdit()" appTooltip title="Cancel">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </td>
+          </ng-template>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+    <div class="text-xs text-muted">Showing {{ rows().length }} of {{ total }} permissions</div>
+    <div class="ui-btn-group">
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(1)" [disabled]="loading() || page <= 1">First</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1">Prev</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages">Next</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages">Last</button>
+    </div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isCreateModalOpen()"
+  *ngIf="isCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-lg ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create New Permission</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createPermissionForm" (ngSubmit)="createPermission()">
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Permission Name</label>
+            <input class="ui-form-control" formControlName="name" placeholder="e.g. Manage Users" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('name', 'required')">Permission name is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Permission Code</label>
+            <input class="ui-form-control" formControlName="code" placeholder="e.g. users.manage" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('code', 'required')">Permission code is required.</div>
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('code', 'pattern')">Use lowercase letters, numbers, dot, and underscore only.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Resource</label>
+            <input class="ui-form-control" formControlName="resource" placeholder="e.g. users" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('resource', 'required')">Resource is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Action</label>
+            <input class="ui-form-control" formControlName="action" placeholder="e.g. create" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('action', 'required')">Action is required.</div>
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Description</label>
+            <textarea class="ui-form-control" rows="3" formControlName="description"></textarea>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isSystem" />
+              <label class="ui-form-check-label">System Permission</label>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createPermission()">
+          {{ submitting() ? 'Creating...' : 'Create Permission' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

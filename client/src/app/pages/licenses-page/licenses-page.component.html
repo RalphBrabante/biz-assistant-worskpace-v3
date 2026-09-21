@@ -1,0 +1,216 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Subscriptions</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Licenses</h1>
+        <p class="text-muted mb-0">Create and assign UUID license keys to organizations.</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="ui-btn ui-btn-outline-dark" (click)="load()" [disabled]="loading()">
+          {{ loading() ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create License</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label font-semibold">Filter licenses</label>
+        <input
+          type="text"
+          class="ui-form-control"
+          placeholder="Search by key, plan, status, organization name"
+          [ngModel]="filter()"
+          (ngModelChange)="onFilterChange($event)"
+        />
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label font-semibold">Rows per page</label>
+        <select class="ui-form-select" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+          <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+        </select>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-table"></i>
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
+            <i class="bi bi-grid-3x2-gap"></i>
+          </button>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="stat-chip">
+          <div class="stat-label">Total Licenses</div>
+          <div class="stat-value">{{ total }}</div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="stat-chip">
+          <div class="stat-label">Page</div>
+          <div class="stat-value">{{ page }} / {{ totalPages }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th *ngIf="isSuperuser">Organization</th>
+          <th>Key</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Expires At</th>
+          <th>Max Users</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="!loading() && filteredRows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 8 : 7" class="text-center text-muted py-6">No licenses found.</td>
+        </tr>
+
+        <tr *ngFor="let row of filteredRows(); trackBy: trackById">
+          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
+          <td class="font-semibold">{{ row.key }}</td>
+          <td>{{ row.planName || '-' }}</td>
+          <td>
+            <span class="ui-badge" [class.ui-badge-danger]="isExpired(row)" [class.ui-badge-success]="!isExpired(row)">
+              {{ row.status || (isExpired(row) ? 'expired' : 'active') }}
+            </span>
+          </td>
+          <td>{{ row.expiresAt ? (row.expiresAt | date: 'medium') : '-' }}</td>
+          <td>{{ row.maxUsers ?? '-' }}</td>
+          <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
+          <td class="text-right">
+            <div class="table-actions-inline">
+              <a
+                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
+                [routerLink]="['/license', row.id]"
+                appTooltip
+                title="Edit"
+              >
+                <i class="bi bi-pencil-square"></i>
+              </a>
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                type="button"
+                [disabled]="deletingId() === row.id"
+                (click)="removeLicense(row.id)"
+                appTooltip
+                title="Delete"
+              >
+                <i class="bi bi-trash3"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+    <div class="text-xs text-muted">Showing {{ rows().length }} of {{ total }} licenses</div>
+    <div class="ui-btn-group">
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(1)" [disabled]="loading() || page <= 1">First</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1">Prev</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages">Next</button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages">Last</button>
+    </div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isCreateModalOpen()"
+  *ngIf="isCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create New License</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div *ngIf="createModalError()" class="ui-alert ui-alert-danger">{{ createModalError() }}</div>
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createLicenseForm" (ngSubmit)="createLicense()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Assign Organization</label>
+            <select class="ui-form-select" formControlName="organizationId">
+              <option value="">Unassigned</option>
+              <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
+            </select>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">License Key</label>
+            <div class="ui-input-group">
+              <input class="ui-form-control" formControlName="key" readonly />
+              <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="generateKey()">
+                <i class="bi bi-arrow-clockwise mr-1"></i>Generate UUID
+              </button>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Plan</label>
+            <input class="ui-form-control" formControlName="planName" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('planName', 'required')">Plan is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Status</label>
+            <input class="ui-form-control" formControlName="status" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('status', 'required')">Status is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Max Users</label>
+            <input type="number" class="ui-form-control" formControlName="maxUsers" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('maxUsers', 'min')">Max users cannot be negative.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Starts At</label>
+            <input type="datetime-local" class="ui-form-control" formControlName="startsAt" />
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Expires At</label>
+            <input type="datetime-local" class="ui-form-control" formControlName="expiresAt" />
+            <div class="text-danger text-xs mt-1" *ngIf="hasCreateFormError('invalidDateRange')">Expires At must be after Starts At.</div>
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Notes</label>
+            <textarea rows="2" class="ui-form-control" formControlName="notes"></textarea>
+          </div>
+          <div class="col-span-12 md:col-span-4 flex items-end">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createLicense()">
+          {{ submitting() ? 'Creating...' : 'Create License' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

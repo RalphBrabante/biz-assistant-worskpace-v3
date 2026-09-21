@@ -1,0 +1,30 @@
+name: Validate application
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            client/package-lock.json
+      - run: npm run build
+      - run: npm test
+      - name: Verify standalone release
+        run: |
+          test -f dist/server.js
+          test -f dist/api/dist/main.js
+          test -f dist/client/dist/angular-client/browser/index.html
+          test -f dist/api/node_modules/sequelize-cli/lib/sequelize
+          test ! -e dist/.env
+          test ! -e dist/api/uploads

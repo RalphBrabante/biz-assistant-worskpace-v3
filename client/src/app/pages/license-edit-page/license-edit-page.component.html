@@ -1,0 +1,87 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Subscriptions</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Edit License</h1>
+        <p class="text-muted mb-0">Update assignment and subscription details. License key is immutable.</p>
+      </div>
+      <div class="flex gap-2">
+        <a class="ui-btn ui-btn-outline-dark" routerLink="/licenses"><i class="bi bi-arrow-left mr-1"></i>Back to Licenses</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div *ngIf="message()" class="ui-alert ui-alert-success">{{ message() }}</div>
+<div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
+
+<section class="ui-card shadow-panel rounded-xl">
+  <div class="ui-card-body p-6">
+    <div *ngIf="loading()" class="text-muted">Loading license...</div>
+
+    <div class="ui-grid grid grid-cols-12 gap-4" *ngIf="!loading() && license()">
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label">Assign Organization</label>
+        <select class="ui-form-select" [(ngModel)]="form['organizationId']">
+          <option value="">Unassigned</option>
+          <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label">License Key</label>
+        <input class="ui-form-control" [ngModel]="form['key']" readonly />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Plan</label>
+        <input class="ui-form-control" [(ngModel)]="form['planName']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Status</label>
+        <input class="ui-form-control" [(ngModel)]="form['status']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Max Users</label>
+        <input type="number" class="ui-form-control" [(ngModel)]="form['maxUsers']" />
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label">Starts At</label>
+        <input type="datetime-local" class="ui-form-control" [(ngModel)]="form['startsAt']" />
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label">Expires At</label>
+        <input type="datetime-local" class="ui-form-control" [(ngModel)]="form['expiresAt']" />
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label">Revoked At</label>
+        <input type="datetime-local" class="ui-form-control" [ngModel]="form['revokedAt']" readonly />
+      </div>
+      <div class="col-span-12">
+        <label class="ui-form-label">Notes</label>
+        <textarea rows="2" class="ui-form-control" [(ngModel)]="form['notes']"></textarea>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-end">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" />
+          <label class="ui-form-check-label">Active</label>
+        </div>
+      </div>
+      <div class="col-span-12 flex gap-2">
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="save()">
+          {{ submitting() ? 'Saving...' : 'Save License' }}
+        </button>
+        <button
+          class="ui-btn ui-btn-outline-danger"
+          type="button"
+          [disabled]="submitting() || form['status'] === 'revoked'"
+          (click)="revoke()"
+        >
+          <i class="bi bi-slash-circle mr-1"></i>Revoke License
+        </button>
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="backToList()">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</section>

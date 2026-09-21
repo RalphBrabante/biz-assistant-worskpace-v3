@@ -1,0 +1,142 @@
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+    <h1 class="text-xl font-semibold tracking-tight mb-4">{{ config.title }}</h1>
+
+    <div *ngIf="message" class="ui-alert ui-alert-success">{{ message }}</div>
+    <div *ngIf="error" class="ui-alert ui-alert-danger">{{ error }}</div>
+
+    <form (ngSubmit)="submit()" class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-6" *ngFor="let field of config.fields">
+        <div class="ui-form-check mt-6" *ngIf="isCheckbox(field)">
+          <input
+            class="ui-form-check-input"
+            type="checkbox"
+            [id]="field.key"
+            [name]="field.key"
+            [(ngModel)]="form[field.key]"
+          />
+          <label class="ui-form-check-label" [for]="field.key">{{ field.label }}</label>
+        </div>
+
+        <ng-container *ngIf="!isCheckbox(field)">
+          <label class="ui-form-label font-semibold" [for]="field.key">{{ field.label }}</label>
+
+          <textarea
+            *ngIf="isTextArea(field) || isJson(field)"
+            class="ui-form-control"
+            rows="3"
+            [id]="field.key"
+            [name]="field.key"
+            [required]="!!field.required"
+            [placeholder]="field.placeholder || ''"
+            [(ngModel)]="form[field.key]"
+          ></textarea>
+
+          <input
+            *ngIf="!isTextArea(field) && !isJson(field)"
+            class="ui-form-control"
+            [type]="inputType(field)"
+            [id]="field.key"
+            [name]="field.key"
+            [required]="!!field.required"
+            [readonly]="!!editingId && field.readonlyOnEdit"
+            [placeholder]="field.placeholder || ''"
+            [(ngModel)]="form[field.key]"
+          />
+        </ng-container>
+      </div>
+
+      <div class="col-span-12 flex gap-2 flex-wrap">
+        <button class="ui-btn ui-btn-primary" type="submit" [disabled]="submitting">
+          <i class="bi bi-plus-lg mr-1" *ngIf="!editingId"></i>
+          <i class="bi bi-floppy2 mr-1" *ngIf="editingId"></i>
+          {{ submitting ? 'Saving...' : (editingId ? 'Update' : 'Create') }}
+        </button>
+        <button *ngIf="editingId" class="ui-btn ui-btn-outline-secondary" type="button" (click)="cancelEdit()">
+          <i class="bi bi-x-lg mr-1"></i>
+          Cancel Edit
+        </button>
+        <button class="ui-btn ui-btn-outline-dark" type="button" (click)="load()" [disabled]="loading">
+          <i class="bi bi-arrow-clockwise mr-1"></i>
+          {{ loading ? 'Refreshing...' : 'Refresh List' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl">
+  <div class="ui-card-body border-b">
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-8">
+        <label class="ui-form-label">Search</label>
+        <input
+          type="text"
+          class="ui-form-control"
+          placeholder="Search table records..."
+          [(ngModel)]="searchQuery"
+          name="resourceSearch"
+        />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Active Filter</label>
+        <select class="ui-form-select" [(ngModel)]="activeFilter" name="resourceActiveFilter">
+          <option value="">All</option>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-table"></i>
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
+            <i class="bi bi-grid-3x2-gap"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ui-card-body p-0">
+    <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+      <table class="ui-table ui-table-hover align-middle mb-0">
+        <thead class="ui-table-light">
+          <tr>
+            <th>ID</th>
+            <th *ngFor="let key of config.summaryFields">{{ key }}</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!loading && filteredRows.length === 0">
+            <td [attr.colspan]="config.summaryFields.length + 2" class="text-center text-muted py-6">
+              No records found.
+            </td>
+          </tr>
+          <tr *ngFor="let row of filteredRows; trackBy: trackById">
+            <td class="whitespace-nowrap text-xs">{{ row['id'] }}</td>
+            <td *ngFor="let key of config.summaryFields">{{ prettyValue(row, key) }}</td>
+            <td class="text-right whitespace-nowrap">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="edit(row)" appTooltip title="Edit">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                  type="button"
+                  [disabled]="deletingId === row['id']"
+                  (click)="remove(row['id'])"
+                  appTooltip
+                  title="Delete"
+                >
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,158 @@
+<app-organization-required *ngIf="isContextLocked" />
+
+<div *ngIf="!isContextLocked">
+  <section class="page-heading ui-card shadow-panel rounded-xl mb-6">
+    <div class="ui-card-body p-6 lg:p-12 role-hero">
+      <div class="flex flex-wrap justify-between items-end gap-4">
+        <div>
+          <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Inbox</div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-2">Organization Messages <span *ngIf="unreadCount() !== null" class="ui-badge rounded-full ui-badge-primary text-base">{{ unreadCount() }} unread</span></h1>
+          <p class="text-muted mb-1">Updates from your organization, newest first.</p>
+          <p class="text-xs text-muted mb-0">Read status is shared with everyone in this organization.</p>
+          <p *ngIf="unreadCount() === null" class="text-xs text-muted mt-2 mb-0">Unread count unavailable. Refresh to try again.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="ui-btn ui-btn-outline-primary" (click)="markAllAsRead()" [disabled]="markingAllRead() || pendingReadIds().size > 0 || !unreadCount()">
+            <i class="bi bi-check2-all mr-1" aria-hidden="true"></i>{{ markingAllRead() ? 'Marking read…' : 'Mark all read' }}
+          </button>
+          <button type="button" class="ui-btn ui-btn-outline-secondary" (click)="refresh()" [disabled]="loading()">
+            <i class="bi bi-arrow-clockwise mr-1" aria-hidden="true"></i>{{ loading() ? 'Refreshing…' : 'Refresh' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ui-card shadow-panel rounded-xl mb-6">
+    <div class="ui-card-body p-6">
+      <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+        <div class="col-span-12 md:col-span-5">
+          <label for="message-search" class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted">Search</label>
+          <div class="relative">
+            <i class="bi bi-search absolute text-muted message-search-icon" aria-hidden="true"></i>
+            <input id="message-search" type="search" class="ui-form-control pl-12" [class.pr-12]="query" [(ngModel)]="query" (ngModelChange)="onSearchChange()" (keydown.enter)="applyFilters()" placeholder="Search title or message" />
+            <button *ngIf="query" type="button" class="ui-btn absolute p-0 border-0 bg-transparent text-muted message-search-clear" aria-label="Clear search" (click)="clearSearch()"><i class="bi bi-x-circle-fill" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div class="col-span-6 md:col-span-3">
+          <label for="message-status" class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted">Status</label>
+          <select id="message-status" class="ui-form-select" [class.border-brand]="isReadFilter" [(ngModel)]="isReadFilter" (ngModelChange)="applyFilters()">
+            <option value="">All Messages</option><option value="unread">Unread</option><option value="read">Read</option>
+          </select>
+        </div>
+        <div class="col-span-6 md:col-span-4">
+          <label for="message-type" class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted">Type</label>
+          <select id="message-type" class="ui-form-select" [class.border-brand]="entityTypeFilter" [(ngModel)]="entityTypeFilter" (ngModelChange)="applyFilters()">
+            <option value="">All Types</option><option *ngFor="let type of messageTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+        <div class="col-span-6 md:col-span-2">
+          <div class="ui-input-group">
+            <label for="message-page-size" class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</label>
+            <select id="message-page-size" class="ui-form-select border-l-0" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+              <option [ngValue]="10">10</option><option [ngValue]="20">20</option><option [ngValue]="50">50</option><option [ngValue]="100">100</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-span-6 md:col-span-2">
+          <div class="ui-btn-group view-toggle-group" role="group" aria-label="Message view">
+            <button type="button" class="ui-btn ui-btn-outline-secondary" [class.active]="viewMode === 'card'" [attr.aria-pressed]="viewMode === 'card'" aria-label="Card view" (click)="viewMode = 'card'"><i class="bi bi-grid" aria-hidden="true"></i></button>
+            <button type="button" class="ui-btn ui-btn-outline-secondary" [class.active]="viewMode === 'table'" [attr.aria-pressed]="viewMode === 'table'" aria-label="Table view" (click)="viewMode = 'table'"><i class="bi bi-table" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div class="col-span-12 md:col-span-8 flex flex-wrap md:justify-end items-center gap-4">
+          <span class="text-xs text-muted"><span class="font-semibold text-ink">{{ total }}</span> {{ total === 1 ? 'message' : 'messages' }} · Page {{ page }} / {{ totalPages }}</span>
+          <button type="button" class="ui-btn ui-btn-sm" [ngClass]="hasActiveFilters ? 'ui-btn-outline-danger' : 'ui-btn-outline-secondary'" [disabled]="!hasActiveFilters" (click)="clearFilters()">
+            Clear filters <span *ngIf="activeFilterCount" class="ui-badge ui-badge-danger ml-1">{{ activeFilterCount }}</span>
+          </button>
+        </div>
+      </div>
+      <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+        <span *ngIf="query.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface">Search: {{ query }} <button type="button" class="ui-btn-close ml-2" aria-label="Remove search filter" (click)="clearSearch()"></button></span>
+        <span *ngIf="isReadFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface">{{ isReadFilter === 'read' ? 'Read' : 'Unread' }} <button type="button" class="ui-btn-close ml-2" aria-label="Remove status filter" (click)="isReadFilter = ''; applyFilters()"></button></span>
+        <span *ngIf="entityTypeFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface">{{ entityTypeLabel(entityTypeFilter) }} <button type="button" class="ui-btn-close ml-2" aria-label="Remove type filter" (click)="entityTypeFilter = ''; applyFilters()"></button></span>
+      </div>
+      <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0" role="status">{{ message() }}</div>
+      <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0" role="alert">{{ error() }} <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-danger ml-2" (click)="refresh()">Retry loading</button></div>
+    </div>
+  </section>
+
+  <div *ngIf="newMessageCount()" class="ui-alert ui-alert-info flex flex-wrap justify-between items-center gap-2" role="status">
+    <span>{{ newMessageCount() }} new {{ newMessageCount() === 1 ? 'message is' : 'messages are' }} available.</span>
+    <button type="button" class="ui-btn ui-btn-sm ui-btn-primary" (click)="showNewMessages()" [disabled]="loading()">Refresh messages</button>
+  </div>
+
+  <section class="ui-card shadow-panel rounded-xl mb-6" [attr.aria-busy]="loading()">
+    <div *ngIf="loading()" class="p-12 text-center text-muted" role="status"><span class="ui-spinner-border ui-spinner-border-sm mr-2" aria-hidden="true"></span>Loading messages…</div>
+    <div *ngIf="!loading() && !error() && !rows().length" class="p-12 text-center">
+      <i class="bi bi-inbox text-4xl text-muted" aria-hidden="true"></i>
+      <h2 class="text-base font-semibold mt-4">{{ hasActiveFilters ? 'No matching messages' : 'Your organization inbox is empty' }}</h2>
+      <p class="text-muted">{{ hasActiveFilters ? 'Try another search or clear your filters.' : 'Updates will appear here as activity happens in your organization.' }}</p>
+      <button *ngIf="hasActiveFilters" type="button" class="ui-btn ui-btn-outline-primary" (click)="clearFilters()">Clear filters</button>
+    </div>
+    <div *ngIf="!loading() && viewMode === 'card'" class="ui-list-group ui-list-group-flush rounded-xl">
+      <article *ngFor="let row of rows(); trackBy: trackById" class="ui-list-group-item p-6 message-card" [class.message-unread]="!row.isRead">
+        <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+          <div class="flex flex-wrap gap-2 items-center">
+            <span class="ui-badge rounded-full" [ngClass]="row.isRead ? 'ui-badge-secondary' : 'ui-badge-primary'">{{ row.isRead ? 'Read' : 'Unread' }}</span>
+            <span class="text-xs text-muted capitalize">{{ entityTypeLabel(row.entityType) }}</span>
+          </div>
+          <time class="text-xs text-muted" [attr.datetime]="row.createdAt">{{ formatTimestamp(row.createdAt) }}</time>
+        </div>
+        <h2 class="text-sm font-semibold mb-2"><button type="button" class="ui-btn ui-btn-link text-ink text-left font-semibold break-words p-0 no-underline" (click)="openMessage(row)">{{ row.title }}</button></h2>
+        <p class="message-preview text-muted mb-4">{{ row.message }}</p>
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <span class="text-xs text-muted">From {{ creatorLabel(row) }}</span>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="openMessage(row)">Read message</button>
+            <button *ngIf="!row.isRead" type="button" class="ui-btn ui-btn-sm ui-btn-outline-primary" (click)="markAsRead(row)" [disabled]="pendingReadIds().has(row.id) || markingAllRead()">{{ pendingReadIds().has(row.id) ? 'Marking…' : 'Mark read' }}</button>
+          </div>
+        </div>
+      </article>
+    </div>
+    <div *ngIf="!loading() && viewMode === 'table' && rows().length" class="ui-table-responsive">
+      <table class="ui-table ui-table-hover align-middle mb-0">
+        <thead><tr><th>Message</th><th>Type</th><th>From</th><th>Received</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of rows(); trackBy: trackById" [class.message-unread]="!row.isRead">
+            <td class="message-table-summary"><button type="button" class="ui-btn ui-btn-link text-ink text-left font-semibold p-0 break-words" (click)="openMessage(row)">{{ row.title }}</button><div class="text-xs text-muted message-preview">{{ row.message }}</div></td>
+            <td class="capitalize">{{ entityTypeLabel(row.entityType) }}</td><td>{{ creatorLabel(row) }}</td><td class="text-xs">{{ formatTimestamp(row.createdAt) }}</td>
+            <td><span class="ui-badge rounded-full" [ngClass]="row.isRead ? 'ui-badge-secondary' : 'ui-badge-primary'">{{ row.isRead ? 'Read' : 'Unread' }}</span></td>
+            <td><button type="button" class="ui-btn ui-btn-sm ui-btn-outline-primary whitespace-nowrap" (click)="markAsRead(row)" [disabled]="row.isRead || pendingReadIds().has(row.id) || markingAllRead()">{{ row.isRead ? 'Read' : pendingReadIds().has(row.id) ? 'Marking…' : 'Mark read' }}</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="total > 0 && !error()" class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+      <span class="text-xs text-muted">Page {{ page }} of {{ totalPages }} · {{ total }} {{ total === 1 ? 'message' : 'messages' }}</span>
+      <div class="ui-btn-group" role="group" aria-label="Message pages">
+        <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm" aria-label="First page" (click)="goToPage(1)" [disabled]="loading() || page <= 1">First</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm" aria-label="Previous page" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1">Previous</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm" aria-label="Next page" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages">Next</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm" aria-label="Last page" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages">Last</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<dialog #messageDialog class="message-dialog border rounded-xl shadow-dialog p-0" aria-labelledby="message-detail-title">
+  <ng-container *ngIf="selectedMessage() as row">
+    <div class="p-6 border-b flex justify-between items-start gap-4">
+      <div><div class="text-xs text-muted capitalize mb-2">{{ entityTypeLabel(row.entityType) }}</div><h2 id="message-detail-title" class="text-base font-semibold mb-0 break-words">{{ row.title }}</h2></div>
+      <button type="button" class="ui-btn-close shrink-0" aria-label="Close message" (click)="closeMessage()"></button>
+    </div>
+    <div class="message-dialog-body p-6">
+      <p class="text-xs text-muted">From {{ creatorLabel(row) }} · {{ formatTimestamp(row.createdAt) }}</p>
+      <p class="message-content">{{ row.message }}</p>
+      <p class="text-xs text-muted mb-0">{{ row.isRead ? 'Read for this organization' : 'Unread' }}<span *ngIf="row.readAt"> · {{ formatTimestamp(row.readAt) }}</span></p>
+      <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4" role="alert">{{ error() }}</div>
+    </div>
+    <div class="p-6 border-t flex flex-wrap justify-end gap-2">
+      <button *ngIf="!row.isRead" type="button" class="ui-btn ui-btn-outline-primary" (click)="markAsRead(row)" [disabled]="pendingReadIds().has(row.id) || markingAllRead()">{{ pendingReadIds().has(row.id) ? 'Marking…' : 'Mark read' }}</button>
+      <button type="button" class="ui-btn ui-btn-outline-secondary" (click)="closeMessage()">Close</button>
+      <a *ngIf="relatedPath(row) as path" class="ui-btn ui-btn-primary" [routerLink]="path" (click)="closeMessage()">Open related record <i class="bi bi-arrow-up-right ml-1" aria-hidden="true"></i></a>
+    </div>
+  </ng-container>
+</dialog>

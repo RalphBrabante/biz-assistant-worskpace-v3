@@ -1,0 +1,129 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden no-print">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Revenue</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Sales Invoice</h1>
+        <p class="text-muted mb-0">Manage invoice status and print client-ready copy.</p>
+      </div>
+      <div class="flex gap-2">
+        <a class="ui-btn ui-btn-outline-dark" routerLink="/sales-invoices"><i class="bi bi-arrow-left mr-1"></i>Back to Sales Invoices</a>
+        <button class="ui-btn ui-btn-dark" type="button" *ngIf="isPaid && invoice()" (click)="printInvoice()">
+          <i class="bi bi-printer mr-1"></i>Print Invoice
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div *ngIf="message()" class="ui-alert ui-alert-success no-print">{{ message() }}</div>
+<div *ngIf="error()" class="ui-alert ui-alert-danger no-print">{{ error() }}</div>
+
+<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="invoice() && !isPaid">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">Status Update</h2>
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label font-semibold">Status</label>
+        <select class="ui-form-select" [(ngModel)]="status" [disabled]="submitting()">
+          <option *ngFor="let option of statusOptions" [value]="option">{{ option }}</option>
+        </select>
+      </div>
+      <div class="col-span-12 flex gap-2">
+        <button class="ui-btn ui-btn-primary" type="button" [disabled]="submitting()" (click)="saveStatus()">
+          {{ submitting() ? 'Saving...' : 'Save Status' }}
+        </button>
+        <button class="ui-btn ui-btn-outline-danger" type="button" [disabled]="submitting()" (click)="markCancelled()">
+          <i class="bi bi-x-octagon mr-1"></i>Mark Cancelled
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl print-delivery-sheet" *ngIf="invoice() as row">
+  <div class="ui-card-body p-6 lg:p-12">
+    <div class="flex justify-between items-start mb-6">
+      <div>
+        <h2 class="text-xl font-semibold tracking-tight mb-1">Invoice {{ row.invoiceNumber }}</h2>
+        <div class="text-muted">Sales Invoice Record</div>
+      </div>
+      <div class="text-right text-xs">
+        <div><strong>Status:</strong> {{ printableStatus }}</div>
+        <div><strong>Payment:</strong> {{ row.paymentStatus || '-' }}</div>
+        <div><strong>Issue Date:</strong> {{ row.issueDate ? (row.issueDate | date: 'mediumDate') : '-' }}</div>
+        <div><strong>Order #:</strong> {{ row.order?.orderNumber || '-' }}</div>
+      </div>
+    </div>
+
+    <div *ngIf="isPaid" class="ui-alert ui-alert-success">
+      This invoice is paid. Editable fields are locked and this is shown as text-only for display/printing.
+    </div>
+
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-6">
+        <div class="border rounded-lg p-4 h-full">
+          <div class="text-xs text-muted uppercase tracking-wider mb-2">Invoice Reference</div>
+          <div><strong>Invoice ID:</strong> {{ row.id }}</div>
+          <div><strong>Order ID:</strong> {{ row.orderId }}</div>
+          <div><strong>Customer:</strong> {{ row.order?.customer?.name || '-' }}</div>
+          <div><strong>Customer Tax ID:</strong> {{ row.order?.customer?.taxId || '-' }}</div>
+          <div><strong>Due Date:</strong> {{ row.dueDate ? (row.dueDate | date: 'mediumDate') : '-' }}</div>
+          <div><strong>Paid At:</strong> {{ row.paidAt ? (row.paidAt | date: 'medium') : '-' }}</div>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <div class="border rounded-lg p-4 h-full">
+          <div class="text-xs text-muted uppercase tracking-wider mb-2">Amounts</div>
+          <div><strong>Currency:</strong> {{ row.currency || 'USD' }}</div>
+          <div><strong>Amount:</strong> {{ formatMoney(invoiceAmount, invoiceCurrency) }}</div>
+          <div><strong>Taxable Amount:</strong> {{ formatMoney(invoiceTaxableAmount, invoiceCurrency) }}</div>
+          <div><strong>Tax Amount:</strong> {{ formatMoney((row.taxAmount ?? itemsTax), invoiceCurrency) }}</div>
+          <div><strong>Withholding Tax Amount:</strong> {{ formatMoney(invoiceWithHoldingTaxAmount, invoiceCurrency) }}</div>
+          <div><strong>Discount:</strong> {{ formatMoney((row.discountAmount ?? itemsDiscount), invoiceCurrency) }}</div>
+          <div><strong>Shipping:</strong> {{ formatMoney(orderShippingAmount, invoiceCurrency) }}</div>
+          <div class="text-lg mt-2"><strong>Total Paid:</strong> {{ formatMoney(invoicePaidTotal, invoiceCurrency) }}</div>
+        </div>
+      </div>
+      <div class="col-span-12" *ngIf="row.notes">
+        <div class="border rounded-lg p-4">
+          <div class="text-xs text-muted uppercase tracking-wider mb-2">Notes</div>
+          <div>{{ row.notes }}</div>
+        </div>
+      </div>
+
+      <div class="col-span-12">
+        <div class="border rounded-lg p-4">
+          <div class="text-xs text-muted uppercase tracking-wider mb-2">Ordered Items</div>
+          <div class="ui-table-responsive">
+            <table class="ui-table ui-table-sm ui-table-bordered align-middle mb-0">
+              <thead class="ui-table-light">
+                <tr>
+                  <th>Item</th>
+                  <th>SKU</th>
+                  <th class="text-right">Qty</th>
+                  <th class="text-right">Unit Price</th>
+                  <th class="text-right">Tax</th>
+                  <th class="text-right">Line Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let line of orderedItems; trackBy: trackBySnapshotId">
+                  <td>{{ line.name || '-' }}</td>
+                  <td>{{ line.sku || '-' }}</td>
+                  <td class="text-right">{{ line.quantity || 0 }}</td>
+                  <td class="text-right">{{ formatMoney(line.unitPrice || 0, invoiceCurrency) }}</td>
+                  <td class="text-right">{{ formatMoney(line.lineTax || 0, invoiceCurrency) }}</td>
+                  <td class="text-right font-semibold">{{ formatMoney(line.lineTotal || 0, invoiceCurrency) }}</td>
+                </tr>
+                <tr *ngIf="orderedItems.length === 0">
+                  <td colspan="6" class="text-center text-muted">No ordered item snapshots found for this invoice.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,195 @@
+<div class="ui-grid grid grid-cols-12 gap-4" [formGroup]="form">
+  <div class="col-span-12" *ngIf="showOrganizationAssignments">
+    <label class="ui-form-label font-semibold">Assigned Organizations</label>
+    <select class="ui-form-select" formControlName="organizationIds" multiple size="4">
+      <option *ngFor="let organization of organizationOptions" [value]="organization.id">
+        {{ organizationLabel(organization) }}{{ organization.id === ownerOrganizationId ? ' (Owner)' : '' }}
+      </option>
+    </select>
+    <div class="ui-form-text">Hold Ctrl or Cmd to select multiple organizations.</div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">
+      Name
+      <span class="text-danger" *ngIf="isFieldRequired('name')">*</span>
+    </label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="name" [class.is-invalid]="shouldShowError('name')" />
+      <div *ngIf="shouldShowError('name')" class="field-validation-icon" appTooltip [attr.title]="fieldError('name')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">
+      Category
+      <span class="text-danger" *ngIf="isFieldRequired('category')">*</span>
+    </label>
+    <div class="relative">
+      <select class="ui-form-select" formControlName="category" [class.is-invalid]="shouldShowError('category')">
+        <option value="goods">Goods</option>
+        <option value="operations">Operations</option>
+        <option value="others">Others</option>
+      </select>
+      <div *ngIf="shouldShowError('category')" class="field-validation-icon-select" appTooltip [attr.title]="fieldError('category')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Legal Name</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="legalName" [class.is-invalid]="shouldShowError('legalName')" />
+      <div *ngIf="shouldShowError('legalName')" class="field-validation-icon" appTooltip [attr.title]="fieldError('legalName')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">TIN</label>
+    <div class="relative">
+      <input
+        class="ui-form-control"
+        formControlName="taxId"
+        [class.is-invalid]="shouldShowError('taxId')"
+        placeholder="499-531-238-00000"
+        inputmode="numeric"
+        maxlength="17"
+        (input)="taxIdInput.emit($event)"
+      />
+      <div *ngIf="shouldShowError('taxId')" class="field-validation-icon" appTooltip [attr.title]="fieldError('taxId')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Contact Person</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="contactPerson" [class.is-invalid]="shouldShowError('contactPerson')" />
+      <div *ngIf="shouldShowError('contactPerson')" class="field-validation-icon" appTooltip [attr.title]="fieldError('contactPerson')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Contact Email (optional)</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="contactEmail" [class.is-invalid]="shouldShowError('contactEmail')" />
+      <div *ngIf="shouldShowError('contactEmail')" class="field-validation-icon" appTooltip [attr.title]="fieldError('contactEmail')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Phone</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="phone" [class.is-invalid]="shouldShowError('phone')" />
+      <div *ngIf="shouldShowError('phone')" class="field-validation-icon" appTooltip [attr.title]="fieldError('phone')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">Address Line 1</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="addressLine1" [class.is-invalid]="shouldShowError('addressLine1')" />
+      <div *ngIf="shouldShowError('addressLine1')" class="field-validation-icon" appTooltip [attr.title]="fieldError('addressLine1')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">Address Line 2</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="addressLine2" [class.is-invalid]="shouldShowError('addressLine2')" />
+      <div *ngIf="shouldShowError('addressLine2')" class="field-validation-icon" appTooltip [attr.title]="fieldError('addressLine2')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">City</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="city" [class.is-invalid]="shouldShowError('city')" />
+      <div *ngIf="shouldShowError('city')" class="field-validation-icon" appTooltip [attr.title]="fieldError('city')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">State</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="state" [class.is-invalid]="shouldShowError('state')" />
+      <div *ngIf="shouldShowError('state')" class="field-validation-icon" appTooltip [attr.title]="fieldError('state')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Barangay (Brgy)</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="barangay" [class.is-invalid]="shouldShowError('barangay')" />
+      <div *ngIf="shouldShowError('barangay')" class="field-validation-icon" appTooltip [attr.title]="fieldError('barangay')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Province</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="province" [class.is-invalid]="shouldShowError('province')" />
+      <div *ngIf="shouldShowError('province')" class="field-validation-icon" appTooltip [attr.title]="fieldError('province')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Postal Code</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="postalCode" [class.is-invalid]="shouldShowError('postalCode')" />
+      <div *ngIf="shouldShowError('postalCode')" class="field-validation-icon" appTooltip [attr.title]="fieldError('postalCode')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Country</label>
+    <select class="ui-form-select" formControlName="country">
+      <option *ngFor="let country of countryOptions" [value]="country">{{ country }}</option>
+    </select>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">Payment Terms</label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="paymentTerms" [class.is-invalid]="shouldShowError('paymentTerms')" />
+      <div *ngIf="shouldShowError('paymentTerms')" class="field-validation-icon" appTooltip [attr.title]="fieldError('paymentTerms')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">
+      Status
+      <span class="text-danger" *ngIf="isFieldRequired('status')">*</span>
+    </label>
+    <div class="relative">
+      <select class="ui-form-select" formControlName="status" [class.is-invalid]="shouldShowError('status')">
+        <option value="active">active</option>
+        <option value="inactive">inactive</option>
+        <option value="blocked">blocked</option>
+      </select>
+      <div *ngIf="shouldShowError('status')" class="field-validation-icon-select" appTooltip [attr.title]="fieldError('status')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12">
+    <label class="ui-form-label font-semibold">Notes</label>
+    <div class="relative">
+      <textarea rows="2" class="ui-form-control" formControlName="notes" [class.is-invalid]="shouldShowError('notes')"></textarea>
+      <div *ngIf="shouldShowError('notes')" class="field-validation-icon-textarea" appTooltip [attr.title]="fieldError('notes')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+</div>

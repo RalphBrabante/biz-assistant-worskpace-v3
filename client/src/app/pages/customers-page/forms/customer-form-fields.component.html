@@ -1,0 +1,185 @@
+<div class="ui-grid grid grid-cols-12 gap-4" [formGroup]="form">
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Name <span *ngIf="isRequired('name')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="name" [class.is-invalid]="hasError('name')" />
+      <div *ngIf="hasError('name')" class="field-validation-icon" appTooltip [attr.title]="error('name')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Legal Name <span *ngIf="isRequired('legalName')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="legalName" [class.is-invalid]="hasError('legalName')" />
+      <div *ngIf="hasError('legalName')" class="field-validation-icon" appTooltip [attr.title]="error('legalName')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Tax ID <span *ngIf="isRequired('taxId')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="taxId" placeholder="499-531-238-00000" inputmode="numeric" [class.is-invalid]="hasError('taxId')" (input)="taxIdInput.emit($event)" />
+      <div *ngIf="hasError('taxId')" class="field-validation-icon" appTooltip [attr.title]="error('taxId')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Customer Code <span *ngIf="isRequired('customerCode')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="customerCode" [class.is-invalid]="hasError('customerCode')" />
+      <div *ngIf="hasError('customerCode')" class="field-validation-icon" appTooltip [attr.title]="error('customerCode')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Type <span *ngIf="isRequired('type')" class="text-danger">*</span></label>
+    <div class="relative">
+      <select class="ui-form-select" formControlName="type" [class.is-invalid]="hasError('type')">
+        <option value="business">business</option>
+        <option value="individual">individual</option>
+      </select>
+      <div *ngIf="hasError('type')" class="field-validation-icon-select" appTooltip [attr.title]="error('type')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Status <span *ngIf="isRequired('status')" class="text-danger">*</span></label>
+    <div class="relative">
+      <select class="ui-form-select" formControlName="status" [class.is-invalid]="hasError('status')">
+        <option value="active">active</option>
+        <option value="inactive">inactive</option>
+        <option value="blocked">blocked</option>
+      </select>
+      <div *ngIf="hasError('status')" class="field-validation-icon-select" appTooltip [attr.title]="error('status')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Contact Person <span *ngIf="isRequired('contactPerson')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="contactPerson" [class.is-invalid]="hasError('contactPerson')" />
+      <div *ngIf="hasError('contactPerson')" class="field-validation-icon" appTooltip [attr.title]="error('contactPerson')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Email <span *ngIf="isRequired('email')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="email" [class.is-invalid]="hasError('email')" />
+      <div *ngIf="hasError('email')" class="field-validation-icon" appTooltip [attr.title]="error('email')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Phone <span *ngIf="isRequired('phone')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="phone" [class.is-invalid]="hasError('phone')" />
+      <div *ngIf="hasError('phone')" class="field-validation-icon" appTooltip [attr.title]="error('phone')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">Address Line 1 <span *ngIf="isRequired('addressLine1')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="addressLine1" [class.is-invalid]="hasError('addressLine1')" />
+      <div *ngIf="hasError('addressLine1')" class="field-validation-icon" appTooltip [attr.title]="error('addressLine1')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold">Address Line 2 <span *ngIf="isRequired('addressLine2')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="addressLine2" [class.is-invalid]="hasError('addressLine2')" />
+      <div *ngIf="hasError('addressLine2')" class="field-validation-icon" appTooltip [attr.title]="error('addressLine2')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">City <span *ngIf="isRequired('city')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="city" [class.is-invalid]="hasError('city')" />
+      <div *ngIf="hasError('city')" class="field-validation-icon" appTooltip [attr.title]="error('city')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">State <span *ngIf="isRequired('state')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="state" [class.is-invalid]="hasError('state')" />
+      <div *ngIf="hasError('state')" class="field-validation-icon" appTooltip [attr.title]="error('state')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Postal Code <span *ngIf="isRequired('postalCode')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input class="ui-form-control" formControlName="postalCode" [class.is-invalid]="hasError('postalCode')" />
+      <div *ngIf="hasError('postalCode')" class="field-validation-icon" appTooltip [attr.title]="error('postalCode')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-3">
+    <label class="ui-form-label font-semibold">Country <span *ngIf="isRequired('country')" class="text-danger">*</span></label>
+    <div class="relative">
+      <select class="ui-form-select" formControlName="country" [class.is-invalid]="hasError('country')">
+        <option *ngFor="let country of countryOptions" [value]="country">{{ country }}</option>
+      </select>
+      <div *ngIf="hasError('country')" class="field-validation-icon-select" appTooltip [attr.title]="error('country')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Credit Limit <span *ngIf="isRequired('creditLimit')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input type="number" class="ui-form-control" formControlName="creditLimit" [class.is-invalid]="hasError('creditLimit')" />
+      <div *ngIf="hasError('creditLimit')" class="field-validation-icon" appTooltip [attr.title]="error('creditLimit')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4">
+    <label class="ui-form-label font-semibold">Payment Terms (days) <span *ngIf="isRequired('paymentTermsDays')" class="text-danger">*</span></label>
+    <div class="relative">
+      <input type="number" class="ui-form-control" formControlName="paymentTermsDays" [class.is-invalid]="hasError('paymentTermsDays')" />
+      <div *ngIf="hasError('paymentTermsDays')" class="field-validation-icon" appTooltip [attr.title]="error('paymentTermsDays')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-span-12 md:col-span-4 flex items-end">
+    <div class="ui-form-check">
+      <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+      <label class="ui-form-check-label">Active</label>
+    </div>
+  </div>
+
+  <div class="col-span-12">
+    <label class="ui-form-label font-semibold">Notes <span *ngIf="isRequired('notes')" class="text-danger">*</span></label>
+    <div class="relative">
+      <textarea rows="2" class="ui-form-control" formControlName="notes" [class.is-invalid]="hasError('notes')"></textarea>
+      <div *ngIf="hasError('notes')" class="field-validation-icon-textarea" appTooltip [attr.title]="error('notes')">
+        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+      </div>
+    </div>
+  </div>
+</div>

@@ -23,8 +23,6 @@ coverage/
 
 # Node modules in root (if any)
 node_modules/
-package-lock.json
-**/package-lock.json
 
 # Docker local overrides
 docker-compose.override.yml
@@ -33,3 +31,7 @@ docker-compose.override.yml
 nginx/certs/*
 !nginx/certs/.gitkeep
 !nginx/certs/README.md
+
+# Deployable release and environment templates
+/dist/
+!.env.hostinger.example

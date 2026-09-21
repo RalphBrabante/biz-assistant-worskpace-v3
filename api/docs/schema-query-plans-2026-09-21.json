@@ -1,0 +1,166 @@
+{
+  "before": {
+    "expenseList": [
+      {
+        "table": "expenses",
+        "type": "ALL",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id",
+        "key": null,
+        "rows": 250,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "expenseStatus": [
+      {
+        "table": "expenses",
+        "type": "ALL",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id,expenses_status",
+        "key": null,
+        "rows": 250,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "expensePeriod": [
+      {
+        "table": "expenses",
+        "type": "ALL",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id,expenses_expense_date",
+        "key": null,
+        "rows": 250,
+        "extra": "Using where"
+      }
+    ],
+    "invoiceList": [
+      {
+        "table": "sales_invoices",
+        "type": "ALL",
+        "possible_keys": "sales_invoices_organization_id_invoice_number_uq,sales_invoices_organization_id",
+        "key": null,
+        "rows": 30,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "invoicePeriod": [
+      {
+        "table": "sales_invoices",
+        "type": "ALL",
+        "possible_keys": "sales_invoices_organization_id_invoice_number_uq,sales_invoices_organization_id,sales_invoices_status,sales_invoices_issue_date",
+        "key": null,
+        "rows": 30,
+        "extra": "Using where"
+      }
+    ],
+    "orderStatus": [
+      {
+        "table": "orders",
+        "type": "ref",
+        "possible_keys": "orders_organization_id_order_number_uq,orders_organization_id,orders_status",
+        "key": "orders_organization_id_order_number_uq",
+        "rows": 1,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "unreadMessages": [
+      {
+        "table": "messages",
+        "type": "ref",
+        "possible_keys": "messages_organization_id,messages_is_read",
+        "key": "messages_is_read",
+        "rows": 1,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "orderActivity": [
+      {
+        "table": "order_activities",
+        "type": "ALL",
+        "possible_keys": "order_activities_order_id",
+        "key": null,
+        "rows": 17,
+        "extra": "Using where; Using filesort"
+      }
+    ]
+  },
+  "after": {
+    "expenseList": [
+      {
+        "table": "expenses",
+        "type": "range",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id,expenses_org_created_idx,expenses_org_status_created_idx,expenses_org_date_idx",
+        "key": "expenses_org_created_idx",
+        "rows": 245,
+        "extra": "Using index condition; Backward index scan"
+      }
+    ],
+    "expenseStatus": [
+      {
+        "table": "expenses",
+        "type": "ref",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id,expenses_status,expenses_org_created_idx,expenses_org_status_created_idx,expenses_org_date_idx",
+        "key": "expenses_org_created_idx",
+        "rows": 245,
+        "extra": "Using where; Backward index scan"
+      }
+    ],
+    "expensePeriod": [
+      {
+        "table": "expenses",
+        "type": "ALL",
+        "possible_keys": "expenses_organization_id_expense_number_uq,expenses_organization_id,expenses_expense_date,expenses_org_created_idx,expenses_org_status_created_idx,expenses_org_date_idx",
+        "key": null,
+        "rows": 250,
+        "extra": "Using where"
+      }
+    ],
+    "invoiceList": [
+      {
+        "table": "sales_invoices",
+        "type": "range",
+        "possible_keys": "sales_invoices_organization_id_invoice_number_uq,sales_invoices_organization_id,sales_invoices_org_created_idx,sales_invoices_org_status_created_idx,sales_invoices_org_date_idx",
+        "key": "sales_invoices_org_created_idx",
+        "rows": 30,
+        "extra": "Using index condition; Backward index scan"
+      }
+    ],
+    "invoicePeriod": [
+      {
+        "table": "sales_invoices",
+        "type": "ALL",
+        "possible_keys": "sales_invoices_organization_id_invoice_number_uq,sales_invoices_organization_id,sales_invoices_status,sales_invoices_issue_date,sales_invoices_org_created_idx,sales_invoices_org_status_created_idx,sales_invoices_org_date_idx",
+        "key": null,
+        "rows": 30,
+        "extra": "Using where"
+      }
+    ],
+    "orderStatus": [
+      {
+        "table": "orders",
+        "type": "ref",
+        "possible_keys": "orders_organization_id_order_number_uq,orders_organization_id,orders_status,orders_org_created_idx,orders_org_status_created_idx",
+        "key": "orders_org_created_idx",
+        "rows": 1,
+        "extra": "Using where; Backward index scan"
+      }
+    ],
+    "unreadMessages": [
+      {
+        "table": "messages",
+        "type": "ref",
+        "possible_keys": "messages_organization_id,messages_is_read,messages_org_created_idx,messages_org_read_created_idx",
+        "key": "messages_is_read",
+        "rows": 1,
+        "extra": "Using where; Using filesort"
+      }
+    ],
+    "orderActivity": [
+      {
+        "table": "order_activities",
+        "type": "ref",
+        "possible_keys": "order_activities_order_id,order_activities_order_created_idx",
+        "key": "order_activities_order_created_idx",
+        "rows": 10,
+        "extra": "Backward index scan; Using index"
+      }
+    ]
+  }
+}

@@ -1,0 +1,546 @@
+<app-organization-required *ngIf="isContextLocked" />
+
+<div [attr.inert]="isContextLocked ? '' : null" [class.opacity-50]="isContextLocked">
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Inventory</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Items</h1>
+        <p class="text-muted mb-0">Manage products and services with modal-first creation.</p>
+      </div>
+      <div class="flex gap-2">
+        <div class="ui-btn-group table-actions-menu">
+          <button
+            class="ui-btn ui-btn-outline-dark ui-dropdown-toggle"
+            type="button"
+            appDropdown
+            aria-expanded="false"
+            appTooltip
+            title="Table actions"
+          >
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading()">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>{{ loading() ? 'Refreshing...' : 'Refresh' }}</span>
+              </button>
+            </li>
+            <li><hr class="ui-dropdown-divider" /></li>
+            <li class="ui-dropdown-header uppercase tracking-wider text-xs">CSV</li>
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="exportItemsCsv()" [disabled]="exporting()">
+                <i class="bi bi-download"></i>
+                <span>{{ exporting() ? 'Exporting...' : 'Export CSV' }}</span>
+              </button>
+            </li>
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()">
+                <i class="bi bi-upload"></i>
+                <span>Import CSV</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create Item</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+
+    <!-- Row 1: Primary filters -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
+        <div class="relative">
+          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <input type="text" class="ui-form-control pl-12" [class.pr-12]="filter()" placeholder="Name, SKU, category..." [ngModel]="filter()" (ngModelChange)="onFilterChange($event)" />
+          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Vendor</label>
+        <div *ngIf="selectedVendorFilter() as vendor; else vendorFilterSearchTemplate" class="ui-input-group">
+          <span class="ui-input-group-text border-r-0 text-success"><i class="bi bi-check-circle-fill text-xs"></i></span>
+          <span class="ui-form-control border-l-0 font-semibold truncate text-xs flex items-center">{{ vendorOptionLabel(vendor) }}</span>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="clearVendorFilter()" title="Clear vendor filter"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <ng-template #vendorFilterSearchTemplate>
+          <div class="relative">
+            <i class="bi bi-truck absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+            <input type="text" class="ui-form-control pl-12" [ngModel]="vendorFilterSearch" (ngModelChange)="onVendorFilterSearchChange($event)" placeholder="Search vendor or TIN" />
+          </div>
+          <div *ngIf="loadingVendorFilter()" class="ui-form-text"><i class="bi bi-arrow-clockwise spin mr-1"></i>Searching...</div>
+          <div class="ui-list-group mt-1 shadow-panel" *ngIf="vendorFilterSearch.trim() && vendorFilterResults().length > 0">
+            <button type="button" class="ui-list-group-item ui-list-group-item-action text-xs" *ngFor="let vendor of vendorFilterResults()" (click)="selectVendorFilter(vendor)">{{ vendorOptionLabel(vendor) }}</button>
+          </div>
+          <div class="ui-form-text text-danger" *ngIf="vendorFilterSearch.trim().length >= 2 && !loadingVendorFilter() && vendorFilterResults().length === 0">No vendors found.</div>
+        </ng-template>
+      </div>
+    </div>
+
+    <!-- Row 2: Secondary controls -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</span>
+          <select class="ui-form-select border-l-0" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+            <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view"><i class="bi bi-table"></i></button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view"><i class="bi bi-grid-3x2-gap"></i></button>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-center justify-between md:justify-end gap-4">
+        <div class="text-xs text-muted leading-snug">
+          <span class="font-semibold text-ink">{{ total }}</span> items &nbsp;&middot;&nbsp;
+          Page <span class="font-semibold text-ink">{{ page }}</span> / <span class="font-semibold text-ink">{{ totalPages }}</span>
+        </div>
+        <button class="ui-btn ui-btn-sm flex items-center gap-2" [class.ui-btn-outline-secondary]="!hasActiveFilters" [class.ui-btn-outline-danger]="hasActiveFilters" type="button" (click)="clearFilters()" [disabled]="!hasActiveFilters">
+          <i class="bi bi-x-circle"></i> Clear
+          <span *ngIf="activeFilterCount > 0" class="ui-badge ui-badge-danger rounded-full leading-none">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active filter chips -->
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+      <span class="text-xs text-muted font-semibold mr-1">Active:</span>
+      <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onFilterChange('')" aria-label="Close dialog"></button>
+      </span>
+      <span *ngIf="selectedVendorFilter()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-truck text-xs text-muted"></i> {{ vendorOptionLabel(selectedVendorFilter()!) }}
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="clearVendorFilter()" aria-label="Close dialog"></button>
+      </span>
+    </div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+    <div *ngIf="importSummary() as summary" class="ui-alert ui-alert-info mt-4 mb-0">
+      <div class="flex justify-between items-start gap-4 flex-wrap">
+        <div>
+          <div class="font-semibold">Import Summary</div>
+          <div class="text-xs">
+            Processed {{ summary.totalRows }} rows.
+            Imported: {{ summary.imported }}.
+            Skipped: {{ summary.skipped }}.
+          </div>
+        </div>
+        <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="clearImportSummary()">
+          <i class="bi bi-x-lg mr-1"></i>Dismiss
+        </button>
+      </div>
+      <div *ngIf="summary.skipped > 0 && summary.errors.length > 0" class="mt-4">
+        <div class="text-xs font-semibold mb-2">Skipped row details</div>
+        <ul class="text-xs mb-0 pl-4">
+          <li *ngFor="let rowError of summary.errors">{{ rowError }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th *ngIf="isSuperuser">Organization</th>
+          <th>Name</th>
+          <th>SKU</th>
+          <th>Type</th>
+          <th>Price</th>
+          <th>Cost</th>
+          <th>Stock</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="loading()">
+          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center py-12 border-0">
+            <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>
+            <span class="text-muted text-xs">Loading...</span>
+          </td>
+        </tr>
+        <tr *ngIf="!loading() && rows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center text-muted py-6">No items found.</td>
+        </tr>
+
+        <tr *ngFor="let row of rows(); trackBy: trackById">
+          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
+          <td class="font-semibold">{{ row.name }}</td>
+          <td>{{ row.sku || '-' }}</td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="itemTypeBadgeClass(row.type)">
+              {{ row.type || '-' }}
+            </span>
+          </td>
+          <td>{{ formatMoney(row.price ?? 0, row.currency || currentOrganizationCurrency) }}</td>
+          <td>{{ formatMoney(row.cost ?? 0, row.currency || currentOrganizationCurrency) }}</td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="itemStockBadgeClass(row)">
+              {{ row.stock ?? 0 }}
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="itemActiveBadgeClass(row.isActive)">
+              {{ row.isActive ? 'Yes' : 'No' }}
+            </span>
+          </td>
+          <td class="text-right">
+            <div class="table-actions-inline">
+              <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="openEditModal(row)" appTooltip title="Edit">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                type="button"
+                [disabled]="deletingId() === row.id"
+                (click)="removeItem(row.id)"
+                appTooltip
+                title="Delete"
+              >
+                <i class="bi bi-trash3"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+    <div class="text-xs text-muted">
+      Showing {{ rows().length }} of {{ total }} items
+    </div>
+    <div class="ui-btn-group">
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(1)" [disabled]="loading() || page <= 1">
+        First
+      </button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1">
+        Prev
+      </button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages">
+        Next
+      </button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages">
+        Last
+      </button>
+    </div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isCreateModalOpen()"
+  *ngIf="isCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create New Item</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div *ngIf="createModalError()" class="ui-alert ui-alert-danger py-2">{{ createModalError() }}</div>
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createItemForm" (ngSubmit)="createItem()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Name <span *ngIf="isCreateFieldRequired('name')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input class="ui-form-control" formControlName="name" [class.is-invalid]="shouldShowCreateFieldError('name')" />
+              <div *ngIf="shouldShowCreateFieldError('name')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('name')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">SKU <span *ngIf="isCreateFieldRequired('sku')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input class="ui-form-control" formControlName="sku" [class.is-invalid]="shouldShowCreateFieldError('sku')" />
+              <div *ngIf="shouldShowCreateFieldError('sku')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('sku')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Type <span *ngIf="isCreateFieldRequired('type')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input class="ui-form-control" formControlName="type" [class.is-invalid]="shouldShowCreateFieldError('type')" />
+              <div *ngIf="shouldShowCreateFieldError('type')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('type')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Category <span *ngIf="isCreateFieldRequired('category')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input class="ui-form-control" formControlName="category" [class.is-invalid]="shouldShowCreateFieldError('category')" />
+              <div *ngIf="shouldShowCreateFieldError('category')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('category')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Unit <span *ngIf="isCreateFieldRequired('unit')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input class="ui-form-control" formControlName="unit" [class.is-invalid]="shouldShowCreateFieldError('unit')" />
+              <div *ngIf="shouldShowCreateFieldError('unit')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('unit')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Price <span *ngIf="isCreateFieldRequired('price')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input type="number" step="0.01" class="ui-form-control" formControlName="price" [class.is-invalid]="shouldShowCreateFieldError('price')" />
+              <div *ngIf="shouldShowCreateFieldError('price')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('price')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Cost <span *ngIf="isCreateFieldRequired('cost')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input type="number" step="0.01" class="ui-form-control" formControlName="cost" [class.is-invalid]="shouldShowCreateFieldError('cost')" />
+              <div *ngIf="shouldShowCreateFieldError('cost')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('cost')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Discounted Price <span *ngIf="isCreateFieldRequired('discountedPrice')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input type="number" step="0.01" class="ui-form-control" formControlName="discountedPrice" [class.is-invalid]="shouldShowCreateFieldError('discountedPrice')" />
+              <div *ngIf="shouldShowCreateFieldError('discountedPrice')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('discountedPrice')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Stock <span *ngIf="isCreateFieldRequired('stock')" class="text-danger">*</span></label>
+            <div class="relative">
+              <input type="number" class="ui-form-control" formControlName="stock" [class.is-invalid]="shouldShowCreateFieldError('stock')" />
+              <div *ngIf="shouldShowCreateFieldError('stock')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('stock')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Description <span *ngIf="isCreateFieldRequired('description')" class="text-danger">*</span></label>
+            <div class="relative">
+              <textarea rows="2" class="ui-form-control" formControlName="description" [class.is-invalid]="shouldShowCreateFieldError('description')"></textarea>
+              <div *ngIf="shouldShowCreateFieldError('description')" class="field-validation-icon-textarea" appTooltip [attr.title]="getCreateFieldError('description')">
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-4 flex items-end">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createItem()">
+          {{ submitting() ? 'Creating...' : 'Create Item' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isEditModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isEditModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isEditModalOpen()"
+  *ngIf="isEditModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Edit Item</h5>
+        <button type="button" class="ui-btn-close" (click)="closeEditModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Organization</label>
+            <ng-container *ngIf="isSuperuser; else fixedOrgField">
+              <select class="ui-form-select" [(ngModel)]="editForm['organizationId']">
+                <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
+              </select>
+            </ng-container>
+            <ng-template #fixedOrgField>
+              <input class="ui-form-control" [value]="currentOrganizationName" readonly />
+            </ng-template>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Name</label>
+            <input class="ui-form-control" [(ngModel)]="editForm['name']" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">SKU</label>
+            <input class="ui-form-control" [(ngModel)]="editForm['sku']" />
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Vendor / Supplier</label>
+            <input type="hidden" [(ngModel)]="editForm['vendorId']" />
+
+            <div *ngIf="selectedEditVendor() as vendor; else editVendorLookupTemplate" class="border rounded-lg p-2 bg-subtle flex items-center justify-between gap-2">
+              <div>
+                <div class="font-semibold">{{ vendor.name || vendor.legalName || 'Unnamed vendor' }}</div>
+                <div class="text-xs text-muted">TIN: {{ vendor.taxId || '-' }}</div>
+              </div>
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
+                type="button"
+                (click)="clearEditVendorSelection()"
+                appTooltip
+                title="Change vendor"
+              >
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <ng-template #editVendorLookupTemplate>
+              <input
+                class="ui-form-control"
+                [ngModel]="editVendorSearch"
+                (ngModelChange)="onEditVendorSearchChange($event)"
+                placeholder="Search vendor name or TIN"
+              />
+              <div class="ui-form-text">Type at least 2 characters to search vendors.</div>
+              <div class="ui-list-group mt-2 shadow-panel" *ngIf="editVendorSearch.trim() && editVendors().length > 0">
+                <button
+                  type="button"
+                  class="ui-list-group-item ui-list-group-item-action"
+                  *ngFor="let vendor of editVendors()"
+                  (click)="selectEditVendor(vendor)"
+                >
+                  <div class="font-semibold">{{ vendor.name || vendor.legalName || 'Unnamed Vendor' }}</div>
+                  <div class="text-xs text-muted">TIN: {{ vendor.taxId || '-' }}</div>
+                </button>
+              </div>
+              <div class="ui-form-text" *ngIf="loadingEditVendors()">Loading vendors...</div>
+              <div class="ui-form-text text-danger" *ngIf="editVendorSearch.trim() && !loadingEditVendors() && editVendors().length === 0">
+                No vendors found.
+              </div>
+            </ng-template>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Type</label>
+            <input class="ui-form-control" [(ngModel)]="editForm['type']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Category</label>
+            <input class="ui-form-control" [(ngModel)]="editForm['category']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Unit</label>
+            <input class="ui-form-control" [(ngModel)]="editForm['unit']" />
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Price</label>
+            <input type="number" step="0.01" class="ui-form-control" [(ngModel)]="editForm['price']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Cost</label>
+            <input type="number" step="0.01" class="ui-form-control" [(ngModel)]="editForm['cost']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Discounted Price</label>
+            <input type="number" step="0.01" class="ui-form-control" [(ngModel)]="editForm['discountedPrice']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Stock</label>
+            <input type="number" class="ui-form-control" [(ngModel)]="editForm['stock']" />
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Description</label>
+            <textarea rows="2" class="ui-form-control" [(ngModel)]="editForm['description']"></textarea>
+          </div>
+
+          <div class="col-span-12 md:col-span-4 flex items-end">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" [(ngModel)]="editForm['isActive']" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeEditModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="saveEdit()">
+          {{ submitting() ? 'Saving...' : 'Save Item' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isImportModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isImportModalOpen()"
+  *ngIf="isImportModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Import Items CSV</h5>
+        <button type="button" class="ui-btn-close" (click)="closeImportModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4">
+        <p class="text-muted text-xs mb-4">
+          Upload a CSV file to import items for the selected organization.
+        </p>
+        <input type="file" class="ui-form-control" accept=".csv,text/csv" (change)="onImportFileChange($event)" />
+        <div *ngIf="importModalError()" class="ui-alert ui-alert-danger py-2 mt-4 mb-0">{{ importModalError() }}</div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeImportModal()" [disabled]="submitting()">Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="importItemsCsv()">
+          {{ submitting() ? 'Importing...' : 'Import CSV' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

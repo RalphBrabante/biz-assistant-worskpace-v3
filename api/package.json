@@ -1,0 +1,45 @@
+{
+  "name": "node-express-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:expenses": "node --test tests/expense-calculation.test.js tests/expenses-controller.test.js",
+    "start": "node dist/main.js",
+    "start:legacy": "node src/index.js",
+    "start:nest:ts": "node -r ts-node/register src/main.ts",
+    "dev": "nodemon --watch src --ext ts,js --exec \"node -r ts-node/register src/main.ts\"",
+    "db:create": "sequelize-cli db:create",
+    "db:migrate": "sequelize-cli db:migrate",
+    "test:schema": "node --test tests/schema-indexes.test.js tests/invoice-relationship.test.js",
+    "db:audit": "node scripts/audit-schema.js",
+    "test:schema:mysql": "node scripts/verify-schema-indexes.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/core": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "@aws-sdk/client-s3": "^3.888.0",
+    "amqplib": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "csv-parse": "^5.5.6",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.0",
+    "nodemailer": "^8.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "sharp": "^0.33.5",
+    "sequelize": "^6.37.3",
+    "sequelize-cli": "^6.6.2",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}

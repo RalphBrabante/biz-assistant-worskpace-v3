@@ -47,7 +47,6 @@ echo "==> Pulling latest code (branch: $BRANCH)..."
 git fetch --all --prune
 git checkout "$BRANCH"
 git pull origin "$BRANCH"
-git submodule update --init --recursive
 
 echo ""
 echo "==> Building Angular client..."

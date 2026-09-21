@@ -1,0 +1,338 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Finance</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Taxes</h1>
+        <p class="text-muted mb-0">Manage tax types and withholding tax types in one place.</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="ui-btn ui-btn-outline-dark" (click)="loadAll()" [disabled]="loading()">
+          {{ loading() ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button class="ui-btn ui-btn-primary" (click)="openTaxCreateModal()" [disabled]="!canManageGlobalTaxes">
+          <i class="bi bi-plus-lg mr-1"></i>Create Tax Type
+        </button>
+        <button class="ui-btn ui-btn-outline-primary" (click)="openWithholdingCreateModal()" [disabled]="!canManageWithholding">
+          <i class="bi bi-plus-lg mr-1"></i>Create Withholding Type
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center">
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label font-semibold">Filter taxes</label>
+        <input
+          type="text"
+          class="ui-form-control"
+          placeholder="Search by code, name, description"
+          [ngModel]="filter()"
+          (ngModelChange)="onFilterChange($event)"
+        />
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="stat-chip">
+          <div class="stat-label">Tax Types</div>
+          <div class="stat-value">{{ taxRows().length }}</div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="stat-chip">
+          <div class="stat-label">Withholding</div>
+          <div class="stat-value">{{ withholdingRows().length }}</div>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-table"></i>
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
+            <i class="bi bi-grid-3x2-gap"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="!canManageWithholding" class="ui-alert ui-alert-warning mt-4 mb-0 py-2">
+      Select a specific organization to manage withholding tax types.
+    </div>
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-header bg-transparent border-0 pt-6 px-6">
+    <h2 class="text-base font-semibold mb-0">Tax Types</h2>
+  </div>
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Percentage</th>
+          <th>Description</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="!loading() && filteredTaxRows().length === 0">
+          <td colspan="6" class="text-center text-muted py-6">No tax types found.</td>
+        </tr>
+        <tr *ngFor="let row of filteredTaxRows(); trackBy: trackById">
+          <ng-container *ngIf="editingTaxId !== row.id; else taxEditRow">
+            <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
+            <td class="font-semibold">{{ row.name }}</td>
+            <td>{{ row.percentage }}%</td>
+            <td>{{ row.description || '-' }}</td>
+            <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="startTaxEdit(row)" appTooltip title="Edit">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                  type="button"
+                  [disabled]="deletingId() === row.id || !canManageGlobalTaxes"
+                  (click)="removeTaxType(row.id)"
+                  appTooltip
+                  title="Delete"
+                >
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </ng-container>
+          <ng-template #taxEditRow>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['code']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['name']" /></td>
+            <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['percentage']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['description']" /></td>
+            <td>
+              <div class="ui-form-check">
+                <input class="ui-form-check-input" type="checkbox" [(ngModel)]="taxEditForm['isActive']" />
+              </div>
+            </td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveTaxEdit()" appTooltip title="Save">
+                  <i class="bi bi-floppy2"></i>
+                </button>
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelTaxEdit()" appTooltip title="Cancel">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </td>
+          </ng-template>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl">
+  <div class="ui-card-header bg-transparent border-0 pt-6 px-6">
+    <h2 class="text-base font-semibold mb-0">Withholding Tax Types</h2>
+  </div>
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Percentage</th>
+          <th>Applies To</th>
+          <th>Min Base</th>
+          <th>Active</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="!loading() && filteredWithholdingRows().length === 0">
+          <td colspan="7" class="text-center text-muted py-6">No withholding tax types found.</td>
+        </tr>
+        <tr *ngFor="let row of filteredWithholdingRows(); trackBy: trackById">
+          <ng-container *ngIf="editingWithholdingId !== row.id; else withholdingEditRow">
+            <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
+            <td class="font-semibold">{{ row.name }}</td>
+            <td>{{ row.percentage }}%</td>
+            <td>{{ row.appliesTo }}</td>
+            <td>{{ formatMoney(row.minimumBaseAmount ?? 0, currentOrganizationCurrency) }}</td>
+            <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="startWithholdingEdit(row)" appTooltip title="Edit">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                  type="button"
+                  [disabled]="deletingId() === row.id || !canManageWithholding"
+                  (click)="removeWithholdingTaxType(row.id)"
+                  appTooltip
+                  title="Delete"
+                >
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </ng-container>
+          <ng-template #withholdingEditRow>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['code']" /></td>
+            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['name']" /></td>
+            <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['percentage']" /></td>
+            <td>
+              <select class="ui-form-select ui-form-select-sm" [(ngModel)]="withholdingEditForm['appliesTo']">
+                <option value="expense">expense</option>
+                <option value="invoice">invoice</option>
+                <option value="both">both</option>
+              </select>
+            </td>
+            <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['minimumBaseAmount']" /></td>
+            <td>
+              <div class="ui-form-check">
+                <input class="ui-form-check-input" type="checkbox" [(ngModel)]="withholdingEditForm['isActive']" />
+              </div>
+            </td>
+            <td class="text-right">
+              <div class="table-actions-inline">
+                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveWithholdingEdit()" appTooltip title="Save">
+                  <i class="bi bi-floppy2"></i>
+                </button>
+                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelWithholdingEdit()" appTooltip title="Cancel">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </td>
+          </ng-template>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isTaxCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isTaxCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isTaxCreateModalOpen()"
+  *ngIf="isTaxCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-lg ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create Tax Type</h5>
+        <button type="button" class="ui-btn-close" (click)="closeTaxCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="taxCreateForm" (ngSubmit)="createTaxType()">
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Code</label>
+            <input class="ui-form-control" formControlName="code" placeholder="VAT" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(taxCreateForm, 'code', 'required')">Code is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Name</label>
+            <input class="ui-form-control" formControlName="name" placeholder="Value Added Tax" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(taxCreateForm, 'name', 'required')">Name is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Percentage</label>
+            <input type="number" step="0.01" class="ui-form-control" formControlName="percentage" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(taxCreateForm, 'percentage', 'min')">Percentage cannot be negative.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <div class="ui-form-check mt-6">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Description</label>
+            <textarea class="ui-form-control" rows="2" formControlName="description"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeTaxCreateModal()">Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createTaxType()">
+          {{ submitting() ? 'Creating...' : 'Create Tax Type' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isWithholdingCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isWithholdingCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isWithholdingCreateModalOpen()"
+  *ngIf="isWithholdingCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-lg ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create Withholding Tax Type</h5>
+        <button type="button" class="ui-btn-close" (click)="closeWithholdingCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="withholdingCreateForm" (ngSubmit)="createWithholdingTaxType()">
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Code</label>
+            <input class="ui-form-control" formControlName="code" placeholder="WHT_GOODS_1" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(withholdingCreateForm, 'code', 'required')">Code is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Name</label>
+            <input class="ui-form-control" formControlName="name" placeholder="Supplier of goods" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(withholdingCreateForm, 'name', 'required')">Name is required.</div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Percentage</label>
+            <input type="number" step="0.01" class="ui-form-control" formControlName="percentage" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(withholdingCreateForm, 'percentage', 'min')">Percentage cannot be negative.</div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Applies To</label>
+            <select class="ui-form-select" formControlName="appliesTo">
+              <option value="expense">expense</option>
+              <option value="invoice">invoice</option>
+              <option value="both">both</option>
+            </select>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Minimum Base Amount</label>
+            <input type="number" step="0.01" class="ui-form-control" formControlName="minimumBaseAmount" />
+            <div class="text-danger text-xs mt-1" *ngIf="controlHasError(withholdingCreateForm, 'minimumBaseAmount', 'min')">Minimum base cannot be negative.</div>
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Description</label>
+            <textarea class="ui-form-control" rows="2" formControlName="description"></textarea>
+          </div>
+          <div class="col-span-12">
+            <div class="ui-form-check">
+              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+              <label class="ui-form-check-label">Active</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeWithholdingCreateModal()">Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting() || !canManageWithholding" (click)="createWithholdingTaxType()">
+          {{ submitting() ? 'Creating...' : 'Create Withholding Tax Type' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

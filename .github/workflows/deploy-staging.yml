@@ -26,11 +26,9 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout with submodules
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          token: ${{ secrets.GH_PAT || github.token }}
           ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Set up Docker Buildx

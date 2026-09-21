@@ -1,0 +1,11 @@
+{
+  "name": "biz-assistant-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "build": "node scripts/build-hostinger.cjs",
+    "start": "node dist/server.js",
+    "test": "node --test api/tests/*.test.js client/tests/*.test.cjs tests/*.test.cjs"
+  }
+}

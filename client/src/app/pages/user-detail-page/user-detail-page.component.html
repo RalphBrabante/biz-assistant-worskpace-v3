@@ -1,0 +1,254 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Identity</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">User Details</h1>
+        <p class="text-muted mb-0">Edit user profile and manage assigned roles.</p>
+      </div>
+      <a class="ui-btn ui-btn-outline-dark" routerLink="/users"><i class="bi bi-arrow-left mr-1"></i>Back to Users</a>
+    </div>
+  </div>
+</section>
+
+<div *ngIf="message()" class="ui-alert ui-alert-success">{{ message() }}</div>
+<div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
+
+<section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="user() as row">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">User Information</h2>
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">First Name</label>
+        <input class="ui-form-control" [(ngModel)]="form['firstName']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Last Name</label>
+        <input class="ui-form-control" [(ngModel)]="form['lastName']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Email</label>
+        <input type="email" class="ui-form-control" [(ngModel)]="form['email']" />
+      </div>
+
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Organization ID</label>
+        <input class="ui-form-control" [(ngModel)]="form['organizationId']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Status</label>
+        <input class="ui-form-control" [(ngModel)]="form['status']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Legacy Role (optional)</label>
+        <input class="ui-form-control" [(ngModel)]="form['role']" />
+      </div>
+
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Phone</label>
+        <input class="ui-form-control" [(ngModel)]="form['phone']" />
+      </div>
+      <div class="col-span-12 md:col-span-8">
+        <label class="ui-form-label">Address</label>
+        <input class="ui-form-control" [(ngModel)]="form['addressLine1']" />
+      </div>
+
+      <div class="col-span-12 md:col-span-4 flex items-end">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isEmailVerified']" />
+          <label class="ui-form-check-label">Email Verified</label>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-end">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" />
+          <label class="ui-form-check-label">Active</label>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">New Password (optional)</label>
+        <input type="password" class="ui-form-control" [(ngModel)]="form['password']" />
+      </div>
+
+      <div class="col-span-12">
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="saveUser()">
+          {{ submitting() ? 'Saving...' : 'Save User' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="isSuperuser && user() as row">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">Organization Memberships</h2>
+    <p class="text-muted mb-4">
+      Assign this user to multiple organizations and manage primary organization.
+    </p>
+
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start mb-6">
+      <div class="col-span-12 lg:col-span-7">
+        <label class="ui-form-label">Assign Organization</label>
+        <select class="ui-form-select" [(ngModel)]="selectedOrganizationId">
+          <option value="">Select organization</option>
+          <option
+            *ngFor="let organization of assignableOrganizations(); trackBy: trackByOrganizationId"
+            [value]="organization.id"
+          >
+            {{ organizationLabel(organization) }}
+          </option>
+        </select>
+      </div>
+      <div class="col-span-12 lg:col-span-3">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" id="add-org-primary" [(ngModel)]="addOrganizationAsPrimary" />
+          <label class="ui-form-check-label" for="add-org-primary">Set as primary</label>
+        </div>
+      </div>
+      <div class="col-span-12 lg:col-span-2">
+        <button
+          class="ui-btn ui-btn-outline-primary w-full"
+          [disabled]="assigningOrganization()"
+          (click)="addOrganizationMembership()"
+        >
+          {{ assigningOrganization() ? 'Assigning...' : 'Assign' }}
+        </button>
+      </div>
+    </div>
+
+    <p class="text-muted mb-4">
+      Set the default organization this user will use when logging in.
+    </p>
+
+    <div *ngIf="(row.organizations || []).length === 0" class="ui-alert ui-alert-warning mb-0">
+      This user has no organization memberships yet.
+    </div>
+
+    <div class="ui-table-responsive mb-6" *ngIf="(row.organizations || []).length > 0">
+      <table class="ui-table ui-table-hover align-middle mb-0">
+        <thead class="ui-table-light">
+          <tr>
+            <th>Organization</th>
+            <th>Primary</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let organization of (row.organizations || []); trackBy: trackByOrganizationId">
+            <td class="font-semibold">{{ organizationLabel(organization) }}</td>
+            <td>
+              <span class="ui-badge" [ngClass]="organization.OrganizationUser?.isPrimary ? 'ui-badge-primary' : 'ui-badge-light border'">
+                {{ organization.OrganizationUser?.isPrimary ? 'Primary' : 'Secondary' }}
+              </span>
+            </td>
+            <td>
+              <span class="ui-badge" [ngClass]="organization.OrganizationUser?.isActive === false ? 'ui-badge-danger' : 'ui-badge-success'">
+                {{ organization.OrganizationUser?.isActive === false ? 'Inactive' : 'Active' }}
+              </span>
+            </td>
+            <td class="text-right">
+              <div class="inline-flex gap-2">
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-primary"
+                  type="button"
+                  [disabled]="submitting() || organization.OrganizationUser?.isPrimary"
+                  (click)="selectedPrimaryOrganizationId = organization.id; savePrimaryOrganization()"
+                >
+                  Make Primary
+                </button>
+                <button
+                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                  type="button"
+                  [disabled]="removingOrganizationId() === organization.id"
+                  (click)="removeOrganizationMembership(organization.id)"
+                >
+                  {{ removingOrganizationId() === organization.id ? 'Removing...' : 'Remove' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="(row.organizations || []).length > 0" class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <div class="col-span-12 md:col-span-8">
+        <label class="ui-form-label">Primary Organization</label>
+        <select class="ui-form-select" [(ngModel)]="selectedPrimaryOrganizationId">
+          <option value="">Select organization</option>
+          <option
+            *ngFor="let organization of (row.organizations || []); trackBy: trackByOrganizationId"
+            [value]="organization.id"
+          >
+            {{ organizationLabel(organization) }}
+            {{ organization.OrganizationUser?.isPrimary ? '(Current Primary)' : '' }}
+          </option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <button class="ui-btn ui-btn-outline-primary w-full" [disabled]="submitting()" (click)="savePrimaryOrganization()">
+          {{ submitting() ? 'Saving...' : 'Set Primary Organization' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl" *ngIf="user() as row">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">User Roles</h2>
+
+    <div class="ui-grid grid grid-cols-12 gap-2 items-end mb-4">
+      <div class="col-span-12 md:col-span-8">
+        <label class="ui-form-label">Assign Role</label>
+        <select class="ui-form-select" [(ngModel)]="selectedRoleId">
+          <option value="">Select a role</option>
+          <option *ngFor="let role of assignableRoles()" [value]="role.id">
+            {{ role.name || role.code }}
+          </option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <button class="ui-btn ui-btn-outline-primary w-full" [disabled]="assigning()" (click)="assignRole()">
+          {{ assigning() ? 'Assigning...' : 'Assign Role' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="ui-table-responsive">
+      <table class="ui-table ui-table-hover align-middle mb-0">
+        <thead class="ui-table-light">
+          <tr>
+            <th>Role</th>
+            <th>Code</th>
+            <th>Assigned At</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="(row.roles || []).length === 0">
+            <td colspan="4" class="text-center text-muted py-6">No roles assigned.</td>
+          </tr>
+          <tr *ngFor="let role of (row.roles || []); trackBy: trackByRoleId">
+            <td class="font-semibold">{{ role.name || '-' }}</td>
+            <td>
+              <span class="ui-badge rounded-full" [ngClass]="roleChipClass(role.code)">{{ role.code || '-' }}</span>
+            </td>
+            <td>{{ role.UserRole?.createdAt ? (role.UserRole?.createdAt | date : 'medium') : '-' }}</td>
+            <td class="text-right">
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                type="button"
+                [disabled]="removingRoleId() === role.id"
+                (click)="removeRole(role.id)"
+              >
+                {{ removingRoleId() === role.id ? 'Removing...' : 'Remove' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

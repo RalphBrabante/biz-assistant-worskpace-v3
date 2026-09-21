@@ -1,0 +1,110 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Access Control</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Role Details</h1>
+        <p class="text-muted mb-0">Update role settings and manage role permissions.</p>
+      </div>
+      <a class="ui-btn ui-btn-outline-dark" routerLink="/roles"><i class="bi bi-arrow-left mr-1"></i>Back to Roles</a>
+    </div>
+  </div>
+</section>
+
+<div *ngIf="message()" class="ui-alert ui-alert-success">{{ message() }}</div>
+<div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
+
+<section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="role()">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">Role Information</h2>
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Name</label>
+        <input class="ui-form-control" [(ngModel)]="form['name']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Code</label>
+        <input class="ui-form-control" [(ngModel)]="form['code']" />
+      </div>
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Description</label>
+        <input class="ui-form-control" [(ngModel)]="form['description']" />
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-end">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isSystem']" />
+          <label class="ui-form-check-label">System Role</label>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-end">
+        <div class="ui-form-check">
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" />
+          <label class="ui-form-check-label">Active</label>
+        </div>
+      </div>
+      <div class="col-span-12">
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="saveRole()">
+          {{ submitting() ? 'Saving...' : 'Save Role' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl" *ngIf="role() as row">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">Role Permissions</h2>
+
+    <div class="ui-grid grid grid-cols-12 gap-2 items-end mb-4">
+      <div class="col-span-12 md:col-span-9">
+        <label class="ui-form-label">Assign Permission</label>
+        <select class="ui-form-select" [(ngModel)]="selectedPermissionId">
+          <option value="">Select a permission</option>
+          <option *ngFor="let permission of assignablePermissions()" [value]="permission.id">
+            {{ permission.code }}{{ permission.name ? (' - ' + permission.name) : '' }}
+          </option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <button class="ui-btn ui-btn-outline-primary w-full" [disabled]="assigning()" (click)="assignPermission()">
+          {{ assigning() ? 'Assigning...' : 'Assign' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="ui-table-responsive">
+      <table class="ui-table ui-table-hover align-middle mb-0">
+        <thead class="ui-table-light">
+          <tr>
+            <th>Permission</th>
+            <th>Resource</th>
+            <th>Action</th>
+            <th>Allowed</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="(row.permissions || []).length === 0">
+            <td colspan="5" class="text-center text-muted py-6">No permissions assigned.</td>
+          </tr>
+          <tr *ngFor="let permission of (row.permissions || []); trackBy: trackByPermissionId">
+            <td class="font-semibold">{{ permission.code || '-' }}</td>
+            <td>{{ permission.resource || '-' }}</td>
+            <td>{{ permission.action || '-' }}</td>
+            <td>{{ permission.RolePermission?.isAllowed ? 'Yes' : 'No' }}</td>
+            <td class="text-right">
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+                type="button"
+                [disabled]="removingPermissionId() === permission.id"
+                (click)="removePermission(permission.id)"
+              >
+                {{ removingPermissionId() === permission.id ? 'Removing...' : 'Remove' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

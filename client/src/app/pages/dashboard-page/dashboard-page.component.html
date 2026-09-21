@@ -1,0 +1,94 @@
+<section class="page-heading flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <div class="section-eyebrow mb-2">Business overview</div>
+    <h1>Dashboard</h1>
+    <p class="text-muted">Your priorities, financial picture, and latest business activity.</p>
+  </div>
+  <div class="flex items-center gap-3 flex-wrap">
+    <span *ngIf="lastUpdated" class="text-xs text-muted">Updated {{ lastUpdated | date:'shortTime' }}</span>
+    <button class="ui-btn ui-btn-outline-secondary" (click)="refresh()" [disabled]="loading || chartLoading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ loading || chartLoading ? 'Refreshing…' : 'Refresh overview' }}</button>
+  </div>
+</section>
+<div *ngIf="error" class="ui-alert ui-alert-danger" role="alert">{{ error }}</div>
+
+<nav *ngIf="quickLinks.length" class="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6" aria-label="Quick actions">
+  <a *ngFor="let link of quickLinks; trackBy: trackByMetric" [routerLink]="link.route" class="ui-card dashboard-shortcut group">
+    <span class="dashboard-shortcut-icon"><i [ngClass]="['bi', link.icon]" aria-hidden="true"></i></span>
+    <span class="min-w-0 flex-1"><span class="block font-semibold text-ink text-sm">{{ link.label }}</span><span class="hidden sm:block text-xs text-muted mt-1">{{ link.detail }}</span></span>
+    <i class="bi bi-arrow-up-right hidden sm:block text-muted text-xs group-hover:text-brand" aria-hidden="true"></i>
+  </a>
+</nav>
+
+<section *ngIf="!hasOrganization && (canViewExpenses || canViewSalesInvoices || canViewReports)" class="ui-card p-5 mb-6 flex flex-wrap items-center gap-4">
+  <span class="dashboard-shortcut-icon"><i class="bi bi-buildings" aria-hidden="true"></i></span>
+  <div class="flex-1 min-w-0"><h2 class="font-semibold">Choose a workspace for financial insights</h2><p class="text-xs text-muted mt-1">Select an organization to see its financial totals, expense queue, and recent records in the correct currency.</p></div>
+  <button class="ui-btn ui-btn-primary" (click)="selectOrganization()" *ngIf="isSuperuser">Select organization</button>
+</section>
+
+<section class="mb-6" *ngIf="workQueue.length" aria-labelledby="work-queue-title">
+  <div class="flex flex-wrap justify-between items-center gap-2 mb-3"><h2 id="work-queue-title" class="text-base font-semibold">Needs attention</h2><span class="text-xs text-muted">Current status · all dates</span></div>
+  <div class="grid grid-cols-2 xl:grid-cols-4 gap-3" [attr.aria-busy]="loading">
+    <a *ngFor="let task of workQueue; trackBy: trackByMetric" [routerLink]="task.route" [queryParams]="{status: task.status}" class="ui-card dashboard-task group">
+      <div class="flex justify-between items-start gap-2 min-h-8 mb-3"><span class="text-xs font-medium text-muted">{{ task.label }}</span><i [ngClass]="['bi', task.icon]" class="text-brand" aria-hidden="true"></i></div>
+      <div class="text-3xl font-semibold tracking-tight text-ink tabular-nums">{{ loading ? '…' : task.count === null ? '—' : (task.count | number) }}</div>
+      <div class="flex items-center justify-between gap-2 mt-3"><span class="text-xs text-muted">{{ task.count === null ? 'Unavailable · refresh to retry' : task.description }}</span><i class="bi bi-arrow-right text-muted group-hover:text-brand" aria-hidden="true"></i></div>
+    </a>
+  </div>
+</section>
+
+<section class="ui-card mb-6" *ngIf="canShowFinancials" aria-labelledby="financial-title">
+  <div class="p-5 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div><h2 id="financial-title" class="text-base font-semibold tracking-tight">Financial performance</h2><p class="text-xs text-muted mt-1">Recorded sales and expenses · {{ selectedYear }} · {{ orgCurrency }}</p></div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="ui-btn-group ui-btn-group-sm" role="group" aria-label="Chart view"><button type="button" class="ui-btn ui-btn-outline-secondary" [class.active]="chartView === 'monthly'" [attr.aria-pressed]="chartView === 'monthly'" (click)="setChartView('monthly')">Monthly</button><button type="button" class="ui-btn ui-btn-outline-secondary" [class.active]="chartView === 'quarterly'" [attr.aria-pressed]="chartView === 'quarterly'" (click)="setChartView('quarterly')">Quarterly</button></div>
+        <select id="dashboardYear" aria-label="Reporting year" class="ui-form-select ui-form-select-sm !w-24" [value]="selectedYear" (change)="onYearChange($any($event.target).value)"><option *ngFor="let year of availableYears" [value]="year">{{ year }}</option></select>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 py-6 border-b mb-5" [attr.aria-busy]="chartLoading">
+      <div><div class="text-xs text-muted mb-2"><span class="chart-legend-dot bg-[#7265df]"></span>Total sales</div><div class="text-2xl font-semibold tracking-tight tabular-nums">{{ financialReady ? toCurrency(yearlySalesTotal, orgCurrency) : '—' }}</div></div>
+      <div><div class="text-xs text-muted mb-2"><span class="chart-legend-dot bg-[#b7b2dc]"></span>Total expenses</div><div class="text-2xl font-semibold tracking-tight tabular-nums">{{ financialReady ? toCurrency(yearlyExpenseTotal, orgCurrency) : '—' }}</div></div>
+      <div><div class="text-xs text-muted mb-2">Sales less expenses</div><div class="text-2xl font-semibold tracking-tight tabular-nums" [class.text-danger]="financialReady && financialDifference < 0" [class.text-success]="financialReady && financialDifference > 0">{{ financialReady ? toCurrency(financialDifference, orgCurrency) : '—' }}</div><p class="text-xs text-muted mt-1">Difference in recorded totals</p></div>
+    </div>
+    <div *ngIf="chartError" class="ui-alert ui-alert-danger" role="alert">{{ chartError }}</div>
+    <div class="relative h-[260px] sm:h-[300px]">
+      <canvas #salesExpenseChart role="img" aria-label="Sales and expenses chart. Monthly values are available in the table below."></canvas>
+      <div *ngIf="chartLoading" class="absolute inset-0 flex items-center justify-center bg-surface"><span class="ui-spinner-border ui-spinner-border-sm mr-2"></span><span class="text-xs text-muted" role="status">Loading financial data…</span></div>
+      <div *ngIf="chartEmpty && financialReady" class="absolute inset-0 flex items-center justify-center pointer-events-none"><span class="bg-surface px-4 py-3 rounded-lg text-sm text-muted">No sales or expenses recorded for {{ selectedYear }}.</span></div>
+    </div>
+    <div *ngIf="financialReady" class="border-t mt-5 pt-4">
+      <div *ngIf="snapshotMonth as month" class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs mb-3"><span class="font-semibold">{{ month.monthName }} {{ selectedYear }} snapshot</span><span class="text-muted">Sales <strong class="text-ink font-medium ml-1">{{ toCurrency(month.sales, orgCurrency) }}</strong></span><span class="text-muted">Expenses <strong class="text-ink font-medium ml-1">{{ toCurrency(month.expenses, orgCurrency) }}</strong></span></div>
+      <p class="text-xs text-muted leading-relaxed">Based on invoice and expense dates. Sales exclude void invoices; expenses include every recorded status. These totals do not represent cash flow or accounting profit.</p>
+      <details class="mt-4"><summary class="text-xs text-brand font-medium cursor-pointer w-fit">View monthly figures</summary><div class="ui-table-responsive mt-3"><table class="ui-table ui-table-sm"><caption class="sr-only">{{ selectedYear }} monthly sales and expenses in {{ orgCurrency }}</caption><thead><tr><th scope="col">Month</th><th scope="col">Sales</th><th scope="col">Expenses</th><th scope="col">Difference</th></tr></thead><tbody><tr *ngFor="let month of monthlyRows"><th scope="row">{{ month.monthName }}</th><td>{{ toCurrency(month.sales, orgCurrency) }}</td><td>{{ toCurrency(month.expenses, orgCurrency) }}</td><td>{{ toCurrency(month.sales - month.expenses, orgCurrency) }}</td></tr></tbody></table></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6" *ngIf="(hasOrganization && (canViewExpenses || canViewSalesInvoices)) || canViewOrders">
+  <article class="ui-card xl:col-span-2" *ngIf="hasOrganization && (canViewExpenses || canViewSalesInvoices)">
+    <div class="p-5 sm:p-6 border-b"><h2 class="text-base font-semibold">Recent financial records</h2><p class="text-xs text-muted mt-1">Latest additions, ordered by when they were created</p></div>
+    <p *ngIf="activityError" class="ui-alert ui-alert-warning m-4" role="alert">{{ activityError }}</p>
+    <div *ngIf="loading" class="p-6 text-sm text-muted" role="status">Loading recent records…</div>
+    <div *ngIf="!loading">
+      <a *ngFor="let row of recentActivity; trackBy: trackActivity" [routerLink]="[row.route, row.id]" class="dashboard-activity-row">
+        <span class="dashboard-activity-icon" [class.bg-brand-soft]="row.kind === 'Invoice'" [class.text-brand]="row.kind === 'Invoice'"><i [ngClass]="['bi', row.kind === 'Invoice' ? 'bi-file-earmark-text' : 'bi-wallet2']" aria-hidden="true"></i></span>
+        <span class="min-w-0 flex-1"><span class="text-sm font-medium text-ink block truncate">{{ row.party }}</span><span class="text-xs text-muted block truncate mt-1">{{ row.kind }} · {{ row.label }}</span><span class="text-xs text-muted block mt-1">{{ row.date ? (row.date | date:'mediumDate') : 'No document date' }}</span></span>
+        <span class="text-right shrink-0"><span class="block text-sm text-ink font-semibold tabular-nums">{{ toCurrency(row.amount, row.currency) }}</span><span class="ui-badge mt-2 capitalize" [ngClass]="statusClass(row.status)">{{ row.status.replace('_', ' ') }}</span></span>
+      </a>
+      <div *ngIf="!recentActivity.length && !activityError" class="p-10 text-center"><i class="bi bi-inbox text-2xl text-muted" aria-hidden="true"></i><p class="text-sm font-medium mt-3">No financial records yet</p><p class="text-xs text-muted mt-1">Your latest invoices and expenses will appear here.</p></div>
+    </div>
+    <div class="px-5 py-4 flex flex-wrap gap-4 border-t text-xs font-medium"><a *ngIf="canViewSalesInvoices" routerLink="/sales-invoices">View invoices <i class="bi bi-arrow-right ml-1" aria-hidden="true"></i></a><a *ngIf="canViewExpenses" routerLink="/expenses">View expenses <i class="bi bi-arrow-right ml-1" aria-hidden="true"></i></a></div>
+  </article>
+  <article class="ui-card" *ngIf="canViewOrders"><div class="p-5 sm:p-6"><div class="flex justify-between items-center mb-6"><div><h2 class="text-base font-semibold">Order pipeline</h2><p class="text-xs text-muted mt-1">Current status · all dates</p></div><i class="bi bi-receipt text-muted" aria-hidden="true"></i></div>
+    <div class="space-y-5"><a *ngFor="let row of orderStatusCounts; trackBy: trackByOrderStatus" routerLink="/orders" [queryParams]="{status: row.label.toLowerCase()}" class="block"><div class="flex justify-between text-xs mb-2"><span class="text-muted">{{ row.label }}</span><strong class="font-medium tabular-nums text-ink">{{ loading ? '…' : row.value === null ? 'Unavailable' : row.value }}</strong></div><div class="ui-progress"><div class="ui-progress-bar" [ngClass]="row.className" [style.width.%]="orderStatusWidth(row.value)"></div></div></a></div>
+    <p *ngIf="!orderStatusCounts.length" class="text-sm text-muted py-8 text-center">{{ loading ? 'Loading orders…' : 'No order activity to display yet.' }}</p>
+    <a routerLink="/orders" class="inline-flex items-center gap-2 text-xs font-medium mt-6">View all orders <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+  </div></article>
+</section>
+
+<section class="mb-6" *ngIf="metricCards.length" aria-labelledby="workspace-totals-title">
+  <div class="flex flex-wrap justify-between items-center gap-2 mb-3"><h2 id="workspace-totals-title" class="text-base font-semibold">Workspace totals</h2><span class="text-xs text-muted">Records available in your current scope</span></div>
+  <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3"><a *ngFor="let metric of metricCards; trackBy: trackByMetric" [routerLink]="metric.route" class="ui-card dashboard-total"><i [ngClass]="['bi', metric.icon]" class="text-muted" aria-hidden="true"></i><div class="text-xl font-semibold text-ink mt-3 tabular-nums">{{ loading ? '…' : metric.value === null ? '—' : (metric.value | number) }}</div><div class="text-xs text-muted mt-1">{{ metric.label }}</div><span *ngIf="metric.value === null" class="text-xs text-muted">Unavailable</span></a></div>
+</section>
+<footer class="dashboard-status-bar"><span class="text-xs font-medium">Workspace status</span><span *ngFor="let service of healthServices; trackBy: trackByMetric" class="text-xs text-muted flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full" [class.bg-success]="service.healthy" [class.bg-warning]="!service.healthy" aria-hidden="true"></span><span class="capitalize">{{ service.label }}</span> {{ service.status }}</span><span *ngIf="!health && !loading" class="text-xs text-muted">Service status unavailable</span></footer>
+<div *ngIf="loading" class="text-xs text-muted mt-5" role="status">Updating your workspace overview…</div>

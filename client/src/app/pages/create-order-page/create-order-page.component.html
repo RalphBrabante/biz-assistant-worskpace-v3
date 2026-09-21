@@ -1,0 +1,402 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Checkout</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Create Order</h1>
+        <p class="text-muted mb-0">Search items, add to cart, and place order like an ecommerce flow.</p>
+      </div>
+      <div class="flex gap-2">
+        <a class="ui-btn ui-btn-outline-dark" routerLink="/orders">
+          <i class="bi bi-arrow-left mr-1"></i>Back to Orders
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div *ngIf="error" class="ui-alert ui-alert-danger">{{ error }}</div>
+<div *ngIf="message" class="ui-alert ui-alert-success">{{ message }}</div>
+<app-organization-required *ngIf="!hasOrganizationContext" />
+
+<div [attr.inert]="!hasOrganizationContext ? '' : null" [class.opacity-50]="!hasOrganizationContext">
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+    <h2 class="text-base font-semibold mb-4">Order Details</h2>
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Order Number</label>
+        <input class="ui-form-control" [ngModel]="orderNumber" name="orderNumber" readonly />
+      </div>
+      <div class="col-span-12 md:col-span-8">
+        <label class="ui-form-label">Customer <span class="text-danger">*</span></label>
+        <div class="relative">
+          <div class="relative">
+            <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+            <input
+              class="ui-form-control pl-12"
+              [class.pr-12]="customerSearchQuery"
+              [value]="customerSearchQuery"
+              (input)="onCustomerSearchInput($any($event.target).value)"
+              (focus)="customerResults.length > 0 && (customerDropdownOpen = true)"
+              name="customerSearchQuery"
+              placeholder="Search customer by name or TIN..."
+              autocomplete="off"
+            />
+            <button
+              *ngIf="customerSearchQuery"
+              class="ui-btn absolute p-0 border-0 bg-transparent text-muted"
+              style="right:0.75rem;top:50%;transform:translateY(-50%);"
+              type="button"
+              (click)="clearCustomer()"
+            >
+              <i class="bi bi-x-circle-fill"></i>
+            </button>
+          </div>
+
+          <!-- Dropdown results -->
+          <div *ngIf="customerDropdownOpen || (!searchingCustomers && customerSearchQuery.trim().length >= 1 && customerResults.length === 0 && !selectedCustomer)"
+            class="absolute w-full bg-surface border rounded-lg shadow-dialog mt-1 overflow-auto" style="z-index:1060;max-height:280px;">
+            <button
+              *ngFor="let customer of customerResults; trackBy: trackByCustomerId"
+              class="ui-btn ui-btn-link text-left no-underline block w-full px-4 py-2 border-0"
+              [class.bg-brand-soft]="selectedCustomer?.id === customer.id"
+              type="button"
+              (mousedown)="selectCustomer(customer)"
+            >
+              <div class="font-semibold text-ink">{{ customer.name }}</div>
+              <div class="text-xs text-muted">
+                TIN: {{ customer.taxId || '-' }}
+                <span *ngIf="customer.customerCode"> &middot; {{ customer.customerCode }}</span>
+              </div>
+            </button>
+            <!-- No results + Create button -->
+            <div *ngIf="customerResults.length === 0 && !searchingCustomers" class="px-4 py-2 text-center">
+              <div class="text-xs text-muted mb-2">No customers found for "{{ customerSearchQuery.trim() }}"</div>
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-primary" (mousedown)="openCustomerCreateModal()">
+                <i class="bi bi-person-plus mr-1"></i>Create New Customer
+              </button>
+            </div>
+            <!-- Create button at bottom when results exist -->
+            <div *ngIf="customerResults.length > 0" class="border-t px-4 py-2 text-center">
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-primary" (mousedown)="openCustomerCreateModal()">
+                <i class="bi bi-person-plus mr-1"></i>Create New Customer
+              </button>
+            </div>
+          </div>
+
+          <!-- Searching indicator -->
+          <div *ngIf="searchingCustomers" class="absolute w-full bg-surface border rounded-lg shadow-panel mt-1 px-4 py-2 text-muted text-xs" style="z-index:1060;">
+            <span class="ui-spinner-border ui-spinner-border-sm mr-1" role="status"></span> Searching...
+          </div>
+        </div>
+
+        <!-- Selected customer chip -->
+        <div *ngIf="selectedCustomer" class="flex items-center gap-2 mt-2 p-2 bg-success-soft border border-success rounded-lg">
+          <i class="bi bi-person-check text-success"></i>
+          <div class="text-xs grow">
+            <span class="font-semibold">{{ selectedCustomer.name }}</span>
+            <span class="text-muted ml-2">TIN: {{ selectedCustomer.taxId || '-' }}</span>
+          </div>
+          <button type="button" class="ui-btn-close" style="font-size:0.6rem;" (click)="clearCustomer()" aria-label="Remove customer"></button>
+        </div>
+      </div>
+
+      <div class="col-span-12 md:col-span-3">
+        <label class="ui-form-label">Status</label>
+        <select class="ui-form-select" [(ngModel)]="status" name="status">
+          <option value="pending">pending</option>
+          <option value="confirmed">confirmed</option>
+          <option value="fulfilled">fulfilled</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label class="ui-form-label">Payment Status</label>
+        <select class="ui-form-select" [(ngModel)]="paymentStatus" name="paymentStatus">
+          <option value="unpaid">unpaid</option>
+          <option value="partial">partial</option>
+          <option value="paid">paid</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label class="ui-form-label">Fulfillment Status</label>
+        <select class="ui-form-select" [(ngModel)]="fulfillmentStatus" name="fulfillmentStatus">
+          <option value="unfulfilled">unfulfilled</option>
+          <option value="partial">partial</option>
+          <option value="fulfilled">fulfilled</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label class="ui-form-label">Shipping Amount</label>
+        <input type="number" step="0.01" class="ui-form-control" [(ngModel)]="shippingAmount" name="shippingAmount" />
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <div class="ui-form-check mt-6">
+          <input
+            class="ui-form-check-input"
+            type="checkbox"
+            id="applyWithholdingTaxCreate"
+            [(ngModel)]="applyWithholdingTax"
+            name="applyWithholdingTax"
+            (ngModelChange)="onApplyWithholdingTaxChange()"
+          />
+          <label class="ui-form-check-label" for="applyWithholdingTaxCreate">
+            Apply Withholding Tax
+          </label>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-6" *ngIf="applyWithholdingTax">
+        <label class="ui-form-label">Withholding Tax Type</label>
+        <select class="ui-form-select" [(ngModel)]="withholdingTaxTypeId" name="withholdingTaxTypeId">
+          <option value="">Select withholding tax type</option>
+          <option *ngFor="let row of withholdingTaxTypes; trackBy: trackByWithholdingTaxTypeId" [value]="row.id">
+            {{ row.code || 'N/A' }} - {{ row.name || 'Unnamed' }} ({{ row.percentage || 0 }}%)
+          </option>
+        </select>
+        <div class="text-xs text-muted mt-1" *ngIf="withholdingTaxLoading">Loading withholding tax types...</div>
+      </div>
+
+      <div class="col-span-12">
+        <label class="ui-form-label">Notes</label>
+        <textarea rows="2" class="ui-form-control" [(ngModel)]="notes" name="notes"></textarea>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ui-grid grid grid-cols-12 gap-6">
+  <div class="col-span-12 xl:col-span-7">
+    <section class="ui-card shadow-panel rounded-xl h-full">
+      <div class="ui-card-body p-6">
+        <h2 class="text-base font-semibold mb-4">Item Search</h2>
+        <div class="ui-input-group mb-4">
+          <input
+            type="text"
+            class="ui-form-control"
+            placeholder="Search items by name, sku, category"
+            [(ngModel)]="searchQuery"
+            name="searchQuery"
+            (keyup.enter)="searchItems()"
+          />
+          <button class="ui-btn ui-btn-primary" type="button" (click)="searchItems()" [disabled]="catalogLoading">
+            <i class="bi bi-search mr-1"></i>{{ catalogLoading ? 'Searching...' : 'Search' }}
+          </button>
+        </div>
+
+        <div class="ui-grid grid grid-cols-12 gap-4">
+          <div class="col-span-12 md:col-span-6" *ngFor="let item of catalogItems; trackBy: trackByItemId">
+            <article class="border rounded-lg p-4 h-full flex flex-col">
+              <div class="flex justify-between items-start gap-2">
+                <div>
+                  <div class="font-semibold">{{ item.name }}</div>
+                  <div class="text-xs text-muted">{{ item.sku || 'No SKU' }} | {{ item.category || 'General' }}</div>
+                </div>
+                <span class="ui-badge ui-badge-light border">{{ item.stock ?? 0 }} in stock</span>
+              </div>
+
+              <div class="mt-4 font-semibold">
+                {{ formatMoney(itemUnitPrice(item), item.currency || activeCurrency) }}
+              </div>
+
+              <button
+                class="ui-btn ui-btn-outline-primary mt-auto"
+                type="button"
+                (click)="addToCart(item)"
+                [disabled]="item.type === 'product' && !canIncreaseItem(item)"
+              >
+                <i class="bi bi-cart-plus mr-1"></i>Add to Order
+              </button>
+            </article>
+          </div>
+
+          <div class="col-span-12" *ngIf="!catalogLoading && catalogItems.length === 0">
+            <div class="text-muted text-xs">No items loaded. Search using your organization context.</div>
+          </div>
+
+          <div class="col-span-12 flex justify-center" *ngIf="catalogItems.length > 0 && catalogHasMore">
+            <button class="ui-btn ui-btn-outline-primary" type="button" (click)="loadMoreItems()" [disabled]="catalogLoadingMore">
+              <i class="bi bi-plus-circle mr-1"></i>{{ catalogLoadingMore ? 'Loading...' : 'Show 5 More' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-span-12 xl:col-span-5">
+    <section class="ui-card shadow-panel rounded-xl h-full">
+      <div class="ui-card-body p-6 flex flex-col">
+        <h2 class="text-base font-semibold mb-4">Order Cart</h2>
+
+        <div *ngIf="cart.length === 0" class="text-muted text-xs">No items yet. Add items from search.</div>
+
+        <div class="flex flex-col gap-4" *ngIf="cart.length > 0">
+          <div class="border rounded-lg p-4" *ngFor="let row of cart; trackBy: trackByCartItemId">
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <div class="font-semibold">{{ row.item.name }}</div>
+                <div class="text-xs text-muted">{{ row.item.sku || 'No SKU' }}</div>
+              </div>
+              <button class="ui-btn ui-btn-sm ui-btn-outline-danger" type="button" (click)="removeFromCart(row.item.id)">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+              <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="decrease(row.item.id)">-</button>
+              <input
+                type="number"
+                class="ui-form-control ui-form-control-sm text-center"
+                [class.is-invalid]="exceedsStock(row)"
+                style="max-width: 90px"
+                min="1"
+                step="1"
+                [max]="row.item.type === 'product' ? maxStock(row.item) : null"
+                [ngModel]="row.quantity"
+                (ngModelChange)="updateQuantity(row.item.id, $event)"
+              />
+              <button
+                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
+                type="button"
+                (click)="increase(row.item.id)"
+                [disabled]="row.item.type === 'product' && row.quantity >= maxStock(row.item)"
+              >
+                +
+              </button>
+              <div class="ml-auto font-semibold">{{ formatMoney(itemLineTotal(row), row.item.currency || activeCurrency) }}</div>
+            </div>
+            <div class="text-xs text-muted mt-2" *ngIf="row.item.type === 'product'">
+              Available stock: {{ maxStock(row.item) }}
+            </div>
+            <div class="text-xs text-danger mt-1" *ngIf="exceedsStock(row)">
+              Entered quantity is higher than available stock.
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-4" />
+
+        <div class="flex justify-between text-xs mb-1"><span>Subtotal</span><strong>{{ formatMoney(subtotalAmount, activeCurrency) }}</strong></div>
+        <div class="flex justify-between text-xs mb-1"><span>{{ organizationTaxLabel }} Rate</span><strong>{{ organizationVatRate | number: '1.0-2' }}%</strong></div>
+        <div class="flex justify-between text-xs mb-1">
+          <span>{{ isPercentageTaxOrganization ? 'Non-VAT Gross Receipts / EWT Base' : 'Taxable Amount' }}</span>
+          <strong>{{ formatMoney(taxableAmount, activeCurrency) }}</strong>
+        </div>
+        <div class="flex justify-between text-xs mb-1">
+          <span>{{ displayTaxAmountLabel }}</span>
+          <strong>{{ formatMoney(taxAmount, activeCurrency) }}</strong>
+        </div>
+        <div class="flex justify-between text-xs mb-1" *ngIf="isPercentageTaxOrganization">
+          <span>Percentage Tax Due <span class="text-muted">(BIR filing, not added to total)</span></span>
+          <strong>{{ formatMoney(percentageTaxAmount, activeCurrency) }}</strong>
+        </div>
+        <div class="flex justify-between text-xs mb-1"><span>Withholding Tax</span><strong>{{ formatMoney(withHoldingTaxAmount, activeCurrency) }}</strong></div>
+        <div class="flex justify-between text-xs mb-1"><span>Discount</span><strong>{{ formatMoney(discountAmount, activeCurrency) }}</strong></div>
+        <div class="flex justify-between text-xs mb-4"><span>Shipping</span><strong>{{ formatMoney(shippingAmount, activeCurrency) }}</strong></div>
+
+        <div class="flex justify-between text-lg mb-4">
+          <span class="font-semibold">Total</span>
+          <strong>{{ formatMoney(totalAmount, activeCurrency) }}</strong>
+        </div>
+
+        <div class="text-xs text-muted mt-auto">
+          Use the floating action button to place the order anytime.
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="fixed bottom-0 right-0 p-4 md:p-6 no-print" style="z-index: 1045;">
+  <button
+    class="ui-btn ui-btn-primary ui-btn-lg rounded-full shadow-panel inline-flex items-center gap-2"
+    type="button"
+    [disabled]="submitting || !hasOrganizationContext"
+    (click)="placeOrder()"
+  >
+    <i class="bi" [ngClass]="submitting ? 'bi-arrow-repeat' : 'bi-bag-check'"></i>
+    <span>{{ submitting ? 'Placing Order...' : 'Place Order' }}</span>
+  </button>
+</div>
+</div>
+
+<!-- Create Customer Modal -->
+<div class="ui-modal-backdrop fade show" *ngIf="isCustomerCreateModalOpen"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCustomerCreateModalOpen ? 'block' : 'none'"
+  *ngIf="isCustomerCreateModalOpen"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-lg ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title"><i class="bi bi-person-plus mr-2"></i>Create New Customer</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCustomerCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="creatingCustomer" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div *ngIf="customerCreateError" class="ui-alert ui-alert-danger py-2 mb-4">{{ customerCreateError }}</div>
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pe-none]="creatingCustomer" [class.opacity-50]="creatingCustomer">
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Name <span class="text-danger">*</span></label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['name']" placeholder="Customer name" />
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Legal Name</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['legalName']" placeholder="Legal / registered name" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">TIN</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['taxId']" placeholder="000-000-000-00000" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Contact Person</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['contactPerson']" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Phone</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['phone']" />
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Email</label>
+            <input type="email" class="ui-form-control" [(ngModel)]="newCustomer['email']" />
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Address Line 1</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['addressLine1']" />
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Address Line 2</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['addressLine2']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">City</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['city']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">State / Province</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['state']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Postal Code</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['postalCode']" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Country</label>
+            <input class="ui-form-control" [(ngModel)]="newCustomer['country']" />
+          </div>
+        </div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCustomerCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="creatingCustomer" (click)="createCustomer()">
+          {{ creatingCustomer ? 'Creating...' : 'Create & Select Customer' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

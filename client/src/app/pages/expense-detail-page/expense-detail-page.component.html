@@ -1,0 +1,169 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Finance</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Expense Details</h1>
+        <p class="text-muted mb-0">Review full expense record and printable expense summary.</p>
+      </div>
+      <div class="flex gap-2 no-print">
+        <button class="ui-btn ui-btn-outline-primary" (click)="printPage()">
+          <i class="bi bi-printer mr-1"></i>Print
+        </button>
+        <a class="ui-btn ui-btn-outline-secondary" routerLink="/expenses">
+          <i class="bi bi-arrow-left mr-1"></i>Back to Expenses
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl print-card" *ngIf="expense() as row">
+  <div class="ui-card-body p-6">
+    <div class="flex justify-between items-start flex-wrap gap-4 border-b pb-4 mb-4">
+      <div>
+        <div class="text-base font-semibold mb-1">Expense Summary</div>
+        <div class="text-xs text-muted">Reference: {{ row.expenseNumber || row.id }}</div>
+      </div>
+      <div class="md:text-right">
+        <div><strong>Status:</strong> {{ row.status || '-' }}</div>
+        <div><strong>Date:</strong> {{ row.expenseDate | date: 'mediumDate' }}</div>
+      </div>
+    </div>
+
+    <div class="ui-grid grid grid-cols-12 gap-4 mb-6">
+      <div class="col-span-12">
+        <div class="font-semibold uppercase tracking-wider text-xs text-muted">General Details</div>
+      </div>
+      <div class="col-span-12 md:col-span-4"><strong>Organization:</strong> {{ organizationLabel() }}</div>
+      <div class="col-span-12 md:col-span-4"><strong>Vendor:</strong> {{ vendorLabel() }}</div>
+      <div class="col-span-12 md:col-span-4"><strong>Vendor TIN:</strong> {{ row.vendorTaxId || '-' }}</div>
+      <div class="col-span-12 md:col-span-4"><strong>Category:</strong> {{ row.category || '-' }}</div>
+      <div class="col-span-12 md:col-span-4"><strong>Payment Method:</strong> {{ row.paymentMethod || '-' }}</div>
+      <div class="col-span-12 md:col-span-4"><strong>Due Date:</strong> {{ row.dueDate ? (row.dueDate | date: 'mediumDate') : '-' }}</div>
+      <div class="col-span-12 md:col-span-6"><strong>Tax Type:</strong> {{ taxTypeLabel() }}</div>
+      <div class="col-span-12 md:col-span-6"><strong>Withholding Tax Type:</strong> {{ withholdingLabel() }}</div>
+      <div class="col-span-12"><strong>Description:</strong> {{ row.description || '-' }}</div>
+      <div class="col-span-12"><strong>Notes:</strong> {{ row.notes || '-' }}</div>
+      <div class="col-span-12"><strong>Expense ID:</strong> {{ row.id }}</div>
+    </div>
+
+    <div class="ui-grid grid grid-cols-12 gap-4">
+      <div class="col-span-12">
+        <div class="font-semibold uppercase tracking-wider text-xs text-muted">Computed Breakdown</div>
+      </div>
+      <div class="col-span-12 md:col-span-3"><strong>Final Receipt Total:</strong> {{ formatMoney(row.amount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>VAT Exempt Amount:</strong> {{ formatMoney(row.vatExemptAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Net Purchase Portion:</strong> {{ formatMoney(row.taxableAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Claimable Input VAT:</strong> {{ formatMoney(row.taxAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3" *ngIf="row.receiptVatAmount != null"><strong>Supplier VAT:</strong> {{ formatMoney(row.receiptVatAmount, row.currency || 'PHP') }}</div>
+      <div class="col-span-12 md:col-span-3" *ngIf="row.withholdingTaxBase != null"><strong>Withholding Base:</strong> {{ formatMoney(row.withholdingTaxBase, row.currency || 'PHP') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Withholding Tax Amount:</strong> {{ formatMoney(row.withHoldingTaxAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Discount Already Included:</strong> {{ formatMoney(row.discountAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Net Amount Payable:</strong> {{ formatMoney(row.totalAmount ?? 0, row.currency || 'USD') }}</div>
+      <div class="col-span-12 md:col-span-3"><strong>Currency:</strong> {{ row.currency || '-' }}</div>
+    </div>
+
+    <div class="mt-6 border-t pt-6" *ngIf="attachmentUrl() as fileUrl">
+      <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div>
+          <div class="font-semibold text-xs uppercase tracking-wider text-muted">Attachment Preview</div>
+          <div class="text-xs text-muted">{{ attachmentName() }}</div>
+        </div>
+        <div class="flex gap-2 no-print">
+          <button
+            type="button"
+            class="ui-btn ui-btn-outline-primary ui-btn-sm"
+            *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed()"
+            (click)="openImagePreview(fileUrl)"
+          >
+            <i class="bi bi-arrows-fullscreen mr-1"></i>Preview
+          </button>
+          <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
+            <i class="bi bi-box-arrow-up-right mr-1"></i>Open
+          </a>
+          <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" [download]="attachmentName()">
+            <i class="bi bi-download mr-1"></i>Download
+          </a>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="ui-btn p-0 border rounded-lg overflow-hidden block text-left bg-transparent w-full no-print"
+        *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed(); else attachmentOpenOnly"
+        (click)="openImagePreview(fileUrl)"
+      >
+        <img
+          [src]="fileUrl"
+          alt="Expense attachment preview"
+          class="w-full block bg-subtle"
+          style="max-height: 520px; object-fit: contain;"
+          (error)="onAttachmentImageError()"
+        />
+        <div class="px-4 py-2 text-xs bg-subtle">
+          <i class="bi bi-arrows-fullscreen mr-1"></i>Click image to view full size
+        </div>
+      </button>
+
+      <ng-template #attachmentOpenOnly>
+        <div class="border rounded-lg p-6 bg-subtle no-print">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+              <i class="bi bi-paperclip text-2xl text-muted"></i>
+              <div>
+                <div class="font-semibold">Attachment available</div>
+                <div class="text-xs text-muted">Open the file in a new tab to preview it.</div>
+              </div>
+            </div>
+            <a class="ui-btn ui-btn-primary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
+              <i class="bi bi-box-arrow-up-right mr-1"></i>Open Attachment
+            </a>
+          </div>
+        </div>
+      </ng-template>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl" *ngIf="loading()">
+  <div class="ui-card-body p-6 text-muted">Loading expense details...</div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl" *ngIf="error()">
+  <div class="ui-card-body p-6">
+    <div class="ui-alert ui-alert-danger mb-0">{{ error() }}</div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="previewImageUrl()" (click)="closeImagePreview()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="previewImageUrl() ? 'block' : 'none'"
+  [attr.aria-hidden]="!previewImageUrl()"
+  *ngIf="previewImageUrl() as imageUrl"
+>
+  <div class="ui-modal-dialog ui-modal-xl ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Expense Attachment Preview</h5>
+        <button type="button" class="ui-btn-close" (click)="closeImagePreview()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-2 text-center">
+        <img
+          [src]="imageUrl"
+          alt="Expense attachment"
+          class="max-w-full h-auto rounded-md border"
+          style="max-height: 75vh; object-fit: contain;"
+        />
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <a class="ui-btn ui-btn-outline-secondary" [href]="imageUrl" target="_blank" rel="noopener noreferrer">
+          <i class="bi bi-box-arrow-up-right mr-1"></i>Open in New Tab
+        </a>
+        <button class="ui-btn ui-btn-primary" type="button" (click)="closeImagePreview()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>

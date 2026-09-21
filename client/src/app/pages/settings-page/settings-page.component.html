@@ -1,0 +1,163 @@
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6 overflow-hidden">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div>
+      <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Platform</div>
+      <h1 class="text-2xl font-semibold tracking-tight mb-2">Settings</h1>
+      <p class="text-muted mb-0">Superuser controls for platform-wide behavior.</p>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl">
+  <div class="ui-card-body p-6">
+    <div *ngIf="message()" class="ui-alert ui-alert-success">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
+
+    <div *ngIf="isSuperuser; else notAllowed">
+      <h5 class="mb-4">Cache Settings</h5>
+      <div class="ui-form-check ui-form-switch mb-4">
+        <input
+          class="ui-form-check-input"
+          type="checkbox"
+          id="cacheEnabled"
+          [checked]="cacheEnabled()"
+          (change)="cacheEnabled.set($any($event.target).checked)"
+        />
+        <label class="ui-form-check-label font-semibold" for="cacheEnabled">
+          Enable Redis Read Cache
+        </label>
+      </div>
+
+      <p class="text-muted text-xs mb-6">
+        Applies to API read endpoints. Write operations clear cache automatically.
+      </p>
+
+      <hr class="my-6" />
+      <h5 class="mb-4">File Storage Settings</h5>
+      <div class="ui-grid grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-4">
+          <label class="ui-form-label font-semibold">Storage Provider</label>
+          <select class="ui-form-select" [ngModel]="storageProvider()" (ngModelChange)="storageProvider.set($event)">
+            <option value="local">Local Storage</option>
+            <option value="do_spaces">DigitalOcean Spaces</option>
+            <option value="google_drive">Google Drive</option>
+          </select>
+          <div class="ui-form-text">Default provider for upload fields unless a field-specific provider is selected below.</div>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+          <label class="ui-form-label font-semibold">Expense Attachments</label>
+          <select class="ui-form-select" [ngModel]="expenseAttachmentProvider()" (ngModelChange)="expenseAttachmentProvider.set($event)">
+            <option value="local">Local Storage</option>
+            <option value="do_spaces">DigitalOcean Spaces</option>
+            <option value="google_drive">Google Drive</option>
+          </select>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+          <label class="ui-form-label font-semibold">Profile Images</label>
+          <select class="ui-form-select" [ngModel]="profileImageProvider()" (ngModelChange)="profileImageProvider.set($event)">
+            <option value="local">Local Storage</option>
+            <option value="do_spaces">DigitalOcean Spaces</option>
+            <option value="google_drive">Google Drive</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="ui-alert ui-alert-info mt-4 mb-0" *ngIf="requiresDoSpaces && !doSpacesConfigured()">
+        DigitalOcean Spaces is selected but not fully configured yet.
+      </div>
+
+      <div class="ui-alert ui-alert-info mt-4 mb-0" *ngIf="requiresGoogleDrive && !googleDriveConnected()">
+        Google Drive is selected but not connected yet.
+      </div>
+
+      <div class="ui-grid grid grid-cols-12 gap-4 mt-1" *ngIf="requiresDoSpaces">
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Spaces Endpoint</label>
+          <input class="ui-form-control" [ngModel]="doSpacesEndpoint()" (ngModelChange)="doSpacesEndpoint.set($event)" placeholder="nyc3.digitaloceanspaces.com" />
+        </div>
+        <div class="col-span-12 md:col-span-3">
+          <label class="ui-form-label font-semibold">Region</label>
+          <input class="ui-form-control" [ngModel]="doSpacesRegion()" (ngModelChange)="doSpacesRegion.set($event)" placeholder="nyc3" />
+        </div>
+        <div class="col-span-12 md:col-span-3">
+          <label class="ui-form-label font-semibold">Bucket Name</label>
+          <input class="ui-form-control" [ngModel]="doSpacesBucket()" (ngModelChange)="doSpacesBucket.set($event)" placeholder="my-bucket" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Access Key</label>
+          <input class="ui-form-control" [ngModel]="doSpacesAccessKey()" (ngModelChange)="doSpacesAccessKey.set($event)" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Secret Key</label>
+          <input
+            type="password"
+            class="ui-form-control"
+            [ngModel]="doSpacesSecretKey()"
+            (ngModelChange)="doSpacesSecretKey.set($event)"
+            [placeholder]="doSpacesHasSecretKey() ? 'Leave blank to keep existing secret key' : ''"
+          />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">CDN/Base URL (Optional)</label>
+          <input class="ui-form-control" [ngModel]="doSpacesCdnBaseUrl()" (ngModelChange)="doSpacesCdnBaseUrl.set($event)" placeholder="https://my-cdn.domain.com" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Directory Prefix (Optional)</label>
+          <input class="ui-form-control" [ngModel]="doSpacesDirectory()" (ngModelChange)="doSpacesDirectory.set($event)" placeholder="biz-assistant" />
+        </div>
+      </div>
+
+      <div class="ui-grid grid grid-cols-12 gap-4 mt-1" *ngIf="requiresGoogleDrive">
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Google Client ID</label>
+          <input class="ui-form-control" [ngModel]="googleDriveClientId()" (ngModelChange)="googleDriveClientId.set($event)" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold">Google Client Secret</label>
+          <input
+            type="password"
+            class="ui-form-control"
+            [ngModel]="googleDriveClientSecret()"
+            (ngModelChange)="googleDriveClientSecret.set($event)"
+            [placeholder]="googleDriveHasClientSecret() ? 'Leave blank to keep existing secret' : ''"
+          />
+        </div>
+        <div class="col-span-12 md:col-span-8">
+          <label class="ui-form-label font-semibold">Redirect URI</label>
+          <input class="ui-form-control" [ngModel]="googleDriveRedirectUri()" (ngModelChange)="googleDriveRedirectUri.set($event)" />
+          <div class="ui-form-text">Register this URI in Google OAuth credentials.</div>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+          <label class="ui-form-label font-semibold">Folder ID (Optional)</label>
+          <input class="ui-form-control" [ngModel]="googleDriveFolderId()" (ngModelChange)="googleDriveFolderId.set($event)" />
+        </div>
+        <div class="col-span-12">
+          <div class="flex flex-wrap gap-2 items-center">
+            <button type="button" class="ui-btn ui-btn-outline-primary" (click)="connectGoogleDrive()" [disabled]="submitting() || loading()">
+              <i class="bi bi-google mr-1"></i>
+              Connect Google Drive
+            </button>
+            <button type="button" class="ui-btn ui-btn-outline-danger" (click)="disconnectGoogleDrive()" [disabled]="submitting() || loading()">
+              <i class="bi bi-x-circle mr-1"></i>
+              Disconnect
+            </button>
+            <span class="ui-badge" [ngClass]="googleDriveConnected() ? 'ui-badge-success' : 'ui-badge-secondary'">
+              {{ googleDriveConnected() ? 'Connected' : 'Not Connected' }}
+            </span>
+            <span class="text-muted text-xs" *ngIf="googleDriveAccountEmail()">
+              Account: {{ googleDriveAccountEmail() }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <button class="ui-btn ui-btn-primary mt-4" [disabled]="submitting() || loading()" (click)="save()">
+        {{ submitting() ? 'Saving...' : 'Save Settings' }}
+      </button>
+    </div>
+
+    <ng-template #notAllowed>
+      <div class="text-muted">Only superuser can access this page.</div>
+    </ng-template>
+  </div>
+</section>

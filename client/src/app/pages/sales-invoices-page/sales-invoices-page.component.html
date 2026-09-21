@@ -1,0 +1,712 @@
+<app-organization-required *ngIf="isContextLocked" />
+
+<div [attr.inert]="isContextLocked ? '' : null" [class.opacity-50]="isContextLocked">
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Revenue</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Sales Invoices</h1>
+        <p class="text-muted mb-0">Create and manage fulfillment invoices from orders.</p>
+      </div>
+      <div class="flex gap-2">
+        <div class="ui-btn-group table-actions-menu">
+          <button
+            class="ui-btn ui-btn-outline-dark ui-dropdown-toggle"
+            type="button"
+            appDropdown
+            aria-expanded="false"
+            appTooltip
+            title="Table actions"
+          >
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading()">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>{{ loading() ? 'Refreshing...' : 'Refresh' }}</span>
+              </button>
+            </li>
+            <li><hr class="ui-dropdown-divider" /></li>
+            <li class="ui-dropdown-header uppercase tracking-wider text-xs">CSV</li>
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="exportSalesInvoicesCsv()" [disabled]="exporting()">
+                <i class="bi bi-download"></i>
+                <span>{{ exporting() ? 'Exporting...' : 'Export CSV' }}</span>
+              </button>
+            </li>
+            <li>
+              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()">
+                <i class="bi bi-upload"></i>
+                <span>Import CSV</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create Sales Invoice</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6">
+
+    <!-- Row 1: Primary filters -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+
+      <!-- Search -->
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
+        <div class="relative">
+          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <input
+            type="text"
+            class="ui-form-control pl-12"
+            [class.pr-12]="searchQuery"
+            placeholder="Invoice #, order, notes..."
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="onFilterChange()"
+          />
+          <button
+            *ngIf="searchQuery"
+            class="ui-btn absolute p-0 border-0 bg-transparent text-muted"
+            style="right:0.75rem;top:50%;transform:translateY(-50%);"
+            type="button"
+            (click)="searchQuery=''; onFilterChange()"
+            title="Clear search"
+          >
+            <i class="bi bi-x-circle-fill"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Invoice Status -->
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Status</label>
+        <select
+          class="ui-form-select"
+          [(ngModel)]="statusFilter"
+          (ngModelChange)="onFilterChange()"
+          [class.border-brand]="statusFilter"
+        >
+          <option value="">All Statuses</option>
+          <option value="draft">Draft</option>
+          <option value="issued">Issued</option>
+          <option value="sent">Sent</option>
+          <option value="partially_paid">Partially Paid</option>
+          <option value="paid">Paid</option>
+          <option value="overdue">Overdue</option>
+          <option value="void">Void</option>
+        </select>
+      </div>
+
+      <!-- Payment Status -->
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Payment</label>
+        <select
+          class="ui-form-select"
+          [(ngModel)]="paymentStatusFilter"
+          (ngModelChange)="onFilterChange()"
+          [class.border-brand]="paymentStatusFilter"
+        >
+          <option value="">All Payments</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partially_paid">Partially Paid</option>
+          <option value="paid">Paid</option>
+          <option value="refunded">Refunded</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+
+      <!-- Issue Date range (inline) -->
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Issue Date</label>
+        <div class="ui-input-group">
+          <input
+            type="date"
+            class="ui-form-control"
+            [(ngModel)]="issueDateFrom"
+            (ngModelChange)="onFilterChange()"
+            [class.border-brand]="issueDateFrom"
+            title="From date"
+          />
+          <span class="ui-input-group-text bg-surface text-muted text-xs px-2">to</span>
+          <input
+            type="date"
+            class="ui-form-control"
+            [(ngModel)]="issueDateTo"
+            (ngModelChange)="onFilterChange()"
+            [class.border-brand]="issueDateTo"
+            title="To date"
+          />
+        </div>
+        <div class="ui-btn-group ui-btn-group-sm w-full mt-2" role="group" aria-label="Set issue date quarter">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="isIssueQuarterActive(1)" (click)="applyIssueQuarterFilter(1)">Q1</button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="isIssueQuarterActive(2)" (click)="applyIssueQuarterFilter(2)">Q2</button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="isIssueQuarterActive(3)" (click)="applyIssueQuarterFilter(3)">Q3</button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="isIssueQuarterActive(4)" (click)="applyIssueQuarterFilter(4)">Q4</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Row 2: Secondary controls -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+
+      <!-- Sort: select + direction toggle as one control -->
+      <div class="col-span-12 md:col-span-4">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text bg-surface border-r-0 text-muted px-4">
+            <i class="bi bi-arrow-down-up text-xs"></i>
+          </span>
+          <select class="ui-form-select border-l-0" [ngModel]="sortBy" (ngModelChange)="setSort($event)">
+            <option value="createdAt">Date Created</option>
+            <option value="updatedAt">Last Updated</option>
+            <option value="invoiceNumber">Invoice Number</option>
+            <option value="issueDate">Issue Date</option>
+            <option value="dueDate">Due Date</option>
+            <option value="status">Status</option>
+            <option value="paymentStatus">Payment Status</option>
+            <option value="amount">Amount</option>
+            <option value="totalAmount">Total</option>
+          </select>
+          <button
+            class="ui-btn ui-btn-outline-secondary"
+            type="button"
+            (click)="toggleSortDirection()"
+            appTooltip
+            [title]="sortDirection === 'asc' ? 'Ascending — click to reverse' : 'Descending — click to reverse'"
+          >
+            <i class="bi" [ngClass]="sortIcon()"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Rows per page -->
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text bg-surface border-r-0 text-muted text-xs px-2">Show</span>
+          <select class="ui-form-select border-l-0" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+            <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- View toggle -->
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-table"></i>
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
+            <i class="bi bi-grid-3x2-gap"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats + Clear button -->
+      <div class="col-span-12 md:col-span-4 flex items-center justify-between md:justify-end gap-4">
+        <div class="text-xs text-muted leading-snug">
+          <span class="font-semibold text-ink">{{ total }}</span> invoices &nbsp;&middot;&nbsp;
+          Page <span class="font-semibold text-ink">{{ page }}</span> / <span class="font-semibold text-ink">{{ totalPages }}</span>
+        </div>
+        <button
+          class="ui-btn ui-btn-sm flex items-center gap-2"
+          [class.ui-btn-outline-secondary]="!hasActiveFilters"
+          [class.ui-btn-outline-danger]="hasActiveFilters"
+          type="button"
+          (click)="clearFilters()"
+          [disabled]="!hasActiveFilters"
+        >
+          <i class="bi bi-x-circle"></i>
+          Clear
+          <span *ngIf="activeFilterCount > 0" class="ui-badge ui-badge-danger rounded-full leading-none">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Active filter chips -->
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+      <span class="text-xs text-muted font-semibold mr-1">Active:</span>
+
+      <span *ngIf="searchQuery.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-search text-xs text-muted"></i>
+        "{{ searchQuery.trim() }}"
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="searchQuery=''; onFilterChange()" aria-label="Remove search filter"></button>
+      </span>
+
+      <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-tag text-xs text-muted"></i>
+        {{ invoiceStatusLabel(statusFilter) }}
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="statusFilter=''; onFilterChange()" aria-label="Remove status filter"></button>
+      </span>
+
+      <span *ngIf="paymentStatusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-credit-card text-xs text-muted"></i>
+        {{ paymentStatusLabel(paymentStatusFilter) }}
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="paymentStatusFilter=''; onFilterChange()" aria-label="Remove payment filter"></button>
+      </span>
+
+      <span *ngIf="issueDateFrom || issueDateTo" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-calendar3 text-xs text-muted"></i>
+        {{ issueDateFrom || '…' }} → {{ issueDateTo || '…' }}
+        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="issueDateFrom=''; issueDateTo=''; onFilterChange()" aria-label="Remove date filter"></button>
+      </span>
+    </div>
+
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
+    <div *ngIf="importSummary() as summary" class="ui-alert ui-alert-info mt-4 mb-0">
+      <div class="flex justify-between items-start gap-4 flex-wrap">
+        <div>
+          <div class="font-semibold">Import Summary</div>
+          <div class="text-xs">
+            Processed {{ summary.totalRows }} rows.
+            Imported: {{ summary.imported }}.
+            Updated: {{ summary.updated }}.
+            Skipped: {{ summary.skipped }}.
+          </div>
+        </div>
+        <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="clearImportSummary()">
+          <i class="bi bi-x-lg mr-1"></i>Dismiss
+        </button>
+      </div>
+      <div *ngIf="summary.skipped > 0 && summary.errors.length > 0" class="mt-4">
+        <div class="text-xs font-semibold mb-2">Skipped row details</div>
+        <ul class="text-xs mb-0 pl-4">
+          <li *ngFor="let rowError of summary.errors">{{ rowError }}</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th>Issue Date</th>
+          <th *ngIf="isSuperuser">Organization</th>
+          <th>Invoice #</th>
+          <th>Order</th>
+          <th>Customer</th>
+          <th>Status</th>
+          <th>Payment</th>
+          <th>Total</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="loading()">
+          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center py-12 border-0">
+            <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>
+            <span class="text-muted text-xs">Loading...</span>
+          </td>
+        </tr>
+        <tr *ngIf="!loading() && rows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center text-muted py-6">No sales invoices found.</td>
+        </tr>
+
+        <tr *ngFor="let row of rows(); trackBy: trackById">
+          <td>{{ row.issueDate ? (row.issueDate | date: 'mediumDate') : '-' }}</td>
+          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
+          <td class="font-semibold">{{ row.invoiceNumber }}</td>
+          <td class="text-xs">{{ row.orderId || '-' }}</td>
+          <td>
+            <span class="inline-flex items-center gap-1">
+              {{ customerName(row) }}
+              <i *ngIf="row.order?.customer" class="bi bi-info-circle text-muted text-xs opacity-50"
+                style="cursor:pointer;"
+                (mouseenter)="showCustomerPopover($event, row)"
+                (mouseleave)="hideCustomerPopover()"></i>
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="invoiceStatusBadgeClass(row.status)">
+              {{ row.status || '-' }}
+            </span>
+          </td>
+          <td>
+            <span class="ui-badge rounded-full" [ngClass]="paymentStatusBadgeClass(row.paymentStatus)">
+              {{ row.paymentStatus || '-' }}
+            </span>
+          </td>
+          <td class="invoice-breakdown-cell"
+            (mouseenter)="showBreakdown($event, row)"
+            (mouseleave)="hideBreakdown()">
+            <div class="inline-flex flex-col items-start gap-1">
+              <span class="inline-flex items-center gap-1">
+                {{ formatMoney(row.totalAmount ?? 0, row.currency || currentOrganizationCurrency) }}
+                <i class="bi bi-info-circle text-muted text-xs opacity-50"></i>
+              </span>
+              <span class="ui-badge rounded-full ui-badge-light border" *ngIf="(row.withHoldingTaxAmount || 0) > 0">
+                EWT {{ formatMoney(row.withHoldingTaxAmount ?? 0, row.currency || currentOrganizationCurrency) }}
+              </span>
+            </div>
+          </td>
+          <td class="text-right">
+            <div class="ui-btn-group table-actions-menu">
+              <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Invoice actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+                <li>
+                  <a class="ui-dropdown-item flex items-center gap-2" [routerLink]="['/sales-invoices', row.id]">
+                    <i class="bi bi-eye"></i> View Details
+                  </a>
+                </li>
+                <li><hr class="ui-dropdown-divider" /></li>
+                <li>
+                  <button class="ui-dropdown-item flex items-center gap-2 text-danger" type="button"
+                    [disabled]="deletingId() === row.id" (click)="removeInvoice(row.id)">
+                    <i class="bi bi-trash3"></i> {{ deletingId() === row.id ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex flex-wrap justify-between items-center gap-2 p-4 border-t">
+    <div class="text-xs text-muted">Showing {{ rows().length }} of {{ total }} invoices</div>
+    <div class="ui-btn-group">
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(1)" [disabled]="loading() || page <= 1"><i class="bi bi-chevron-double-left"></i></button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page - 1)" [disabled]="loading() || page <= 1"><i class="bi bi-chevron-left"></i></button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(page + 1)" [disabled]="loading() || page >= totalPages"><i class="bi bi-chevron-right"></i></button>
+      <button class="ui-btn ui-btn-outline-secondary ui-btn-sm" type="button" (click)="goToPage(totalPages)" [disabled]="loading() || page >= totalPages"><i class="bi bi-chevron-double-right"></i></button>
+    </div>
+  </div>
+</section>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isCreateModalOpen()"
+  *ngIf="isCreateModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Create New Sales Invoice</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createInvoiceForm" (ngSubmit)="createInvoice()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Organization</label>
+            <input class="ui-form-control" [value]="currentOrganizationId || 'No organization on logged in user'" readonly />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Order ID (Optional)</label>
+            <input class="ui-form-control" formControlName="orderId" />
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Invoice Number</label>
+            <input class="ui-form-control" formControlName="invoiceNumber" />
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Issue Date</label>
+            <input type="date" class="ui-form-control" formControlName="issueDate" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Due Date</label>
+            <input type="date" class="ui-form-control" formControlName="dueDate" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Status</label>
+            <input class="ui-form-control" formControlName="status" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Payment Status</label>
+            <input class="ui-form-control" formControlName="paymentStatus" />
+          </div>
+
+          <!-- ── Amount Entry ────────────────────────────────── -->
+          <div class="col-span-12">
+            <div class="flex items-center gap-2 mb-1 mt-2">
+              <i class="bi bi-receipt text-brand"></i>
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Amount Entry</span>
+            </div>
+            <hr class="mt-1 mb-0" />
+          </div>
+
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">
+              Gross Sales
+              <span class="text-muted font-normal" *ngIf="!isPercentageTaxOrganization">(VAT-inclusive)</span>
+              <span class="text-muted font-normal" *ngIf="isPercentageTaxOrganization">(non-VAT gross receipts)</span>
+              <span class="text-danger">*</span>
+            </label>
+            <div class="ui-input-group">
+              <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
+              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="amount" placeholder="0.00" />
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Promo / Regular Discount</label>
+            <div class="ui-input-group">
+              <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
+              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="discountAmount" placeholder="0.00" />
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold flex items-center gap-1">
+              SC/PWD Discount
+              <div class="ui-form-check ui-form-switch mb-0 ml-auto" *ngIf="!isPercentageTaxOrganization">
+                <input class="ui-form-check-input" type="checkbox" id="scPwdToggle" [checked]="scPwdEnabled" (change)="toggleScPwdDiscount()" />
+                <label class="ui-form-check-label text-xs text-muted" for="scPwdToggle">20%</label>
+              </div>
+            </label>
+            <div class="ui-input-group">
+              <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
+              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="scPwdDiscount" placeholder="0.00" [readonly]="scPwdEnabled" />
+            </div>
+            <div *ngIf="scPwdEnabled && !isPercentageTaxOrganization" class="ui-form-text text-brand">
+              <i class="bi bi-person-wheelchair mr-1"></i>Auto: 20% of VAT-exclusive amount (VAT-exempt)
+            </div>
+            <div *ngIf="isPercentageTaxOrganization" class="ui-form-text text-muted">
+              VAT-specific SC/PWD auto extraction is disabled for non-VAT mode.
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label class="ui-form-label font-semibold">Service Charge</label>
+            <div class="ui-input-group">
+              <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
+              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="serviceCharge" placeholder="0.00" />
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold">Withholding Tax Type <span class="text-muted font-normal">(EWT)</span></label>
+            <select class="ui-form-select" formControlName="withholdingTaxTypeId">
+              <option value="">No sales withholding</option>
+              <option *ngFor="let row of withholdingTaxTypes(); trackBy: trackByWithholdingTaxTypeId" [value]="row.id">
+                {{ row.name }} ({{ row.percentage | number : '1.0-2' }}%)
+              </option>
+            </select>
+            <div class="ui-form-text text-muted" *ngIf="withholdingTaxLoading()">Loading withholding tax types...</div>
+            <div class="ui-form-text text-muted" *ngIf="!withholdingTaxLoading() && withholdingTaxTypes().length === 0">
+              Create an active withholding tax type that applies to invoices or both.
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-2">
+            <label class="ui-form-label font-semibold">EWT Amount</label>
+            <div class="ui-input-group">
+              <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
+              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="withHoldingTaxAmount" placeholder="0.00" readonly />
+            </div>
+          </div>
+
+          <!-- ── Auto-Computed BIR Breakdown ──────────────────── -->
+          <div class="col-span-12">
+            <div class="flex items-center gap-2 mb-1 mt-2">
+              <i class="bi bi-calculator text-brand"></i>
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Computed Breakdown</span>
+              <span class="ui-badge ui-badge-light border text-xs ml-1">Auto-calculated</span>
+            </div>
+            <hr class="mt-1 mb-0" />
+          </div>
+
+          <div class="col-span-12">
+            <div class="bg-subtle rounded-lg p-4">
+              <div class="ui-grid grid grid-cols-12 gap-2 text-xs">
+                <div class="col-span-8 text-muted">
+                  Gross Sales
+                  <span *ngIf="!isPercentageTaxOrganization">(VAT-inclusive)</span>
+                  <span *ngIf="isPercentageTaxOrganization">(non-VAT gross receipts)</span>
+                </div>
+                <div class="col-span-4 text-right font-mono">{{ formatMoney(createInvoiceForm.get('amount')?.value || 0, currentOrganizationCurrency) }}</div>
+
+                <ng-container *ngIf="!isPercentageTaxOrganization">
+                  <div class="col-span-8 text-muted">Less: 12% VAT <span class="text-muted">(extracted)</span></div>
+                  <div class="col-span-4 text-right font-mono text-danger">{{ formatMoney(-((createInvoiceForm.get('amount')?.value || 0) - computedSubtotal), currentOrganizationCurrency) }}</div>
+
+                  <div class="col-span-8 font-semibold">VAT-Exclusive Amount</div>
+                  <div class="col-span-4 text-right font-mono font-semibold">{{ formatMoney(computedSubtotal, currentOrganizationCurrency) }}</div>
+                </ng-container>
+
+                <div class="col-span-12"><hr class="my-1" /></div>
+
+                <div class="col-span-8 text-muted">Less: Promo / Regular Discount</div>
+                <div class="col-span-4 text-right font-mono text-danger">{{ formatMoney(-(createInvoiceForm.get('discountAmount')?.value || 0), currentOrganizationCurrency) }}</div>
+
+                <div class="col-span-8 text-muted">Less: SC/PWD Discount (20%)</div>
+                <div class="col-span-4 text-right font-mono text-danger">{{ formatMoney(-(createInvoiceForm.get('scPwdDiscount')?.value || 0), currentOrganizationCurrency) }}</div>
+
+                <div class="col-span-8 font-semibold">
+                  {{ isPercentageTaxOrganization ? 'Non-VAT Sales / Gross Receipts' : 'Taxable Amount' }}
+                  <span class="text-muted font-normal" *ngIf="!isPercentageTaxOrganization">(VATable Sales)</span>
+                </div>
+                <div class="col-span-4 text-right font-mono font-semibold">{{ formatMoney(computedTaxableAmount, currentOrganizationCurrency) }}</div>
+
+                <div class="col-span-8 text-muted">{{ isPercentageTaxOrganization ? 'VAT / Output Tax' : 'Add: 12% VAT' }}</div>
+                <div class="col-span-4 text-right font-mono text-success">{{ formatMoney(computedTaxAmount, currentOrganizationCurrency) }}</div>
+
+                <ng-container *ngIf="isPercentageTaxOrganization">
+                  <div class="col-span-8 text-muted">{{ taxModeLabel }} <span class="text-muted">(filing, not customer-added VAT)</span></div>
+                  <div class="col-span-4 text-right font-mono">{{ formatMoney(computedPercentageTaxAmount, currentOrganizationCurrency) }}</div>
+                </ng-container>
+
+                <div class="col-span-8 text-muted">Add: Service Charge</div>
+                <div class="col-span-4 text-right font-mono text-success">{{ formatMoney(createInvoiceForm.get('serviceCharge')?.value || 0, currentOrganizationCurrency) }}</div>
+
+                <div class="col-span-8 text-muted">Less: Withholding Tax (EWT)</div>
+                <div class="col-span-4 text-right font-mono text-danger">{{ formatMoney(-(createInvoiceForm.get('withHoldingTaxAmount')?.value || 0), currentOrganizationCurrency) }}</div>
+
+                <div class="col-span-12"><hr class="my-1" /></div>
+
+                <div class="col-span-8 font-bold">Total Amount Due</div>
+                <div class="col-span-4 text-right font-mono font-bold text-base">{{ formatMoney(computedTotalAmount, currentOrganizationCurrency) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold">Paid At</label>
+            <input type="datetime-local" class="ui-form-control" formControlName="paidAt" />
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Notes</label>
+            <textarea rows="2" class="ui-form-control" formControlName="notes"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createInvoice()">
+          {{ submitting() ? 'Creating...' : 'Create Sales Invoice' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="isImportModalOpen() ? 'block' : 'none'"
+  [attr.aria-hidden]="!isImportModalOpen()"
+  *ngIf="isImportModalOpen()"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Import Sales Invoices CSV</h5>
+        <button type="button" class="ui-btn-close" (click)="closeImportModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4">
+        <div class="text-xs text-muted mb-2">
+          Required columns: <code>invoiceNumber</code>, <code>issueDate</code>
+        </div>
+        <div class="text-xs text-muted mb-4">
+          Optional columns: orderId, dueDate, status, paymentStatus, amount, taxableAmount, taxAmount, withholdingTaxTypeId, withholdingTaxTypeCode, withHoldingTaxAmount, discountAmount, totalAmount, paidAt, notes
+        </div>
+        <div class="ui-form-check mb-4">
+          <input class="ui-form-check-input" type="checkbox" id="forceImportInvoices" [(ngModel)]="forceImport" />
+          <label class="ui-form-check-label" for="forceImportInvoices">
+            Force Import (overwrite existing records by invoice number or order)
+          </label>
+        </div>
+        <input type="file" class="ui-form-control" accept=".csv,text/csv" (change)="onImportFileChange($event)" />
+        <div *ngIf="importModalError()" class="ui-alert ui-alert-danger py-2 mt-4 mb-0">{{ importModalError() }}</div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeImportModal()">Cancel</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="importSalesInvoicesCsv()">
+          {{ submitting() ? 'Importing...' : 'Import Sales Invoices' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Breakdown popover -->
+<div class="invoice-breakdown-popover ui-card shadow-dialog rounded-lg"
+  [class.show]="breakdownRow"
+  [style.top.px]="breakdownTop"
+  [style.left.px]="breakdownLeft"
+  *ngIf="breakdownRow as r">
+  <div class="ui-card-body p-4">
+    <div class="flex items-center gap-2 mb-2">
+      <i class="bi bi-receipt text-brand text-xs"></i>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted">Tax Breakdown</span>
+    </div>
+    <div class="ui-grid grid grid-cols-12 gap-1 text-xs" style="min-width: 300px;">
+      <div class="col-span-7 text-muted">
+        Gross Sales
+        <span *ngIf="!isPercentageTaxRow(r)">(VAT-inclusive)</span>
+        <span *ngIf="isPercentageTaxRow(r)">(non-VAT)</span>
+      </div>
+      <div class="col-span-5 text-right font-mono">{{ formatMoney(r.amount ?? 0, r.currency || currentOrganizationCurrency) }}</div>
+
+      <ng-container *ngIf="!isPercentageTaxRow(r)">
+        <div class="col-span-7 text-muted">VAT-Exclusive (&divide; 1.12)</div>
+        <div class="col-span-5 text-right font-mono">{{ formatMoney(computeSubtotal(r), r.currency || currentOrganizationCurrency) }}</div>
+      </ng-container>
+
+      <div class="col-span-7 text-muted">Less: Discount</div>
+      <div class="col-span-5 text-right font-mono text-danger">{{ formatMoney(-(r.discountAmount ?? 0), r.currency || currentOrganizationCurrency) }}</div>
+
+      <div class="col-span-7 text-muted">Less: SC/PWD Discount</div>
+      <div class="col-span-5 text-right font-mono text-danger">{{ formatMoney(-(r.scPwdDiscount ?? 0), r.currency || currentOrganizationCurrency) }}</div>
+
+      <div class="col-span-12"><hr class="my-1" /></div>
+
+      <div class="col-span-7 font-semibold">{{ isPercentageTaxRow(r) ? 'Non-VAT Sales' : 'Taxable Amount' }}</div>
+      <div class="col-span-5 text-right font-mono font-semibold">{{ formatMoney(r.taxableAmount ?? 0, r.currency || currentOrganizationCurrency) }}</div>
+
+      <div class="col-span-7 text-muted">{{ isPercentageTaxRow(r) ? 'VAT / Output Tax' : 'VAT (12%)' }}</div>
+      <div class="col-span-5 text-right font-mono text-success">{{ formatMoney(r.taxAmount ?? 0, r.currency || currentOrganizationCurrency) }}</div>
+
+      <div class="col-span-7 text-muted">Service Charge</div>
+      <div class="col-span-5 text-right font-mono">{{ formatMoney(r.serviceCharge ?? 0, r.currency || currentOrganizationCurrency) }}</div>
+
+      <div class="col-span-7 text-muted">Less: Withholding Tax</div>
+      <div class="col-span-5 text-right font-mono text-danger">{{ formatMoney(-(r.withHoldingTaxAmount ?? 0), r.currency || currentOrganizationCurrency) }}</div>
+      <div class="col-span-7 text-muted" *ngIf="(r.withHoldingTaxAmount || 0) > 0">Withholding Type</div>
+      <div class="col-span-5 text-right text-xs" *ngIf="(r.withHoldingTaxAmount || 0) > 0">{{ withholdingTaxTypeLabel(r) }}</div>
+
+      <div class="col-span-12"><hr class="my-1" /></div>
+
+      <div class="col-span-7 font-bold">Total Amount Due</div>
+      <div class="col-span-5 text-right font-mono font-bold">{{ formatMoney(r.totalAmount ?? 0, r.currency || currentOrganizationCurrency) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Customer address popover -->
+<div class="customer-popover ui-card shadow-dialog rounded-lg"
+  [class.show]="customerPopoverRow"
+  [style.top.px]="customerPopoverTop"
+  [style.left.px]="customerPopoverLeft"
+  *ngIf="customerPopoverRow?.order?.customer as c">
+  <div class="ui-card-body p-4">
+    <div class="flex items-center gap-2 mb-2">
+      <i class="bi bi-person-vcard text-brand text-xs"></i>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted">Customer Details</span>
+    </div>
+    <div class="text-xs" style="min-width: 240px; max-width: 320px;">
+      <div class="font-semibold mb-1">{{ c.name }}</div>
+      <div *ngIf="c.contactPerson" class="text-muted mb-1"><i class="bi bi-person mr-1"></i>{{ c.contactPerson }}</div>
+      <div *ngIf="c.phone" class="text-muted mb-1"><i class="bi bi-telephone mr-1"></i>{{ c.phone }}</div>
+      <div *ngIf="c.email" class="text-muted mb-1"><i class="bi bi-envelope mr-1"></i>{{ c.email }}</div>
+      <div *ngIf="customerAddress(customerPopoverRow?.order)" class="text-muted"><i class="bi bi-geo-alt mr-1"></i>{{ customerAddress(customerPopoverRow?.order) }}</div>
+      <div *ngIf="!c.contactPerson && !c.phone && !c.email && !customerAddress(customerPopoverRow?.order)" class="text-muted italic">No address details available.</div>
+    </div>
+  </div>
+</div>

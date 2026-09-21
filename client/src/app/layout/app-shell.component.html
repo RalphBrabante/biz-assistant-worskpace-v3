@@ -1,0 +1,277 @@
+<a href="#workspace-content" class="skip-link sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-lg focus:bg-surface focus:p-3">Skip to main content</a>
+<div class="app-layout bg-canvas">
+  <div class="sidebar-backdrop lg:hidden" *ngIf="sidebarOpen" (click)="closeSidebar()"></div>
+  <aside #sidebarPanel class="app-sidebar no-print" [class.open]="sidebarOpen" [class.collapsed]="sidebarCollapsed && !sidebarOpen" aria-label="Primary navigation">
+    <button class="lg:hidden absolute right-3 top-3 p-2 text-[#acb5c7]" type="button" (click)="closeSidebar()" aria-label="Close navigation"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    <a routerLink="/" class="workspace-brand" aria-label="Biz Assistant home">
+      <span class="brand-mark"><i class="bi bi-grid" aria-hidden="true"></i></span>
+      <div class="sidebar-copy"><strong>biz assistant<span class="text-[#9b8cff]">.</span></strong><span class="sidebar-copy block mt-0.5">Business workspace</span></div>
+    </a>
+    <button *ngIf="canSwitchOrganization" type="button" class="org-switch"
+      (click)="openOrganizationPicker()" aria-haspopup="dialog" aria-controls="organization-picker"
+      [attr.aria-label]="'Change organization context: ' + organizationDisplayName" title="Change organization context">
+      <span class="org-avatar">{{ organizationDisplayName.slice(0, 1) }}</span>
+      <span class="sidebar-copy min-w-0 grow"><span class="block text-[9px] text-[#7e8ba3] mb-0.5">YOUR WORKSPACE</span><span class="block truncate text-xs font-medium">{{ organizationDisplayName }}</span></span>
+      <i class="bi bi-chevron-expand sidebar-copy text-xs text-[#7e8ba3]" aria-hidden="true"></i>
+    </button>
+    <nav class="sidebar-nav">
+      <div *ngFor="let section of visibleNavSections(); trackBy: trackByNavSection">
+        <div class="nav-section-title">{{ section.title }}</div>
+        <a *ngFor="let item of section.items; trackBy: trackByNavItem" class="ui-nav-link"
+          [routerLink]="item.path" [attr.title]="sidebarCollapsed ? item.label : null"
+          routerLinkActive="active" ariaCurrentWhenActive="page" (click)="closeSidebarAfterNav()">
+          <i [ngClass]="['bi', item.icon]" aria-hidden="true"></i><span class="nav-label">{{ item.label }}</span>
+          <span *ngIf="item.path === '/messages' && unreadMessageCount > 0" class="nav-label ml-auto rounded bg-[#ffffff10] px-1.5 text-[10px]">{{ unreadMessageCount > 99 ? '99+' : unreadMessageCount }}</span>
+        </a>
+      </div>
+    </nav>
+    <div class="sidebar-user">
+      <button type="button" (click)="goToProfile()" title="Edit profile" aria-label="Edit profile">
+        <img *ngIf="userProfileImageUrl" [src]="userProfileImageUrl" alt="" class="avatar" />
+        <span *ngIf="!userProfileImageUrl" class="avatar">{{ userInitials }}</span>
+      </button>
+      <button type="button" class="sidebar-copy min-w-0 grow text-left" (click)="goToProfile()">
+        <span class="block truncate text-xs font-medium text-[#e3e7ef]">{{ userLabel }}</span><span class="block text-[10px] mt-0.5">Manage your account</span>
+      </button>
+      <button type="button" class="sidebar-copy p-1.5" (click)="logout()" title="Sign out" aria-label="Sign out"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></button>
+    </div>
+  </aside>
+  <div class="app-main">
+    <header class="workspace-topbar no-print">
+      <div class="flex items-center gap-3 min-w-0">
+        <button class="topbar-icon hidden lg:inline-flex" type="button" (click)="toggleSidebarCollapsed()" [attr.aria-label]="sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'" [attr.aria-expanded]="!sidebarCollapsed"><i class="bi bi-layout-sidebar" aria-hidden="true"></i></button>
+        <button #mobileMenuButton class="topbar-icon lg:hidden" type="button" (click)="sidebarOpen ? closeSidebar() : openSidebar()" aria-label="Toggle navigation" [attr.aria-expanded]="sidebarOpen"><i class="bi bi-list text-xl" aria-hidden="true"></i></button>
+        <div class="flex items-center gap-2 text-xs min-w-0"><span class="text-muted hidden sm:inline">Workspace</span><i class="bi bi-chevron-right text-[9px] text-muted hidden sm:inline" aria-hidden="true"></i><span class="truncate font-medium">{{ organizationDisplayName }}</span></div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <span class="hidden md:inline-flex items-center gap-1.5 text-[10px] text-muted border-r pr-4 mr-1"><i class="bi bi-building" aria-hidden="true"></i>Business workspace</span>
+        <button class="topbar-icon" type="button" (click)="toggleTheme()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'" [title]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()" aria-hidden="true"></i></button>
+        <button class="topbar-icon relative" type="button" (click)="toggleNotifications()" aria-label="Notifications" title="Notifications"><i class="bi bi-bell" aria-hidden="true"></i><span *ngIf="unreadMessageCount > 0" class="notification-dot"></span></button>
+        <button type="button" (click)="goToProfile()" aria-label="Your profile" class="ml-1"><img *ngIf="userProfileImageUrl" [src]="userProfileImageUrl" class="avatar border" alt="" /><span *ngIf="!userProfileImageUrl" class="avatar bg-brand-soft text-brand">{{ userInitials }}</span></button>
+      </div>
+    </header>
+    <main id="workspace-content" class="workspace-content" tabindex="-1"><router-outlet></router-outlet></main>
+  </div>
+</div>
+
+<div class="fixed bottom-0 right-0 p-4" style="z-index: 3200;" *ngIf="realtimePopup as popup">
+  <div class="ui-toast show border-0 shadow-panel" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="ui-toast-header">
+      <i class="bi bi-bell mr-2"></i>
+      <strong class="mr-auto">New Notification</strong>
+      <small class="text-muted">{{ notificationTimestamp(popup.createdAt) }}</small>
+      <button type="button" class="ui-btn-close ml-2 mb-1" (click)="closeRealtimePopup()" aria-label="Close dialog"></button>
+    </div>
+    <button
+      type="button"
+      class="ui-toast-body ui-btn ui-btn-link text-left no-underline w-full p-4"
+      style="color: inherit;"
+      (click)="openNotification(popup)"
+    >
+      <div class="font-semibold">{{ popup.title }}</div>
+      <div class="text-xs">{{ popup.message }}</div>
+      <div class="text-xs text-brand mt-2">Open details</div>
+    </button>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="notificationsOpen" (click)="closeNotifications()"></div>
+<div appModal class="ui-modal fade show" tabindex="-1" *ngIf="notificationsOpen" aria-labelledby="notifications-title">
+  <div class="ui-modal-dialog ui-modal-dialog-centered notifications-dialog">
+    <div class="ui-modal-content notifications-panel">
+      <div class="ui-modal-header notifications-header">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="notification-heading-icon"><i class="bi bi-bell" aria-hidden="true"></i></span>
+          <h2 id="notifications-title" class="ui-modal-title">Notifications</h2>
+          <span *ngIf="unreadMessageCount > 0" class="notification-count" [attr.aria-label]="unreadMessageCount + ' unread'">{{ unreadMessageCount }}</span>
+        </div>
+        <button type="button" class="ui-btn-close" (click)="closeNotifications()" aria-label="Close notifications"></button>
+      </div>
+      <div class="notification-toolbar">
+        <span class="text-xs text-muted">{{ unreadMessageCount > 0 ? 'Latest activity' : 'You’re all caught up' }}</span>
+        <div class="flex items-center gap-1">
+          <button class="notification-tool" type="button" (click)="markAllAsRead()"
+            [disabled]="markingAllRead || pendingNotificationReadIds.size > 0 || !hasUnreadNotifications"
+            aria-label="Mark all notifications as read" title="Mark all as read">
+            <span *ngIf="markingAllRead" class="ui-spinner-border ui-spinner-border-sm" aria-hidden="true"></span>
+            <i *ngIf="!markingAllRead" class="bi bi-check2-all" aria-hidden="true"></i>
+            <span>Mark all read</span>
+          </button>
+          <button class="notification-tool" type="button" (click)="loadNotifications(1, false)" [disabled]="notificationsLoading" aria-label="Refresh notifications" title="Refresh">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div #notificationViewport class="notification-viewport" (scroll)="onNotificationsScroll()" tabindex="0" role="region" aria-label="Notification history" [attr.aria-busy]="notificationsLoading">
+        <ul class="m-0 list-none p-0">
+          <li *ngFor="let row of notifications; trackBy: trackByMessage" class="notification-row" [class.notification-row-unread]="!row.isRead">
+            <span class="notification-read-dot" [class.is-unread]="!row.isRead" aria-hidden="true"></span>
+            <button class="notification-message" type="button" (click)="openNotification(row)">
+              <span class="notification-title" [attr.title]="row.title">{{ row.title }}</span>
+              <span *ngIf="!row.isRead" class="sr-only">Unread. </span>
+              <span class="notification-preview">{{ row.message }}</span>
+              <span class="notification-meta">
+                <span *ngIf="row.organization" class="truncate">{{ row.organization.name || row.organization.legalName }}</span>
+                <time [attr.datetime]="row.createdAt">{{ notificationTimestamp(row.createdAt) }}</time>
+              </span>
+            </button>
+            <button *ngIf="!row.isRead" class="notification-tool notification-mark-read" type="button"
+              [disabled]="pendingNotificationReadIds.has(row.id) || markingAllRead" (click)="markNotificationAsRead(row)"
+              [attr.aria-label]="'Mark as read: ' + row.title" title="Mark as read">
+              <span *ngIf="pendingNotificationReadIds.has(row.id)" class="ui-spinner-border ui-spinner-border-sm" aria-hidden="true"></span>
+              <i *ngIf="!pendingNotificationReadIds.has(row.id)" class="bi bi-check2" aria-hidden="true"></i>
+            </button>
+          </li>
+        </ul>
+        <div *ngIf="notificationsError" class="notification-state text-danger" role="alert">
+          <span>{{ notificationsError }}</span>
+          <button *ngIf="notificationsLoadFailed" class="ui-btn ui-btn-sm ui-btn-outline-secondary mt-2" type="button" (click)="retryNotifications()">Try again</button>
+        </div>
+        <div *ngIf="notificationsLoading" class="notification-state" role="status">
+          <span class="ui-spinner-border ui-spinner-border-sm" aria-hidden="true"></span>
+          <span>{{ notifications.length ? 'Loading older notifications…' : 'Loading notifications…' }}</span>
+        </div>
+        <div *ngIf="!notificationsLoading && !notificationsError && notifications.length === 0" class="notification-state notification-empty">
+          <i class="bi bi-bell-slash text-xl" aria-hidden="true"></i>
+          <span class="font-medium text-ink">No notifications yet</span>
+          <span>New activity will appear here.</span>
+        </div>
+        <div *ngIf="!notificationsLoading && !notificationsError && notifications.length > 0" class="notification-state notification-end" role="status">
+          {{ notificationsPage < notificationsTotalPages ? 'Scroll for older notifications' : 'You’ve reached the end' }}
+        </div>
+      </div>
+      <div class="notification-footer">
+        <a routerLink="/messages" (click)="closeNotifications()">View all messages <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="auth.unauthorizedAccess().visible"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="auth.unauthorizedAccess().visible ? 'block' : 'none'"
+  [attr.aria-hidden]="!auth.unauthorizedAccess().visible"
+  *ngIf="auth.unauthorizedAccess().visible"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title text-danger">
+          <i class="bi mr-2" [ngClass]="auth.unauthorizedAccess().icon"></i>
+          {{ auth.unauthorizedAccess().title }}
+        </h5>
+        <button type="button" class="ui-btn-close" (click)="closeUnauthorizedModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-2">
+        <p class="mb-0">{{ auth.unauthorizedAccess().message }}</p>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-primary" type="button" (click)="closeUnauthorizedModal()">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="confirmDialog.state().visible"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="confirmDialog.state().visible ? 'block' : 'none'"
+  [attr.aria-hidden]="!confirmDialog.state().visible"
+  *ngIf="confirmDialog.state().visible"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title flex items-center gap-2">
+          <span class="rounded-full bg-danger-soft text-danger inline-flex items-center justify-center" style="width: 2rem; height: 2rem;">
+            <i class="bi" [ngClass]="confirmDialog.state().iconClass"></i>
+          </span>
+          {{ confirmDialog.state().title }}
+        </h5>
+        <button type="button" class="ui-btn-close" (click)="closeConfirmModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-2">
+        <p class="mb-0 text-muted">{{ confirmDialog.state().message }}</p>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeConfirmModal()">
+          {{ confirmDialog.state().cancelText }}
+        </button>
+        <button class="ui-btn" [ngClass]="confirmDialog.state().confirmButtonClass" type="button" (click)="approveConfirmModal()">
+          {{ confirmDialog.state().confirmText }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog #organizationPicker id="organization-picker" class="organization-picker rounded-xl border shadow-dialog p-0"
+  aria-labelledby="organization-picker-title" aria-describedby="organization-picker-description"
+  (cancel)="switchingOrganization ? $event.preventDefault() : null">
+  <div class="p-6 border-b flex justify-between items-start gap-4">
+    <div>
+      <h2 id="organization-picker-title" class="text-base font-semibold mb-2">Select organization context</h2>
+      <p id="organization-picker-description" class="text-xs text-muted mb-0">
+        {{ requireSpecificOrganization ? 'Choose an organization to continue on this page.' : 'Choose which organization you want to work in.' }}
+      </p>
+    </div>
+    <button type="button" class="ui-btn-close shrink-0" aria-label="Close organization selector"
+      [disabled]="switchingOrganization" (click)="closeOrganizationPicker()"></button>
+  </div>
+  <div class="p-6">
+    <label for="organization-search" class="ui-form-label text-xs font-semibold">Search organizations</label>
+    <input id="organization-search" class="ui-form-control mb-4" type="search" autofocus autocomplete="off"
+      placeholder="Search by name or ID" [(ngModel)]="organizationSearch" [disabled]="switchingOrganization" />
+    <p class="text-xs text-muted">Current context: <strong class="text-ink">{{ organizationDisplayName }}</strong></p>
+    <div *ngIf="organizationOptionsLoading" role="status" class="py-6 text-center text-muted">
+      <span class="ui-spinner-border ui-spinner-border-sm mr-2" aria-hidden="true"></span>Loading organizations…
+    </div>
+    <div *ngIf="organizationOptionsError" class="ui-alert ui-alert-danger" role="alert">
+      {{ organizationOptionsError }}
+      <button type="button" class="ui-btn ui-btn-outline-danger ui-btn-sm ml-2" (click)="loadOrganizationOptions()">Retry</button>
+    </div>
+    <fieldset *ngIf="!organizationOptionsLoading && !organizationOptionsError" [disabled]="switchingOrganization">
+      <legend class="sr-only">Organization context</legend>
+      <label *ngIf="!requireSpecificOrganization" class="organization-option rounded-lg border flex gap-4 p-4 mb-4"
+        [class.border-brand]="pendingOrganizationId === organizationContext.ALL_ORGANIZATIONS">
+        <input class="ui-form-check-input shrink-0" type="radio" name="organization-context"
+          [(ngModel)]="pendingOrganizationId" [value]="organizationContext.ALL_ORGANIZATIONS" />
+        <span><strong class="block">All Organizations</strong>
+          <span class="text-xs text-muted">View data across organizations. Some pages and data creation require a specific organization.</span>
+        </span>
+      </label>
+      <div class="text-xs text-muted mb-2" role="status">{{ filteredOrganizationOptions.length }} {{ filteredOrganizationOptions.length === 1 ? 'organization' : 'organizations' }}</div>
+      <div class="organization-options grid gap-2">
+        <label *ngFor="let org of filteredOrganizationOptions; trackBy: trackByOrganization"
+          class="organization-option rounded-lg border flex items-start gap-4 p-4"
+          [class.border-brand]="pendingOrganizationId === org.id">
+          <input class="ui-form-check-input shrink-0" type="radio" name="organization-context" [(ngModel)]="pendingOrganizationId" [value]="org.id" />
+          <span class="break-words">
+            <strong class="block">{{ org.name || org.legalName || org.id }}</strong>
+            <span *ngIf="org.legalName && org.legalName !== org.name" class="block text-xs text-muted">{{ org.legalName }}</span>
+            <span class="block text-xs text-muted">{{ org.id }}</span>
+            <span *ngIf="org.id === selectedOrganizationId" class="ui-badge ui-badge-primary mt-1">Current</span>
+          </span>
+        </label>
+      </div>
+      <div *ngIf="!filteredOrganizationOptions.length" class="text-center py-6 text-muted">
+        {{ organizationOptions.length ? 'No organizations match your search.' : 'No organizations are available.' }}
+        <button *ngIf="organizationSearch" type="button" class="ui-btn ui-btn-link ui-btn-sm block mx-auto" (click)="organizationSearch = ''">Clear search</button>
+      </div>
+    </fieldset>
+  </div>
+  <div class="p-6 border-t">
+    <p class="text-xs text-muted mb-4">Applying a different context reloads this page. Save any unfinished work before switching.</p>
+    <div class="flex justify-end gap-2">
+      <button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="switchingOrganization" (click)="closeOrganizationPicker()">Cancel</button>
+      <button type="button" class="ui-btn ui-btn-primary" [disabled]="!canApplyOrganization" (click)="switchOrganization(pendingOrganizationId)">
+        {{ switchingOrganization ? 'Switching…' : 'Apply context' }}
+      </button>
+    </div>
+  </div>
+</dialog>

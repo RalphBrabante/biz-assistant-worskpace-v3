@@ -1,0 +1,199 @@
+<main class="min-h-screen grid lg:grid-cols-2 bg-surface">
+  <section class="auth-art hidden lg:flex flex-col justify-between p-12 xl:p-16" aria-label="Biz Assistant workspace">
+    <a routerLink="/" class="flex items-center gap-3 text-white"><span class="brand-mark"><i class="bi bi-grid" aria-hidden="true"></i></span><span class="text-lg font-semibold tracking-tight">biz assistant<span class="text-[#a99fff]">.</span></span></a>
+    <div class="max-w-lg my-12 relative">
+      <div class="text-[10px] uppercase tracking-[.2em] text-[#a79ce9] mb-6">One connected workspace</div>
+      <h2 class="!text-white text-4xl xl:text-5xl font-medium leading-[1.15] tracking-[-.04em]">Your business.<br />A clearer perspective.</h2>
+      <p class="text-[#929eb4] text-sm leading-7 mt-6 max-w-sm">Bring your sales, expenses, and operations together. Less time managing the details. More room to move forward.</p>
+      <div class="auth-workspace-preview mt-10">
+        <div class="flex items-center justify-between border-b border-white/10 pb-4"><span class="text-xs text-[#c3cadd]">Everything in its place</span><span class="flex gap-1"><span class="w-1 h-1 rounded-full bg-[#7167ee]"></span><span class="w-1 h-1 rounded-full bg-white/20"></span><span class="w-1 h-1 rounded-full bg-white/20"></span></span></div>
+        <div class="grid grid-cols-3 gap-4 pt-5"><div><i class="bi bi-receipt text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Sales & orders</p></div><div><i class="bi bi-bar-chart-line text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Financial clarity</p></div><div><i class="bi bi-people text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Connected teams</p></div></div>
+      </div>
+    </div>
+    <p class="text-[10px] text-[#6f7c94]">BIZ ASSISTANT · YOUR BUSINESS, ORGANIZED.</p>
+  </section>
+  <section class="relative flex flex-col min-h-screen p-6 sm:p-10">
+    <div class="flex justify-between items-center"><span class="text-sm font-semibold lg:invisible">biz assistant.</span><button type="button" class="topbar-icon" (click)="toggleTheme()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()" aria-hidden="true"></i></button></div>
+    <div class="w-full max-w-sm mx-auto my-auto py-12">
+      <div class="section-eyebrow mb-3">Welcome to your workspace</div><h1 class="text-3xl font-semibold tracking-tight mb-3">Welcome back</h1><p class="text-sm text-muted mb-8">Enter your details to continue to your account.</p>
+            <form (ngSubmit)="submit()" #f="ngForm">
+              <div class="mb-4">
+                <label class="ui-form-label font-semibold" for="email">Email</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  class="ui-form-control ui-form-control-lg"
+                  [(ngModel)]="email"
+                  required
+                  autocomplete="username"
+                />
+              </div>
+
+              <div class="mb-6">
+                <label class="ui-form-label font-semibold" for="password">Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  class="ui-form-control ui-form-control-lg"
+                  [(ngModel)]="password"
+                  required
+                  autocomplete="current-password"
+                />
+                <div class="flex justify-end mt-2">
+                  <button class="ui-btn ui-btn-link ui-btn-sm no-underline px-0" type="button" (click)="openForgotModal()">
+                    Forgot password?
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid">
+                <button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" [disabled]="loading || !f.form.valid">
+                  {{ loading ? 'Signing in...' : 'Sign In' }}
+                </button>
+              </div>
+            </form>
+
+            <div *ngIf="error" class="ui-alert ui-alert-danger mt-6 mb-0" role="alert">
+              <div>{{ error }}</div>
+              <div class="mt-2" *ngIf="canResendVerification">
+                <button class="ui-btn ui-btn-outline-danger ui-btn-sm" type="button" (click)="resendVerificationEmail()" [disabled]="verificationLoading">
+                  {{ verificationLoading ? 'Sending verification...' : 'Send verification email' }}
+                </button>
+              </div>
+            </div>
+            <div *ngIf="verificationMessage" class="ui-alert ui-alert-info mt-4 mb-0" role="alert">
+              {{ verificationMessage }}
+            </div>
+
+            <div class="text-center mt-4">
+              <a class="text-xs no-underline" routerLink="/reset-password">Have a reset token already?</a>
+            </div>
+            <div class="text-center mt-4 pt-2 border-t">
+              <a
+                class="no-underline text-muted mr-4"
+                style="font-size: 0.8rem;"
+                routerLink="/privacy-policy"
+              >
+                Privacy Policy
+              </a>
+              <a
+                class="no-underline text-muted"
+                style="font-size: 0.8rem;"
+                routerLink="/terms-of-service"
+              >
+                Terms of Service
+              </a>
+            </div>
+
+    </div><p class="text-center text-[10px] text-muted">A focused space for the work that matters.</p>
+  </section>
+</main>
+
+<div class="ui-modal-backdrop fade show" *ngIf="forgotModalVisible"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="forgotModalVisible ? 'block' : 'none'"
+  [attr.aria-hidden]="!forgotModalVisible"
+  *ngIf="forgotModalVisible"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">
+          <i class="bi bi-envelope-paper-heart mr-2 text-brand"></i>
+          Reset Password
+        </h5>
+        <button type="button" class="ui-btn-close" (click)="closeForgotModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body">
+        <p class="text-muted mb-4">
+          Enter your account email and we will send a secure reset link.
+        </p>
+        <label class="ui-form-label font-semibold" for="forgotEmail">Email</label>
+        <input
+          id="forgotEmail"
+          type="email"
+          class="ui-form-control"
+          [(ngModel)]="forgotEmail"
+          [disabled]="forgotLoading"
+          autocomplete="email"
+        />
+        <div *ngIf="forgotMessage" class="ui-alert ui-alert-success mt-4 mb-0">
+          {{ forgotMessage }}
+        </div>
+        <div *ngIf="forgotError" class="ui-alert ui-alert-danger mt-4 mb-0">
+          {{ forgotError }}
+        </div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeForgotModal()" [disabled]="forgotLoading">
+          Close
+        </button>
+        <button class="ui-btn ui-btn-primary" type="button" (click)="submitForgotPassword()" [disabled]="forgotLoading">
+          {{ forgotLoading ? 'Sending...' : 'Send Reset Link' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ui-modal-backdrop fade show" *ngIf="organizationSelectionVisible"></div>
+<div
+  appModal class="ui-modal fade show"
+  tabindex="-1"
+  [style.display]="organizationSelectionVisible ? 'block' : 'none'"
+  [attr.aria-hidden]="!organizationSelectionVisible"
+  *ngIf="organizationSelectionVisible"
+>
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">
+          <i class="bi bi-buildings mr-2 text-brand"></i>
+          Select Organization
+        </h5>
+        <button type="button" class="ui-btn-close" (click)="closeOrganizationSelectionModal()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body">
+        <p class="text-muted mb-4">
+          Your account is assigned to multiple organizations. Select one to continue.
+        </p>
+        <label class="ui-form-label font-semibold" for="loginOrganization">Organization</label>
+        <select
+          id="loginOrganization"
+          class="ui-form-select"
+          [(ngModel)]="selectedOrganizationId"
+          [disabled]="loading"
+        >
+          <option value="">Select organization</option>
+          <option
+            *ngFor="let organization of organizationOptions"
+            [value]="organization.id"
+            [disabled]="!isOrganizationSelectable(organization)"
+          >
+            {{ organizationLabel(organization) }}
+            {{ !isOrganizationSelectable(organization) ? ' (No active license)' : '' }}
+          </option>
+        </select>
+        <div class="ui-form-text">
+          Organizations without active license cannot be used for login.
+        </div>
+
+        <div *ngIf="organizationSelectionError" class="ui-alert ui-alert-danger mt-4 mb-0">
+          {{ organizationSelectionError }}
+        </div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeOrganizationSelectionModal()" [disabled]="loading">
+          Cancel
+        </button>
+        <button class="ui-btn ui-btn-primary" type="button" (click)="submitWithSelectedOrganization()" [disabled]="loading">
+          {{ loading ? 'Signing in...' : 'Continue Login' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
