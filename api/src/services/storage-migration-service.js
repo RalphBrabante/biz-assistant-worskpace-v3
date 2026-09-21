@@ -218,8 +218,9 @@ function createStorageMigrationService({ models = getModels, config = getStorage
     latest: async () => summary(await models().StorageMigration.findOne({ order: [['createdAt', 'DESC']] })),
     audit: async (id) => {
       const job = await getJob(id);
-      const items = await models().StorageMigrationItem.findAll({ where: { migrationId: id }, order: [['createdAt', 'ASC']], raw: true });
-      return { ...(await summary(job)), source: job.source, previousProviders: job.previousProviders, createdBy: job.createdBy, items };
+      const items = await models().StorageMigrationItem.findAll({ where: { migrationId: id }, order: [['createdAt', 'ASC']] });
+      return { ...(await summary(job)), source: job.source, previousProviders: job.previousProviders, createdBy: job.createdBy,
+        items: items.map((item) => item.toJSON()) };
     } };
 }
 
