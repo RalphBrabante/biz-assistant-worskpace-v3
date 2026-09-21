@@ -143,6 +143,7 @@ Hostinger's GitHub connection performs deployment. `.github/workflows/validate.y
 | --- | --- |
 | Build cannot find source or entry | Repository root must be `.`; output must be `dist`; confirm the ordinary `api/` and `client/` files and lockfiles were committed |
 | TypeScript/Angular command missing | Use the root build script; it installs build dependencies explicitly |
+| `Cannot find module '@lmdb/lmdb-linux-x64'`, followed by a Python/node-gyp error | Deploy the latest corrected `client/package-lock.json`. It includes LMDB and MessagePack prebuilt platform packages; retain `--include=optional` in the build script. Keep Node.js 22. A fallback source compilation is not required. |
 | Build killed for memory | Keep `NG_BUILD_MAX_WORKERS=2` (or try `1`) and check plan build limits |
 | MySQL connection fails | Full hPanel database/user names, host, password, TLS settings, and connection limits |
 | Migration fails | Imported `SequelizeMeta`, target SQL version, trigger/DDL permissions, and runtime logs; do not reseed |
