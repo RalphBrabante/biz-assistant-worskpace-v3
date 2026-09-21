@@ -79,18 +79,26 @@ Step 7: Total Amount Due                  = Net of Discount + Output VAT
 
 ### 2.2 For EXPENSES (Input VAT + EWT)
 
-When recording a purchase/expense from a vendor's receipt:
+Expense semantics verified on 2026-09-21 for GIMO (VAT) and FBC (PT). The user confirmed that `amount` is the **final invoice total after discounts**, including any service charge. Discount and service-charge fields are informational components already reflected in that total; neither is applied again.
 
 ```
-Step 1: Total on Receipt (VAT-inclusive)  = Amount paid or billed
-Step 2: VAT-Exclusive Amount              = Total / 1.12
-Step 3: Input VAT (12%)                   = VAT-Exclusive Amount * 0.12
-                                          = Total * (12/112)
-Step 4: VAT-Exempt Portion                = Any line items exempt from VAT
-Step 5: Taxable Amount                    = VAT-Exclusive - VAT-Exempt Portion
-Step 6: Withholding Tax (EWT)             = Taxable Amount * EWT Rate
-Step 7: Net Amount Payable                = Total - Withholding Tax
+receipt_total = final invoice total after discounts, including service charges
+receipt_vat = VAT actually shown on the supplier invoice
+non_vat_portion = exempt / non-VAT portion of that final invoice
+net_purchase_portion = receipt_total - non_vat_portion - receipt_vat
+withholding_base = receipt_total - receipt_vat
+withholding_tax = round(withholding_base * selected_EWT_rate, 2)
+net_payable = receipt_total - withholding_tax
+claimable_input_vat = receipt_vat for a VAT-registered buyer, otherwise 0
 ```
+
+When VAT is calculated rather than transcribed, first subtract the exempt portion from the final receipt total, then extract VAT from the remaining gross amount. Preserve the centavo split by calculating VAT as gross minus the rounded net amount. Never divide the exempt portion by 1.12.
+
+Supplier VAT and buyer tax registration are separate. FBC may record supplier VAT to calculate EWT accurately, but cannot claim it as input VAT. A non-VAT supplier invoice has zero supplier VAT even when the buyer is GIMO. VAT exemption does not itself exempt a payment from EWT. Selecting an EWT type applies that rate to all income on the receipt net of supplier VAT; payments with different withholding treatments must be recorded separately.
+
+`receiptVatAmount` stores supplier VAT and `withholdingTaxBase` stores the actual EWT base. Nullable values identify historical records; reports use the recorded legacy base when the new base is absent. No blanket historical recomputation is performed.
+
+Official basis: [BIR RR 16-2005, sections 4.106-9 and 4.110-1–2](https://bir-cdn.bir.gov.ph/BIR/pdf/26116rr16-2005.pdf) separates invoiced discounts and creditable input VAT; [RR 2-2006, section 5(G)(8)](https://elibrary.judiciary.gov.ph/thebookshelf/showdocs/11/54503) specifies the VAT-exclusive income-payment base for VAT suppliers and gross income-payment base for non-VAT suppliers.
 
 ---
 
@@ -159,18 +167,19 @@ Example:
 
 ### 5.2 Expense Model
 
-| DB Column | Receipt Line | Computation |
-|---|---|---|
-| `amount` | Total on Receipt (VAT-inclusive) | What appears on the vendor's receipt/invoice |
-| `taxable_amount` | VATable portion (net of VAT) | `(amount - vat_exempt_amount) / 1.12` |
-| `vat_exempt_amount` | VAT-Exempt portion | Amount of items/services exempt from VAT |
-| `tax_amount` | Input VAT | `taxable_amount * 0.12` |
-| `discount_amount` | Discount | Any discount received from vendor |
-| `service_charge` | Service Charge | Service charge shown on receipt (included in total) |
-| `withholding_tax_amount` | EWT Deducted | `taxable_amount * ewt_rate` |
-| `withholding_tax_type_id` | ATC Code reference | Links to WithholdingTaxType for rate and ATC code |
-| `tax_type_id` | VAT Type reference | Links to TaxType for the applicable VAT rate |
-| `total_amount` | Net Amount Payable | `amount - withholding_tax_amount` |
+| Field | Meaning |
+|---|---|
+| `amount` | Final invoice total after discounts, including service charges |
+| `receiptVatAmount` | Actual supplier VAT, regardless of buyer registration |
+| `vatExemptAmount` | Exempt/non-VAT portion of the final invoice |
+| `taxableAmount` | Remaining purchase portion net of supplier VAT; not the EWT base |
+| `taxAmount` | Claimable input VAT; zero for a non-VAT buyer |
+| `withholdingTaxBase` | Final invoice total minus supplier VAT |
+| `withHoldingTaxAmount` | Rounded withholding base times the selected EWT rate |
+| `discountAmount` | Discount already reflected in `amount`; informational |
+| `serviceCharge` | Service charge already included in `amount`; informational |
+| `totalAmount` | Final invoice total minus EWT |
+
 
 ---
 
@@ -197,26 +206,9 @@ Section: Auto-Computed Breakdown (read-only display)
 
 ### 6.2 Expense Create/Edit
 
-```
-Section: Amount Entry
-  [Total on Receipt (VAT-inclusive)]   <-- User enters this
-  [VAT-Exempt Amount]                  <-- Portion that is VAT-exempt (if any)
-  [Discount Amount]                    <-- Optional
+Enter the final invoice total, the exempt portion, and supplier VAT shown on the invoice. A blank supplier VAT field uses the selected organization's VAT rate as a calculation aid; non-VAT organizations default to zero. Enter zero explicitly for a non-VAT invoice. Enter actual supplier VAT for a VAT invoice received by a non-VAT company. Always compare against the invoice.
 
-Section: Withholding Tax
-  [Withholding Tax Type]               <-- Select ATC code (auto-fills rate)
-  [Withholding Tax Rate]               <-- Auto-filled from selected type
-
-Section: Auto-Computed Breakdown (read-only display)
-  VAT-Inclusive Amount                 = Total on Receipt
-  Less: VAT-Exempt                     = (entered above)
-  VATable Amount (inclusive)            = Total - VAT-Exempt
-  VAT-Exclusive (Taxable Amount)       = VATable Amount / 1.12
-  Input VAT (12%)                      = Taxable Amount * 0.12
-  Withholding Tax (EWT)                = Taxable Amount * EWT Rate
-  -----------------------------------------
-  Net Amount Payable                   = Total - Withholding Tax
-```
+Show supplier VAT, claimable input VAT, and the EWT base separately. Discount and service charge are informational; do not subtract or add them a second time. Block saving until the organization's tax settings and selected withholding rate have loaded. Do not estimate supplier percentage tax from the buyer's expense.
 
 ---
 

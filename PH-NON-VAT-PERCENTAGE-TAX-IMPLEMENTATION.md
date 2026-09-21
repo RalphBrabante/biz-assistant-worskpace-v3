@@ -270,3 +270,8 @@ Before changing calculations:
 - [BIR Forms page](https://www.bir.gov.ph/bir-forms)
 - [National Internal Revenue Code / RA 8424, Lawphil](https://lawphil.net/statutes/repacts/ra1997/ra_8424_1997.html)
 - [Republic Act No. 10963 (TRAIN Law), Lawphil](https://lawphil.net/statutes/repacts/ra2017/ra_10963_2017.html)
+
+
+## Expense clarification — 2026-09-21
+
+A non-VAT buyer may purchase from a VAT supplier. Record supplier VAT separately in `receiptVatAmount` for the EWT base, but keep claimable input VAT (`taxAmount`) at zero. This is supplier-invoice accounting, not a percentage-tax computation; never extract 3% from an expense or display that amount as supplier tax due. Expense totals are final invoice amounts after discounts, per the user's confirmed entry workflow. See section 2.2 of `PH-TAX-RECEIPT-REFERENCE.md` for the corrected expense formulas and official sources.
