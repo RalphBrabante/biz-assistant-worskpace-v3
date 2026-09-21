@@ -16,6 +16,9 @@ function shouldBypassReadCache(req) {
   if ((req.path || '').startsWith('/health')) {
     return true;
   }
+  if (/^\/(?:api\/v1\/)?settings\/storage\/migrations(?:\/|$)/.test(req.path || '')) {
+    return true;
+  }
   return false;
 }
 

@@ -43,9 +43,11 @@ Hostinger replaces release directories when deploying. Choose a stable directory
 
 Use File Manager or SSH to create it and copy the contents of the old API's `uploads/` directory there, preserving the `expenses/` and `profiles/` subdirectories. Set `UPLOAD_DIR` to its actual absolute path. The Node process must be allowed to read and write it. Do not use a symlink back into a release. Confirm the account permits this path before proceeding; if it does not, ask Hostinger for a persistent writable location outside releases.
 
+Replace **both** the account name and domain in the example. In your deployment logs, a path such as `/home/u123456789/domains/my-app.com/hbuilds/...` identifies the account and domain directory; use `/home/u123456789/domains/my-app.com/app-data/uploads` for that example. A literal `replace_account` or `YOUR_ACCOUNT` is not a real hosting account. Update `UPLOAD_DIR` in hPanel's **Environment variables** and select **Apply changes**; changing only your local `.env` file does not update the deployed app. Create the folder using the same hosting account that runs Node, with owner read/write/traverse permissions (normally directory mode `755`).
+
 The app creates missing subdirectories. Startup rejects a relative upload path, a path within its deployment directory, or a path containing `hbuilds`. Browser URLs remain `/uploads/expenses/...` and `/uploads/profiles/...`. Uploads are excluded from Git and the release artifact; back them up separately.
 
-If App Settings currently use DigitalOcean Spaces or Google Drive, moving the application server does **not** move those files. Keep existing storage credentials and objects available until a separate, verified file migration is complete. Switching to Local changes future uploads; it does not rewrite historical attachment URLs. To leave DigitalOcean entirely, copy the objects and plan an audited URL migration before cancelling Spaces. A writable upload directory is still needed for upload processing even when remote storage is used.
+If App Settings currently use DigitalOcean Spaces or Google Drive, moving the application server does **not** move those files. Switching the provider selector to Local changes future uploads; it does not rewrite historical attachment URLs. For Spaces, use the new **Settings → Move Spaces files to local storage** workflow after setting up the persistent `UPLOAD_DIR` and applying database migrations. It previews linked records, copies and verifies each file, updates its links, and keeps a downloadable audit. Follow [the storage migration guide](api/docs/storage-migration.md). Google Drive files are not included in this workflow. A writable upload directory is still needed for upload processing even when remote storage is used.
 
 ## 4. Set environment variables in Hostinger
 
@@ -148,6 +150,7 @@ Hostinger's GitHub connection performs deployment. `.github/workflows/validate.y
 | MySQL connection fails | Full hPanel database/user names, host, password, TLS settings, and connection limits |
 | Migration fails | Imported `SequelizeMeta`, target SQL version, trigger/DDL permissions, and runtime logs; do not reseed |
 | Upload path error or disappearing files | Absolute writable directory outside `hbuilds`, release output, and `public_html`; copy existing files there |
+| `EACCES: permission denied, mkdir '/home/replace_account/...'` | `UPLOAD_DIR` still contains the example account. Replace it with the actual `/home/u.../domains/.../app-data/uploads` path, create the directory under your hosting account, and apply the updated environment variables |
 | Missing older Spaces images | Original object URLs still need their storage service or a completed file/URL migration |
 | API requests return HTML | Wrong static-only deployment type or frontend-only output directory |
 | Health is 503 | Database connectivity or an explicitly enabled Redis/AMQP service has failed |

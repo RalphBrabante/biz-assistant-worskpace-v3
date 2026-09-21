@@ -16,6 +16,14 @@ test('deployment config rejects missing credentials and ephemeral upload directo
   }
 });
 
+test('upload path placeholders produce an actionable error before filesystem access', () => {
+  const env = { NODE_ENV: 'production', DB_HOST: 'localhost', DB_NAME: 'test', DB_USER: 'test', DB_PASSWORD: 'test', APP_BASE_URL: 'https://app.example.com' };
+  for (const account of ['replace_account', 'YOUR_ACCOUNT']) {
+    assert.throws(() => validateEnvironment({ ...env, UPLOAD_DIR: `/home/${account}/domains/app.gimosupplies.com/app-data/uploads` }, '/release'), /UPLOAD_DIR still contains an example account name/);
+  }
+  assert.doesNotThrow(() => validateEnvironment({ ...env, UPLOAD_DIR: '/home/u123456789/domains/app.example.com/app-data/uploads' }, '/release'));
+});
+
 test('optional infrastructure can be disabled, while enabled failures remain unhealthy', () => {
   assert.equal(serviceEnabled('REDIS', { NODE_ENV: 'production' }), false);
   assert.equal(serviceEnabled('REDIS', { NODE_ENV: 'development' }), true);

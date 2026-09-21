@@ -5,6 +5,9 @@ function validateEnvironment(env, appDirectory) {
     if (!env[key]?.trim()) throw new Error(`Required environment variable missing: ${key}`);
   }
   if (env.NODE_ENV !== 'production') throw new Error('The deployment entry point requires NODE_ENV=production.');
+  if (/[\\/](?:replace_account|YOUR_ACCOUNT)(?:[\\/]|$)/i.test(env.UPLOAD_DIR)) {
+    throw new Error('UPLOAD_DIR still contains an example account name. Replace it in Hostinger environment variables with your actual account path and create a writable upload directory outside hbuilds.');
+  }
   if (!path.isAbsolute(env.UPLOAD_DIR)) throw new Error('UPLOAD_DIR must be an absolute, persistent directory.');
   const relative = path.relative(appDirectory, path.resolve(env.UPLOAD_DIR));
   if (!relative || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) {

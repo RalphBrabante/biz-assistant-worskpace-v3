@@ -1,3 +1,4 @@
+const { StorageMigration, StorageMigrationItem, initStorageMigrationModels } = require('./storage-migration');
 const { initOrganizationModel, Organization } = require('./organization');
 const { initUserModel, User } = require('./user');
 const { initLicenseModel, License } = require('./license');
@@ -79,6 +80,10 @@ function initModels(sequelize) {
   initQuarterlyExpenseReportModel(sequelize);
   initAppSettingModel(sequelize);
   initMessageModel(sequelize);
+  initStorageMigrationModels(sequelize);
+  StorageMigration.belongsTo(User, { foreignKey: 'createdBy', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'actor' });
+  StorageMigration.hasMany(StorageMigrationItem, { foreignKey: 'migrationId', onDelete: 'CASCADE', onUpdate: 'CASCADE', as: 'items' });
+  StorageMigrationItem.belongsTo(StorageMigration, { foreignKey: 'migrationId', onDelete: 'CASCADE', onUpdate: 'CASCADE', as: 'migration' });
 
   Organization.hasMany(User, {
     foreignKey: {
@@ -1387,6 +1392,8 @@ function initModels(sequelize) {
     QuarterlySalesReport,
     QuarterlyExpenseReport,
     AppSetting,
+    StorageMigration,
+    StorageMigrationItem,
     Message,
   };
 }

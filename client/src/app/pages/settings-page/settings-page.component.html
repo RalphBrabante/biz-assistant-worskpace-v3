@@ -154,6 +154,7 @@
       <button class="ui-btn ui-btn-primary mt-4" [disabled]="submitting() || loading()" (click)="save()">
         {{ submitting() ? 'Saving...' : 'Save Settings' }}
       </button>
+      <app-storage-migration (storageChanged)="loadSettings()" />
     </div>
 
     <ng-template #notAllowed>

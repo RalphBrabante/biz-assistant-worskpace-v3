@@ -5,6 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
 import { ApiResponse } from '../../core/types';
+import { StorageMigrationComponent } from './storage-migration.component';
 
 interface CacheSettingPayload {
   key: string;
@@ -44,7 +45,7 @@ interface StorageSettingPayload {
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, StorageMigrationComponent],
   templateUrl: './settings-page.component.html',
 })
 export class SettingsPageComponent {
