@@ -124,7 +124,12 @@ test('configuration rejects invalid bounds, caps limits, and skips oversized res
   assert.equal(await cache.getCachedJson('large'), null);
 });
 
-test('real expense router avoids business reads on hits, rechecks permissions, and invalidates before write responses', async (t) => {
+for (const [resource, permission, writeNames] of [
+  ['expenses', 'expenses', ['updateExpense', 'importExpenses']],
+  ['vendors', 'vendors', ['updateVendor', 'importVendors']],
+  ['customers', 'organizations', ['updateCustomer', 'importCustomers']],
+]) {
+test(`real ${resource} router caches searches, rechecks permissions, and invalidates before write responses`, async (t) => {
   const express = require('express');
   const cache = service();
   const middleware = load('middleware/cache.js', { '../services/cache-service': cache });
@@ -132,9 +137,9 @@ test('real expense router avoids business reads on hits, rechecks permissions, a
   let businessReads = 0; let authChecks = 0; let amount = 10;
   const read = (_req, res) => { businessReads++; res.json({ count: 1, amount }); };
   const write = (req, res) => { amount = Number(req.body.amount); res.status(req.body.fail ? 500 : 204).end(); };
-  const controllers = new Proxy({}, { get: (_target, name) => ['updateExpense', 'importExpenses'].includes(name) ? write : read });
-  const router = load('routes/expenses-routes.js', {
-    '../controllers/expenses-controller': controllers,
+  const controllers = new Proxy({}, { get: (_target, name) => writeNames.includes(name) ? write : read });
+  const router = load(`routes/${resource}-routes.js`, {
+    [`../controllers/${resource}-controller`]: controllers,
     '../middleware/authz': { authorize },
     '../middleware/cache': middleware,
     '../middleware/upload': { uploadExpenseImage: (_q, _s, next) => next(), uploadImportCsv: (_q, _s, next) => next() },
@@ -146,20 +151,21 @@ test('real expense router avoids business reads on hits, rechecks permissions, a
     req.auth.userId = req.get('x-test-user') || 'u1';
     req.auth.user.organizationId = req.get('x-test-org') || 'org1';
     if (req.get('x-test-denied')) req.auth.permissions = new Set();
-    else req.auth.permissions.add('expenses.update').add('expenses.create');
+    else req.auth.permissions.add(`${permission}.read`).add(`${permission}.update`).add(`${permission}.create`);
     next();
   });
   app.use(middleware.invalidateCacheOnWriteMiddleware);
-  app.use('/api/v1/expenses', router);
+  app.use(`/api/v1/${resource}`, router);
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
-  const url = `http://127.0.0.1:${server.address().port}/api/v1/expenses`;
-  const get = (headers = {}) => fetch(url, { headers });
+  const url = `http://127.0.0.1:${server.address().port}/api/v1/${resource}`;
+  const get = (headers = {}) => fetch(`${url}?q=acme&limit=20`, { headers });
   assert.equal((await get()).headers.get('x-cache'), 'MISS');
   const hit = await get(); assert.equal(hit.headers.get('x-cache'), 'HIT');
   assert.equal((await hit.json()).amount, 10); assert.equal(businessReads, 1); assert.equal(authChecks, 2);
   assert.equal((await get({ 'x-test-denied': '1' })).status, 403); assert.equal(businessReads, 1);
+  assert.equal((await fetch(`${url}?q=different&limit=20`)).headers.get('x-cache'), 'MISS');
   assert.equal((await get({ 'x-test-org': 'org2' })).headers.get('x-cache'), 'MISS');
   assert.equal((await get({ 'x-test-user': 'u2' })).headers.get('x-cache'), 'MISS');
   assert.equal((await get({ 'Cache-Control': 'no-cache' })).headers.get('x-cache'), 'BYPASS');
@@ -172,3 +178,4 @@ test('real expense router avoids business reads on hits, rechecks permissions, a
   await cache.setCacheEnabled(false);
   assert.equal((await get()).headers.get('x-cache'), 'BYPASS');
 });
+}

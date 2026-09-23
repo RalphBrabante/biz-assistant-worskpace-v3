@@ -5,6 +5,7 @@ import { OrganizationRequiredComponent } from '../../shared/organization-require
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { AbstractControl, FormBuilder, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -98,6 +99,8 @@ export class VendorsPageComponent {
   editingId = '';
   vendorOwnerOrganizationId = '';
   private importFile: File | null = null;
+  private searchTimer?: ReturnType<typeof setTimeout>;
+  private listSubscription?: Subscription;
 
   get currentUserId(): string {
     return this.auth.currentUser()?.id || '';
@@ -136,7 +139,14 @@ export class VendorsPageComponent {
     });
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.searchTimer);
+    this.listSubscription?.unsubscribe();
+  }
+
   load(): void {
+    clearTimeout(this.searchTimer);
+    this.listSubscription?.unsubscribe();
     if (this.isContextLocked) {
       this.loading.set(false);
       this.rows.set([]);
@@ -158,7 +168,7 @@ export class VendorsPageComponent {
       params.set('q', q);
     }
 
-    this.api.list<VendorRow>(`/api/v1/vendors?${params.toString()}`).subscribe({
+    this.listSubscription = this.api.list<VendorRow>(`/api/v1/vendors?${params.toString()}`).subscribe({
       next: (response: ApiResponse<VendorRow[]>) => {
         this.loading.set(false);
         this.rows.set(response.data || []);
@@ -485,18 +495,27 @@ export class VendorsPageComponent {
   }
 
   clearFilters(): void {
-    if (this.isContextLocked) return;
-    this.filter.set('');
+    this.onFilterChange('');
   }
 
   onFilterChange(value: string): void {
-    if (this.isContextLocked) {
-      return;
-    }
+    if (this.isContextLocked) return;
+    const previousQuery = this.filter().trim();
     this.filter.set(value);
+    if (value.trim() === previousQuery) return;
+
+    // Cancel immediately so an older response cannot win during the debounce.
+    clearTimeout(this.searchTimer);
+    this.listSubscription?.unsubscribe();
     this.page = 1;
     this.persistTablePreferences();
-    this.load();
+    this.loading.set(true);
+    this.error.set('');
+    if (!value.trim()) {
+      this.load();
+      return;
+    }
+    this.searchTimer = setTimeout(() => this.load(), 300);
   }
 
   onPageSizeChange(value: string): void {
