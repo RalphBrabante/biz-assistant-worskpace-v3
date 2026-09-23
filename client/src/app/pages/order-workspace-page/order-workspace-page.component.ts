@@ -2,7 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, ViewChild, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription, forkJoin, catchError, of } from 'rxjs';
+import { ExpenseTaxType, isVatTaxType } from '../../core/expense-calculation';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { OrganizationContextService } from '../../core/organization-context.service';
@@ -12,7 +13,7 @@ import { OrderProofUploadComponent, ProofUploadState } from './proof-upload/orde
 interface Settings { preset: string; customerRequired: boolean; inventoryEnabled: boolean; shippingEnabled: boolean; approvalThreshold: number | null; paymentTermsDays: number; }
 interface CatalogItem { id: string; name: string; sku?: string; type: string; unit: string; price: number; discountedPrice?: number; stock: number; }
 interface Customer { id: string; name: string; requiresPurchaseOrder: boolean; paymentTermsDays?: number; }
-interface Line { id?: string; itemId: string | null; name: string; type: string; unit: string; quantity: number; unitPrice: number; discountedUnitPrice?: number | null; lineTotal?: number; }
+interface Line { id?: string; itemId: string | null; name: string; type: string; unit: string; quantity: number; unitPrice: number; discountedUnitPrice?: number | null; lineTotal?: number; taxRate?: number; }
 interface Invoice { id: string; invoiceNumber: string; status: string; paymentStatus: string; totalAmount: number; dueDate?: string; }
 interface Payment { id: string; kind: string; amount: number; reference: string; date: string; invoiceId: string; }
 interface Document { id: string; name: string; size: number; createdAt: string; }
@@ -49,6 +50,10 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   private org = '';
   private routeId = '';
   private lookupGeneration = 0;
+  private loadGeneration = 0;
+  lookupErrors: string[] = [];
+  lookupsLoading = false;
+  organizationTaxType: ExpenseTaxType | null = null;
   constructor() {
     effect(() => {
       this.context.selectedOrganizationId();
@@ -69,7 +74,7 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
     }));
   }
   @HostListener('document:keydown.escape') closeModal(): void { if (!this.busy) { this.actionModal = ''; this.settingsOpen = false; } }
-  ngOnDestroy(): void { this.subscriptions.unsubscribe(); this.lookupGeneration++; }
+  ngOnDestroy(): void { this.subscriptions.unsubscribe(); this.lookupGeneration++; this.loadGeneration++; }
   get hasUnsavedChanges(): boolean { return this.dirty || this.proofUploads.length > 0; }
   get uploadsIncomplete(): boolean { return this.proofUploads.some(upload => upload.status !== 'uploaded'); }
   get orderOrganizationId(): string { return this.org; }
@@ -78,7 +83,33 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   get canEdit(): boolean { return this.editable && this.can(this.order ? 'orders.update' : 'orders.create'); }
   get active(): boolean { return !!this.order?.workflow && ['confirmed', 'processing', 'completed'].includes(this.order.status); }
   get customerRequiresPo(): boolean { return !!(this.customers.find(c => c.id === this.customerId)?.requiresPurchaseOrder || this.order?.customer?.id === this.customerId && this.order.customer.requiresPurchaseOrder); }
-  get estimate(): number { return this.lines.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0) + Number(this.shippingAmount || 0); }
+  private round(value: number): number { return Math.round((value + Number.EPSILON) * 100) / 100; }
+  get estimatedSubtotal(): number { return this.round(this.lines.reduce((sum, line) => sum + this.round(Number(line.quantity || 0) * Number(line.unitPrice || 0)), 0)); }
+  get estimatedTax(): number {
+    return this.round(this.lines.reduce((sum, line) => {
+      const rate = this.organizationTaxType ? (isVatTaxType(this.organizationTaxType) ? Number(this.organizationTaxType.percentage || 0) : 0) : Number(line.taxRate || 0);
+      const total = this.round(Number(line.quantity || 0) * Number(line.unitPrice || 0));
+      return sum + (rate ? this.round(total - total / (1 + rate / 100)) : 0);
+    }, 0));
+  }
+  get estimatedWithholding(): number { return this.round((this.estimatedSubtotal - this.estimatedTax) * Number(this.taxes.find(tax => tax.id === this.withholdingTaxTypeId)?.percentage || 0) / 100); }
+  get estimate(): number { return this.round(this.estimatedSubtotal + Number(this.shippingAmount || 0) - this.estimatedWithholding); }
+  get selectedTaxUnavailable(): boolean { return !!this.withholdingTaxTypeId && !this.taxes.some(tax => tax.id === this.withholdingTaxTypeId); }
+  get canFulfill(): boolean { return !!this.order?.workflow && ['confirmed', 'processing'].includes(this.order.status) && this.can('orders.update'); }
+  get fulfillmentSelection(): { id: string; name: string; quantity: number; unit: string }[] {
+    return this.lines.filter(line => line.id && Number(this.fulfillment[line.id]) > 0).map(line => ({ id: line.id!, name: line.name, quantity: Number(this.fulfillment[line.id!]), unit: line.unit }));
+  }
+  get fulfillmentError(): string {
+    if (!this.canFulfill) return 'Confirm the order before recording fulfillment.';
+    for (const line of this.lines) {
+      const amount = Number(this.fulfillment[line.id!] ?? 0);
+      if (!Number.isFinite(amount) || amount < 0 || Math.abs(amount * 1000 - Math.round(amount * 1000)) > 0.00001) return `Enter a nonnegative quantity with up to 3 decimal places for ${line.name}.`;
+      if (amount > this.remaining(line)) return `Only ${this.remaining(line)} ${line.unit} remain for ${line.name}.`;
+    }
+    return this.fulfillmentSelection.length ? '' : 'Enter a quantity under Fulfill now, or select Fill remaining quantities.';
+  }
+  fillRemaining(): void { if (!this.canFulfill || this.busy || this.hasUnsavedChanges) return; this.fulfillment = Object.fromEntries(this.lines.filter(line => line.id).map(line => [line.id!, this.remaining(line)])); this.error = ''; }
+
   get poMismatch(): boolean { return this.customerPoAmount !== null && Number(this.customerPoAmount) !== Number(this.order?.totalAmount ?? this.estimate); }
   can(permission: string): boolean { return this.auth.hasPermission(permission); }
   actionLabel(value: string): string { return ({ submit: 'Submit for approval', approve: 'Approve order', reject: 'Return to draft', confirm: 'Confirm order', cancel: 'Cancel order', complete: 'Complete order', verify_po: 'Verify customer PO', fulfill: 'Record fulfillment', invoice: 'Issue invoice', void_invoice: 'Void invoice', payment: 'Record payment', refund: 'Record refund', reconcile: 'Enable reviewed workflow' } as Record<string, string>)[value] || value; }
@@ -86,26 +117,42 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   money(value: unknown): string { return new Intl.NumberFormat('en', { style: 'currency', currency: this.currency }).format(Number(value || 0)); }
   changed(): void { this.dirty = true; this.success = ''; }
   reset(): void {
-    this.proofUploads = [];
+    this.proofUploads = []; this.taxes = []; this.lookupErrors = []; this.organizationTaxType = null; this.loadGeneration++;
     this.order = null; this.lines = []; this.customers = []; this.catalog = []; this.customerId = ''; this.customerPoNumber = ''; this.customerPoDate = ''; this.customerPoAmount = null; this.poRequired = false; this.promisedDate = ''; this.dueDate = ''; this.shippingAmount = 0; this.billingAddress = ''; this.shippingAddress = ''; this.notes = ''; this.withholdingTaxTypeId = ''; this.dirty = false; this.error = ''; this.success = ''; this.tab = 'items'; this.requestKey = crypto.randomUUID(); this.lookupGeneration++;
   }
   load(): void {
-    this.loading = true; this.error = '';
-    this.subscriptions.add(this.api.getFresh<Order>(`/api/v1/orders/${this.routeId}`).subscribe({ next: response => { this.loading = false; if (response.data) { this.accept(response.data); this.org = response.data.organizationId; this.loadLookups(); } }, error: e => { this.loading = false; this.fail(e); } }));
+    const generation = ++this.loadGeneration;
+    this.loading = true; this.error = ''; this.lookupGeneration++;
+    this.subscriptions.add(this.api.getFresh<Order>(`/api/v1/orders/${this.routeId}`).subscribe({ next: response => {
+      if (generation !== this.loadGeneration) return;
+      try {
+        if (!response.data) throw new Error('The order could not be loaded. Please reload.');
+        this.accept(response.data); this.loading = false; this.loadLookups();
+      } catch (error) { this.loading = false; this.error = error instanceof Error ? error.message : 'Unable to read this order. Please reload.'; }
+    }, error: e => { if (generation === this.loadGeneration) { this.loading = false; this.fail(e); } } }));
   }
   loadLookups(): void {
     const generation = ++this.lookupGeneration; const scope = `organizationId=${encodeURIComponent(this.org)}`;
-    this.subscriptions.add(forkJoin({ settings: this.api.get<{ settings: Settings; presets: Record<string, Settings>; currency: string }>(`/api/v1/orders/workflow-settings?${scope}`),
-      customers: this.api.list<Customer>(`/api/v1/customers?${scope}&limit=100&isActive=true`),
-      items: this.api.list<CatalogItem>(`/api/v1/items?${scope}&limit=100&isActive=true`),
-      taxes: this.api.list<{ id: string; name: string; percentage: number; appliesTo: string }>(`/api/v1/withholding-tax-types?${scope}&limit=100&isActive=true`)
+    this.lookupErrors = []; this.lookupsLoading = true;
+    const recover = (label: string) => { if (generation === this.lookupGeneration) this.lookupErrors.push(`Unable to load ${label}. Retry the order options.`); return of({ data: undefined }); };
+    this.subscriptions.add(forkJoin({
+      settings: this.api.get<{ settings: Settings; presets: Record<string, Settings>; currency: string; taxType: ExpenseTaxType }>(`/api/v1/orders/workflow-settings?${scope}`).pipe(catchError(() => recover('workflow settings'))),
+      customers: this.api.list<Customer>(`/api/v1/customers?${scope}&limit=100&isActive=true`).pipe(catchError(() => recover('customers'))),
+      items: this.api.list<CatalogItem>(`/api/v1/items?${scope}&limit=100&isActive=true`).pipe(catchError(() => recover('catalog items'))),
+      taxes: this.api.list<{ id: string; name: string; percentage: number; appliesTo: string }>(`/api/v1/withholding-tax-types?${scope}&activeOnly=true`).pipe(catchError(() => recover('withholding tax options')))
     }).subscribe({ next: responses => {
       if (generation !== this.lookupGeneration) return;
-      this.presets = responses.settings.data?.presets || {}; this.settingsDraft = { ...responses.settings.data!.settings };
-      if (!this.order) { this.config = { ...this.settingsDraft }; this.currency = responses.settings.data?.currency || 'USD'; this.paymentTermsDays = this.config.paymentTermsDays; }
-      this.customers = responses.customers.data || []; this.catalog = responses.items.data || []; this.taxes = (responses.taxes.data || []).filter(t => ['invoice', 'both'].includes(t.appliesTo));
+      this.lookupsLoading = false;
+      if (responses.settings.data) {
+        this.presets = responses.settings.data.presets || {}; this.settingsDraft = { ...responses.settings.data.settings };
+        this.organizationTaxType = responses.settings.data.taxType || null;
+        if (!this.order) { this.config = { ...this.settingsDraft }; this.currency = responses.settings.data.currency || 'USD'; this.paymentTermsDays = this.config.paymentTermsDays; }
+      }
+      if (responses.customers.data) this.customers = responses.customers.data;
+      if (responses.items.data) this.catalog = responses.items.data;
+      if (responses.taxes.data) this.taxes = responses.taxes.data;
       if (this.order?.customer && !this.customers.some(c => c.id === this.order!.customer!.id)) this.customers.unshift(this.order.customer);
-    }, error: e => this.fail(e) }));
+    } }));
   }
   search(kind: 'customer' | 'item'): void {
     const generation = this.lookupGeneration;
@@ -138,16 +185,27 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
     }, error: e => this.fail(e) }));
   }
   accept(order: Order): void {
+    // Be tolerant of older API deployments returning MariaDB JSON as text.
+    let workflow = order.workflow;
+    if (typeof workflow === 'string') {
+      try { workflow = JSON.parse(workflow); } catch { throw new Error('The saved order workflow could not be read. Please reload after updating the API.'); }
+    }
+    if (workflow && (typeof workflow !== 'object' || Array.isArray(workflow))) throw new Error('The saved order workflow is invalid.');
+    if (!order.organizationId || !Array.isArray(order.orderedItemSnapshots)) throw new Error('The order response is incomplete. Please reload.');
+    order = { ...order, workflow };
+    if (this.org !== order.organizationId) { this.taxes = []; this.organizationTaxType = null; }
+    this.org = order.organizationId;
     if (order.customer && !this.customers.some(c => c.id === order.customer!.id)) this.customers.unshift(order.customer);
     this.order = order; this.currency = order.currency; this.config = order.workflow?.settings || this.config;
     this.lines = order.orderedItemSnapshots.map(l => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.discountedUnitPrice ?? l.unitPrice) }));
-    this.customerId = order.customerId || ''; this.customerPoNumber = order.customerPoNumber || ''; this.customerPoDate = order.workflow?.po.date || ''; this.customerPoAmount = order.workflow?.po.amount ?? null; this.poRequired = order.workflow?.poRequired || false;
+    this.customerId = order.customerId || ''; this.customerPoNumber = order.customerPoNumber || ''; this.customerPoDate = order.workflow?.po?.date || ''; this.customerPoAmount = order.workflow?.po?.amount ?? null; this.poRequired = order.workflow?.poRequired || false;
     this.promisedDate = order.promisedDate || ''; this.dueDate = order.dueDate || ''; this.paymentTermsDays = order.workflow?.paymentTermsDays ?? this.config.paymentTermsDays;
     this.shippingAmount = Number(order.shippingAmount); this.withholdingTaxTypeId = order.withholdingTaxTypeId || ''; this.billingAddress = order.billingAddress || ''; this.shippingAddress = order.shippingAddress || ''; this.notes = order.notes || ''; this.dirty = false;
     this.fulfillment = Object.fromEntries(this.lines.map(l => [l.id!, 0]));
   }
   openAction(action: string): void {
     if (this.hasUnsavedChanges) { this.error = 'Save the draft and selected attachment before taking this action.'; return; }
+    if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
     this.actionModal = action; this.actionNote = ''; this.actionInvoiceNumber = ''; this.actionDueDate = ''; this.inventoryDecision = '';
     this.actionInvoiceId = this.order?.salesInvoices.find(i => i.status !== 'void')?.id || '';
     this.actionAmount = action === 'invoice' ? this.order?.balances.toInvoice || 0 : 0;
@@ -155,11 +213,12 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   }
   runAction(action: string): void {
     if (!this.order || this.busy || this.hasUnsavedChanges) return;
+    if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
     this.busy = true; this.error = '';
     const lines = this.lines.filter(l => Number(this.fulfillment[l.id!]) > 0).map(l => ({ id: l.id, quantity: Number(this.fulfillment[l.id!]) }));
     this.subscriptions.add(this.api.create<Order>(`/api/v1/orders/${this.order.id}/actions`, { action, revision: this.order.revision, note: this.actionNote,
       amount: this.actionAmount, invoiceId: this.actionInvoiceId, invoiceNumber: this.actionInvoiceNumber, date: this.actionDate, issueDate: this.actionDate, dueDate: this.actionDueDate,
-      inventoryDecision: this.inventoryDecision, lines }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; this.success = 'Order updated.'; }, error: e => this.fail(e) }));
+      inventoryDecision: this.inventoryDecision, lines }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; this.success = action === 'fulfill' ? 'Fulfillment recorded successfully.' : 'Order updated.'; }, error: e => this.fail(e) }));
   }
   fileSize(bytes: number): string { return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
   download(doc: Document): void {

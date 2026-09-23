@@ -117,9 +117,11 @@ async function prepare(req, org, transaction, previous) {
   const items = ids.length ? await m.Item.findAll({ where: { id: ids, organizationId: org.id, isActive: true }, transaction }) : [];
   const lines = W.buildLines(body.orderedItems, new Map(items.map(i => [i.id, i])), org.taxType, org.currency || 'USD', W.permitted(req, 'orders.override_price'));
   let withholdingRate = 0;
+  // Preserve the existing order form: all active organization-managed rates
+  // are selectable, including rates originally classified for expenses.
   if (body.withholdingTaxTypeId) {
-    const tax = await m.WithholdingTaxType.findOne({ where: { id: body.withholdingTaxTypeId, organizationId: org.id, isActive: true, appliesTo: ['invoice', 'both'] }, transaction });
-    if (!tax) W.fail('Select a valid invoice withholding tax type.');
+    const tax = await m.WithholdingTaxType.findOne({ where: { id: body.withholdingTaxTypeId, organizationId: org.id, isActive: true }, transaction });
+    if (!tax) W.fail('Select an active withholding tax type in this organization.');
     withholdingRate = Number(tax.percentage);
   }
   const poRequired = !!customer?.requiresPurchaseOrder || body.poRequired === true;

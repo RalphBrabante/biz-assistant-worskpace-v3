@@ -1,3 +1,4 @@
+const { jsonObjectAttribute } = require('./json-object-attribute');
 const { indexesFor } = require('../database/schema-indexes-v1');
 const { DataTypes, Model } = require('sequelize');
 
@@ -27,7 +28,7 @@ function initOrderModel(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
-      workflow: { type: DataTypes.JSON, allowNull: true },
+      workflow: jsonObjectAttribute('workflow'),
       revision: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       requestKey: { type: DataTypes.UUID, allowNull: true },
       customerPoNumber: { type: DataTypes.STRING(120), allowNull: true },

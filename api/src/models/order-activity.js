@@ -1,3 +1,4 @@
+const { jsonObjectAttribute } = require('./json-object-attribute');
 const { indexesFor } = require('../database/schema-indexes-v1');
 const { DataTypes, Model } = require('sequelize');
 
@@ -39,10 +40,7 @@ function initOrderActivityModel(sequelize) {
         type: DataTypes.JSON,
         allowNull: true,
       },
-      metadata: {
-        type: DataTypes.JSON,
-        allowNull: true,
-      },
+      metadata: jsonObjectAttribute('metadata'),
     },
     {
       sequelize,

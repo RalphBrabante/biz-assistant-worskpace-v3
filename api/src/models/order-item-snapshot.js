@@ -1,3 +1,4 @@
+const { jsonObjectAttribute } = require('./json-object-attribute');
 const { DataTypes, Model } = require('sequelize');
 
 class OrderItemSnapshot extends Model {}
@@ -84,10 +85,7 @@ function initOrderItemSnapshotModel(sequelize) {
         allowNull: false,
         defaultValue: 0.0,
       },
-      metadata: {
-        type: DataTypes.JSON,
-        allowNull: true,
-      },
+      metadata: jsonObjectAttribute('metadata'),
     },
     {
       sequelize,

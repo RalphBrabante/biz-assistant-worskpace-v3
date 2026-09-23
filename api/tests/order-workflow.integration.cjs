@@ -95,6 +95,19 @@ const legacy = require('../src/controllers/orders-controller');
     await require('../src/jobs/order-upload-cleanup-job').cleanupOrderUploads();
     assert.equal(await m.OrderDocumentUpload.count({ where: { id: expiredId } }), 0);
     await m.Order.destroy({ where: { id: stagedOrder.id, organizationId: org.id } });
+    // Legacy expense-classified rates remain selectable for orders, while
+    // inactive and cross-organization tax IDs still fail validation.
+    const selectedTax = await m.WithholdingTaxType.create({ organizationId: org.id, code: 'ORDER-REGRESSION', name: 'Order withholding fixture', percentage: 2, appliesTo: 'expense', isActive: true });
+    const taxBody = { ...proofBody, requestKey: randomUUID(), withholdingTaxTypeId: selectedTax.id, orderedItems: [{ name: 'Tax fixture', type: 'service', quantity: 1, unitPrice: 112 }] };
+    let taxedOrder = expect(await request('createOrder', taxBody), 201);
+    const deduction = Math.round((112 - Number(taxedOrder.taxAmount)) * 2) / 100;
+    assert.ok(deduction > 0); assert.equal(Number(taxedOrder.withHoldingTaxAmount), deduction); assert.equal(Number(taxedOrder.totalAmount), 112 - deduction);
+    taxedOrder = expect(await request('updateOrder', { ...taxBody, revision: taxedOrder.revision, orderedItems: [{ name: 'Tax fixture edited', type: 'service', quantity: 2, unitPrice: 112 }] }, taxedOrder.id));
+    assert.equal(taxedOrder.withholdingTaxTypeId, selectedTax.id); assert.equal(Number(taxedOrder.withHoldingTaxAmount), deduction * 2);
+    expect(await request('createOrder', { ...taxBody, organizationId: otherOrg.id, requestKey: randomUUID() }, undefined, { auth: { ...auth, user: { organizationId: otherOrg.id } } }), 400);
+    await selectedTax.update({ isActive: false });
+    expect(await request('updateOrder', { ...taxBody, revision: taxedOrder.revision }, taxedOrder.id), 400);
+    await m.Order.destroy({ where: { id: taxedOrder.id, organizationId: org.id } });
     const act = (action, body = {}, override = {}) => request('performAction', { action, revision: order.revision, ...body }, order.id, override);
     expect(await act('confirm'), 400);
     expect(await act('start_processing'), 400);

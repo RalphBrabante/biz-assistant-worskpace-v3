@@ -1,3 +1,4 @@
+const { jsonObjectAttribute } = require('./json-object-attribute');
 const { DataTypes, Model } = require('sequelize');
 
 class Organization extends Model {}
@@ -5,7 +6,7 @@ class Organization extends Model {}
 function initOrganizationModel(sequelize) {
   Organization.init(
     {
-      orderWorkflowSettings: { type: DataTypes.JSON, allowNull: true },
+      orderWorkflowSettings: jsonObjectAttribute('orderWorkflowSettings'),
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
