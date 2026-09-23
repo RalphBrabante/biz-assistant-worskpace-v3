@@ -614,6 +614,10 @@ async function createExpense(req, res, next) {
 
     const { Expense, Vendor, Organization, WithholdingTaxType } = models;
     const payload = cleanUndefined(pickExpensePayload(req.body));
+    // The browser's cached profile may not match the authenticated database user.
+    payload.createdBy = getAuthenticatedUserId(req);
+    payload.updatedBy = getAuthenticatedUserId(req);
+    payload.withholdingTaxTypeId = String(payload.withholdingTaxTypeId || '').trim() || null;
     const uploadedFile = await resolveUploadedExpenseFile(req);
     if (uploadedFile) {
       payload.file = uploadedFile.file;

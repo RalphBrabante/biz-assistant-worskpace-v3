@@ -90,3 +90,36 @@ for (const source of [
  assert.equal(writes[0].taxAmount, source.expectedVat);
  assert.equal(writes[0].totalAmount, 11200);
 });
+
+for (const auditFields of [
+ { createdBy: 'deleted-user', updatedBy: 'deleted-user' },
+ { createdBy: '', updatedBy: '' },
+ {},
+]) test(`create uses authenticated audit references for ${JSON.stringify(auditFields)}`, async () => {
+ const { controller, req, res, writes, models } = setup();
+ Object.assign(req.body, auditFields);
+ const create = models.Expense.create;
+ models.Expense.create = async (payload) => {
+  // Only the authenticated user exists in this persistence fixture.
+  assert.equal(payload.createdBy, 'user-a');
+  assert.equal(payload.updatedBy, 'user-a');
+  return create(payload);
+ };
+ await controller.createExpense(req, res, next);
+ assert.equal(res.statusCode, 201);
+ assert.equal(writes.length, 1);
+});
+
+for (const value of ['', '  ', null, undefined]) test(`create accepts no withholding tax: ${JSON.stringify(value)}`, async () => {
+ const { controller, req, res, writes, models } = setup();
+ req.body.withholdingTaxTypeId = value;
+ const create = models.Expense.create;
+ models.Expense.create = async (payload) => {
+  // An empty string is not a valid foreign key; no selection must be NULL.
+  assert.equal(payload.withholdingTaxTypeId, null);
+  return create(payload);
+ };
+ await controller.createExpense(req, res, next);
+ assert.equal(res.statusCode, 201);
+ assert.equal(writes[0].withHoldingTaxAmount, 0);
+});
