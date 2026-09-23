@@ -454,11 +454,12 @@ async function createSalesInvoice(req, res) {
       }
       const order = await models.Order.findOne({
         where: { id: payload.orderId, organizationId: payload.organizationId },
-        attributes: ['id'],
+        attributes: ['id', 'workflow'],
       });
       if (!order) {
         return res.status(400).json({ ok: false, message: 'orderId must belong to the invoice organization.' });
       }
+      if (order.workflow) return res.status(400).json({ ok: false, message: 'Issue invoices from this order’s workspace.' });
     }
     payload.currency = await getOrganizationCurrency(payload.organizationId);
     const organization = await Organization.findByPk(payload.organizationId, {
@@ -812,6 +813,7 @@ async function updateSalesInvoice(req, res) {
     if (!salesInvoice) {
       return res.status(404).json({ ok: false, message: 'Sales invoice not found.' });
     }
+    if (salesInvoice.orderId && (await getModels().Order.findByPk(salesInvoice.orderId))?.workflow) return res.status(400).json({ ok: false, message: 'Manage this invoice from its order workspace.' });
     if (String(salesInvoice.status || '').toLowerCase() === 'paid') {
       return res.status(400).json({
         ok: false,
@@ -881,6 +883,7 @@ async function deleteSalesInvoice(req, res) {
       return res.status(404).json({ ok: false, message: 'Sales invoice not found.' });
     }
 
+    if (salesInvoice.orderId && (await getModels().Order.findByPk(salesInvoice.orderId))?.workflow) return res.status(400).json({ ok: false, message: 'Manage this invoice from its order workspace.' });
     await salesInvoice.destroy();
     return res.status(200).json({ ok: true, message: 'Sales invoice deleted successfully.' });
   } catch (err) {

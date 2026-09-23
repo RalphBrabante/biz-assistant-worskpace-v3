@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getModels } = require('../sequelize');
 const {
   getCacheEnabled,
+  getCacheStatus,
   setCacheEnabled,
 } = require('../services/cache-service');
 const {
@@ -101,6 +102,7 @@ async function getCacheSetting(req, res) {
       data: {
         key: 'cache_enabled',
         enabled,
+        ...getCacheStatus(),
       },
     });
   } catch (err) {
@@ -141,7 +143,7 @@ async function updateCacheSetting(req, res) {
       defaults: {
         key: 'cache_enabled',
         valueBoolean: enabled,
-        description: 'Global toggle for Redis API response cache',
+        description: 'Global toggle for API response cache (Redis or memory)',
         updatedBy: req.auth?.userId || null,
       },
     });
@@ -161,6 +163,7 @@ async function updateCacheSetting(req, res) {
       data: {
         key: 'cache_enabled',
         enabled,
+        ...getCacheStatus(),
       },
     });
   } catch (err) {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BugReportsModule } from './modules/bug-reports/bug-reports.module';
 import { LegacyApiModule } from './modules/legacy/legacy-api.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SystemModule } from './modules/system/system.module';
@@ -24,6 +25,7 @@ import { DevModule } from './modules/dev/dev.module';
 
 @Module({
   imports: [
+    BugReportsModule,
     LegacyApiModule,
     AuthModule,
     SystemModule,

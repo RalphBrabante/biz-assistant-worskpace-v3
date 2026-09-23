@@ -26,6 +26,8 @@ const {
   VendorOrganization,
 } = require('./vendor-organization');
 const { initOrderModel, Order } = require('./order');
+const { initOrderDocumentModel, OrderDocument } = require('./order-document');
+const { initOrderDocumentUploadModel, OrderDocumentUpload } = require('./order-document-upload');
 const { initSalesInvoiceModel, SalesInvoice } = require('./sales-invoice');
 const { initExpenseModel, Expense } = require('./expense');
 const { initCustomerModel, Customer } = require('./customer');
@@ -52,6 +54,8 @@ const {
 } = require('./quarterly-expense-report');
 const { initAppSettingModel, AppSetting } = require('./app-setting');
 const { initMessageModel, Message } = require('./message');
+const { initBugReportModel, BugReport } = require('./bug-report');
+const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-column');
 
 function initModels(sequelize) {
   initOrganizationModel(sequelize);
@@ -69,6 +73,8 @@ function initModels(sequelize) {
   initVendorModel(sequelize);
   initVendorOrganizationModel(sequelize);
   initOrderModel(sequelize);
+  initOrderDocumentModel(sequelize);
+  initOrderDocumentUploadModel(sequelize);
   initSalesInvoiceModel(sequelize);
   initExpenseModel(sequelize);
   initCustomerModel(sequelize);
@@ -80,6 +86,13 @@ function initModels(sequelize) {
   initQuarterlyExpenseReportModel(sequelize);
   initAppSettingModel(sequelize);
   initMessageModel(sequelize);
+  initBugReportModel(sequelize);
+  initBugReportColumnModel(sequelize);
+  BugReportColumn.belongsTo(Organization, { foreignKey: 'organizationId', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'organization' });
+  BugReportColumn.belongsTo(User, { foreignKey: 'createdBy', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'creator' });
+  BugReport.belongsTo(Organization, { foreignKey: 'organizationId', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'organization' });
+  BugReport.belongsTo(User, { foreignKey: 'createdBy', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'reporter' });
+  BugReport.belongsTo(User, { foreignKey: 'updatedBy', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'reviewer' });
   initStorageMigrationModels(sequelize);
   StorageMigration.belongsTo(User, { foreignKey: 'createdBy', onDelete: 'SET NULL', onUpdate: 'CASCADE', as: 'actor' });
   StorageMigration.hasMany(StorageMigrationItem, { foreignKey: 'migrationId', onDelete: 'CASCADE', onUpdate: 'CASCADE', as: 'items' });
@@ -866,20 +879,20 @@ function initModels(sequelize) {
     as: 'organization',
   });
 
-  Order.hasOne(SalesInvoice, {
+  Order.hasMany(SalesInvoice, {
     foreignKey: {
       name: 'orderId',
-      allowNull: false,
+      allowNull: true,
     },
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE',
-    as: 'salesInvoice',
+    as: 'salesInvoices',
   });
 
   SalesInvoice.belongsTo(Order, {
     foreignKey: {
       name: 'orderId',
-      allowNull: false,
+      allowNull: true,
     },
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE',
@@ -1382,6 +1395,8 @@ function initModels(sequelize) {
     Vendor,
     VendorOrganization,
     Order,
+    OrderDocument,
+    OrderDocumentUpload,
     SalesInvoice,
     Expense,
     Customer,
@@ -1395,6 +1410,8 @@ function initModels(sequelize) {
     StorageMigration,
     StorageMigrationItem,
     Message,
+    BugReport,
+    BugReportColumn,
   };
 }
 

@@ -27,6 +27,12 @@ function initOrderModel(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      workflow: { type: DataTypes.JSON, allowNull: true },
+      revision: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      requestKey: { type: DataTypes.UUID, allowNull: true },
+      customerPoNumber: { type: DataTypes.STRING(120), allowNull: true },
+      promisedDate: { type: DataTypes.DATEONLY, allowNull: true },
+      invoicingStatus: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'not_invoiced' },
       source: {
         type: DataTypes.ENUM('web', 'mobile', 'in_store', 'admin', 'api'),
         allowNull: false,
@@ -144,6 +150,7 @@ function initOrderModel(sequelize) {
       indexes: [
         ...indexesFor('orders'),
         { unique: true, fields: ['organization_id', 'order_number'] },
+        { unique: true, fields: ['organization_id', 'request_key'] },
         { fields: ['organization_id'] },
         { fields: ['user_id'] },
         { fields: ['customer_id'] },

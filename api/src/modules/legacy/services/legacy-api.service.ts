@@ -12,6 +12,7 @@ const { authenticateSequelize } = require('../../../sequelize');
 const { getModels } = require('../../../sequelize');
 const { setRedisClient, initializeCacheConfig } = require('../../../services/cache-service');
 const { setSocketServer } = require('../../../services/socket-service');
+const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('../../../jobs/order-upload-cleanup-job');
 const { startLicenseExpiryJob, stopLicenseExpiryJob } = require('../../../jobs/license-expiry-job');
 
 const { getUploadDirectory } = require('../../../services/upload-paths');
@@ -61,10 +62,12 @@ export class LegacyApiService {
     await this.connectRedis();
     await this.connectAmqp();
     if (process.env.LICENSE_EXPIRY_JOB_ENABLED !== 'false') startLicenseExpiryJob();
+    startOrderUploadCleanupJob();
   }
 
   async shutdown(): Promise<void> {
     stopLicenseExpiryJob();
+    stopOrderUploadCleanupJob();
     if (this.io) {
       await this.io.close();
       this.io = null;

@@ -1,0 +1,39 @@
+:host { display: block; min-width: 0; }
+.board-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--border-color); }
+.board-search { display: flex; gap: 8px; width: 430px; max-width: 100%; }
+.board-view-label { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-weight: 600; }
+.bug-board { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; padding: 3px 3px 18px; min-height: 440px; }
+.board-column { --column-color: var(--text-soft); flex: 0 0 290px; width: 290px; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-subtle); transition: border-color .15s, background .15s; }
+.board-column[data-color='blue'] { --column-color: #5794f5; }
+.board-column[data-color='violet'] { --column-color: var(--brand); }
+.board-column[data-color='amber'] { --column-color: var(--warning); }
+.board-column[data-color='green'] { --column-color: var(--success); }
+.board-column[data-color='rose'] { --column-color: var(--danger); }
+.board-column-header { padding: 18px 14px 14px; border-top: 3px solid var(--column-color); border-radius: 12px 12px 0 0; }
+.column-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--column-color); }
+.column-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.column-count { flex-shrink: 0; font-size: 11px; color: var(--text-soft); background: var(--bg-panel); padding: 1px 7px; border-radius: 5px; border: 1px solid var(--border-color); }
+.board-column-body { padding: 0 10px 12px; flex: 1; min-height: 330px; }
+.bug-card { border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-panel); padding: 13px; margin-bottom: 10px; box-shadow: 0 1px 2px rgb(0 0 0 / .06); cursor: grab; }
+.bug-card:hover { border-color: var(--brand); }
+.bug-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.issue-key { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: var(--text-soft); }
+.issue-key i { color: var(--danger); }
+.drag-handle { color: var(--text-soft); }
+.card-open { display: block; text-align: left; width: 100%; }
+.card-open h3 { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.card-description { font-size: 12px; color: var(--text-soft); margin-top: 7px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.card-path { font-size: 11px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 0; }
+.bug-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+.reporter { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; color: var(--text-soft); }
+.reporter-avatar { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.empty-column { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 30px 12px; min-height: 170px; border: 1px dashed var(--border-color); border-radius: 8px; color: var(--text-soft); text-align: center; }
+.empty-column p { font-size: 12px; font-weight: 500; }
+.empty-column span { font-size: 11px; }
+.drop-target { background: var(--brand-soft); border-color: var(--brand); outline: 2px dashed var(--brand); outline-offset: -4px; }
+.drop-unavailable { opacity: .45; }
+.card-dragging { opacity: .35; }
+.card-saving { opacity: .6; cursor: progress; }
+.add-column-tile { display: flex; flex-shrink: 0; align-items: center; justify-content: center; align-self: flex-start; gap: 8px; width: 170px; min-height: 56px; border: 1px dashed var(--border-color); border-radius: 10px; font-size: 12px; color: var(--text-soft); }
+.add-column-tile:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+@media (max-width: 640px) { .board-column { flex-basis: 280px; width: 280px; } .bug-board { gap: 12px; } }

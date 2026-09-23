@@ -10,6 +10,8 @@ import { StorageMigrationComponent } from './storage-migration.component';
 interface CacheSettingPayload {
   key: string;
   enabled: boolean;
+  backend: 'memory' | 'redis' | 'disabled';
+  ttlSeconds: number;
 }
 
 interface StorageSettingPayload {
@@ -58,6 +60,8 @@ export class SettingsPageComponent {
   readonly error = signal('');
   readonly message = signal('');
   readonly cacheEnabled = signal(true);
+  readonly cacheBackend = signal<CacheSettingPayload['backend'] | 'unknown'>('unknown');
+  readonly cacheTtlSeconds = signal(60);
   readonly storageProvider = signal<'local' | 'do_spaces' | 'google_drive'>('local');
   readonly expenseAttachmentProvider = signal<'local' | 'do_spaces' | 'google_drive'>('local');
   readonly profileImageProvider = signal<'local' | 'do_spaces' | 'google_drive'>('local');
@@ -129,6 +133,8 @@ export class SettingsPageComponent {
     this.api.get<CacheSettingPayload>('/api/v1/settings/cache').subscribe({
       next: (response: ApiResponse<CacheSettingPayload>) => {
         this.cacheEnabled.set(Boolean(response.data?.enabled));
+        this.cacheBackend.set(response.data?.backend || 'unknown');
+        this.cacheTtlSeconds.set(response.data?.ttlSeconds || 60);
         complete();
       },
       error: (err) => {
@@ -213,7 +219,9 @@ export class SettingsPageComponent {
         enabled: this.cacheEnabled(),
       })
       .subscribe({
-        next: () => {
+        next: (response) => {
+          this.cacheBackend.set(response.data?.backend || 'unknown');
+          this.cacheTtlSeconds.set(response.data?.ttlSeconds || 60);
           complete();
         },
         error: (err) => {

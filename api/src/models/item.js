@@ -64,7 +64,7 @@ function initItemModel(sequelize) {
         defaultValue: 'USD',
       },
       stock: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.DECIMAL(12, 3),
         allowNull: false,
         defaultValue: 0,
       },

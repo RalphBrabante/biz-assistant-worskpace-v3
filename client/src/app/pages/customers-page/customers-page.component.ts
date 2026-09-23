@@ -38,6 +38,7 @@ interface CustomerRow {
   status?: string;
   notes?: string;
   isActive?: boolean;
+  requiresPurchaseOrder?: boolean;
   organization?: {
     id: string;
     name?: string;
@@ -407,6 +408,7 @@ export class CustomersPageComponent {
       status: row.status || 'active',
       notes: row.notes || '',
       isActive: row.isActive !== false,
+      requiresPurchaseOrder: row.requiresPurchaseOrder === true,
     });
     this.editModalError.set('');
     this.error.set('');
@@ -680,6 +682,7 @@ export class CustomersPageComponent {
       status: 'active',
       notes: '',
       isActive: true,
+      requiresPurchaseOrder: false,
       createdBy: '',
       updatedBy: '',
     };
@@ -709,6 +712,7 @@ export class CustomersPageComponent {
       status: [defaults['status'], [Validators.required]],
       notes: [defaults['notes'], [Validators.maxLength(2000)]],
       isActive: [defaults['isActive']],
+      requiresPurchaseOrder: [defaults['requiresPurchaseOrder']],
     });
   }
 
@@ -734,6 +738,7 @@ export class CustomersPageComponent {
       status: this.optionalString(form['status']),
       notes: this.optionalString(form['notes']),
       isActive: Boolean(form['isActive']),
+      requiresPurchaseOrder: Boolean(form['requiresPurchaseOrder']),
       createdBy: this.optionalString(form['createdBy']),
       updatedBy: this.optionalString(form['updatedBy']),
     };

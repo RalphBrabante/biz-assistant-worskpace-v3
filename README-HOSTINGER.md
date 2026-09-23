@@ -15,7 +15,7 @@ GitHub push → Hostinger build: npm run build → dist/server.js
                                                └─ /healthz → readiness check
 ```
 
-One Node process serves the API and frontend on the same domain. The browser uses relative API URLs; there is no frontend API-host setting to rebuild. Docker, a separate Nginx container, Redis, and RabbitMQ are not required for this deployment. Redis caching is optional; notifications use Socket.IO directly. The startup settings below disable both Redis and RabbitMQ.
+One Node process serves the API and frontend on the same domain. The browser uses relative API URLs; there is no frontend API-host setting to rebuild. Docker, a separate Nginx container, Redis, and RabbitMQ are not required for this deployment. API reads use a bounded memory cache automatically when Redis is disabled; Redis remains optional; notifications use Socket.IO directly. The startup settings below disable both Redis and RabbitMQ.
 
 `api/` and `client/` now belong to this repository. Hostinger needs access only to `biz-assistant-worskpace-v3`, not the two old source repositories. Make future changes and commits from this repository root. Local historical Git metadata was preserved in `.git/hostinger-submodule-backup/`; the original remote repositories are unchanged.
 
@@ -64,7 +64,11 @@ Use [.env.hostinger.example](.env.hostinger.example) as a template and enter the
 | `DB_SSL_REJECT_UNAUTHORIZED` | `true`; use a trusted database certificate |
 | `UPLOAD_DIR` | Absolute persistent path from step 3 |
 | `RUN_MIGRATIONS` | `false` during initial import/verification; see next section |
-| `REDIS_ENABLED` | `false` |
+| `REDIS_ENABLED` | `false`; API caching falls back to server memory |
+| `API_CACHE_TTL_SECONDS` | `60`; safety expiry (maximum `600`) |
+| `API_CACHE_MAX_ENTRIES` | `500`; memory entry limit (maximum `10000`) |
+| `API_CACHE_MAX_BYTES` | `33554432`; 32 MiB serialized key/payload budget (maximum 256 MiB; runtime overhead is additional) |
+| `API_CACHE_MAX_ENTRY_BYTES` | `1048576`; skip individual responses over 1 MiB (maximum 8 MiB) |
 | `AMQP_ENABLED` | `false` |
 | `LICENSE_EXPIRY_JOB_ENABLED` | `true` for the existing in-process expiry housekeeping |
 | `SMTP2GO_API_KEY` | API key used by the existing mail implementation |
@@ -73,6 +77,16 @@ Use [.env.hostinger.example](.env.hostinger.example) as a template and enter the
 Leave `PORT` to the hosting platform; the server reads it and falls back to `3000` locally. Do not hardcode a public port or configure browser API URLs to point to it. SMTP username/password variables do not enable mail here: the app currently sends through SMTP2GO's API. Test password-reset/verification email and update any Google Drive OAuth redirect allowlist to the new HTTPS domain.
 
 If adding external Redis/RabbitMQ later, set `REDIS_ENABLED=true` with `REDIS_URL`, or `AMQP_ENABLED=true` with `AMQP_URL`. Disabled services are reported as disabled instead of making health checks fail. Enabled but failed services still produce an unhealthy result. Hostinger's [database/data-tool support guide](https://www.hostinger.com/support/which-databases-and-data-tools-are-supported-at-hostinger/) describes managed-plan restrictions; standalone Redis requires an external service or VPS.
+
+### API read caching without Redis
+
+Caching is enabled by default; an existing **Settings → Enable Read Cache** preference is preserved. That page reports the active backend. Expense, invoice, item, customer, vendor, tax lookup, report, and dashboard monthly-summary JSON reads can be reused for up to 60 seconds. The first request after a restart, expiry, or write loads from SQL; repeated matching reads avoid the business-data queries. Authentication, permissions, membership, and license checks still run on every request. Orders, bug reports, Action Center, messages, settings, account administration, and file exports remain live.
+
+Cache keys separate users, organizations, roles, permissions, paths, and filters. Protected API writes clear the whole response cache before completing, including error responses in case an import partially committed. This also refreshes dependent reports/totals when an amount changes without changing the record count. Storage migration jobs explicitly clear it after URL updates. Slow reads cannot repopulate the current cache after invalidation. Direct SQL changes and external writers are picked up at TTL expiry. Memory entries are discarded on restart and evicted by least recent use when limits are reached. No SQL cache table or new service is required.
+
+The in-memory cache belongs to **one Node process**. Keep this deployment single-instance; if scaling out, use shared Redis or disable read caching until shared invalidation is available. Redis uses shared cache generations; failures fall back to memory. Process-local fallback cannot coordinate separate instances during a Redis outage.
+
+In browser Network tools, eligible responses show `X-Cache: MISS`, then `HIT` for the same authenticated request; after a write they show `MISS` again. Other reads show `BYPASS`. Requests with `Cache-Control: no-cache` bypass server caching. API responses are no longer stored by the Angular service worker, avoiding stale data or cross-account offline responses; app assets still work offline. An already installed service worker needs to activate this release before that change takes effect.
 
 ## 5. Connect GitHub and configure the build
 

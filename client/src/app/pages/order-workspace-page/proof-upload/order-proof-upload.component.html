@@ -1,0 +1,24 @@
+<div class="proof-dropzone" [class.dragging]="dragging" [class.disabled]="disabled" (dragenter)="dragEnter($event)" (dragover)="dragOver($event)" (dragleave)="dragLeave($event)" (drop)="drop($event)">
+  <span class="upload-icon" aria-hidden="true"><i class="bi bi-cloud-arrow-up"></i></span>
+  <strong>{{ dragging ? 'Drop files to upload' : 'Drag and drop your files here' }}</strong>
+  <span class="text-muted">or <button type="button" class="browse-button" [disabled]="disabled" (click)="filePicker.click()">Browse files</button></span>
+  <input #filePicker type="file" multiple accept=".pdf,.png,.jpg,.jpeg" [disabled]="disabled" (change)="select($event)" hidden aria-label="Choose proof of order files" />
+  <small class="text-muted">PDF, PNG, or JPEG · up to 5 MB each · up to 10 files</small>
+</div>
+<p class="upload-help text-muted">Files upload immediately. Save the draft to attach them to this order.</p>
+<p *ngIf="notice" class="upload-notice" role="status">{{ notice }}</p>
+<ul class="upload-list" *ngIf="uploads.length" aria-label="Proof of order uploads">
+  <li *ngFor="let entry of uploads; trackBy: trackUpload" [class.failed]="entry.status === 'error'">
+    <span class="file-icon" aria-hidden="true"><i class="bi" [class.bi-file-earmark-pdf]="entry.file.name.toLowerCase().endsWith('.pdf')" [class.bi-file-earmark-image]="!entry.file.name.toLowerCase().endsWith('.pdf')"></i></span>
+    <div class="upload-detail">
+      <div class="file-heading"><strong>{{ entry.file.name }}</strong><span class="text-muted">{{ size(entry.file.size) }}</span></div>
+      <progress *ngIf="entry.status !== 'error'" [attr.value]="entry.progress" max="100" [attr.aria-label]="'Upload progress for ' + entry.file.name"></progress>
+      <div class="upload-status" [class.complete]="entry.status === 'uploaded'" aria-live="polite"><i *ngIf="entry.status === 'uploaded'" class="bi bi-check-circle" aria-hidden="true"></i> {{ statusLabel(entry) }}</div>
+      <p *ngIf="entry.error" class="file-error" role="alert">{{ entry.error }}</p>
+    </div>
+    <div class="upload-actions">
+      <button *ngIf="entry.status === 'error' && entry.retryable" type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="disabled" (click)="retry(entry)" [attr.aria-label]="'Retry ' + entry.file.name">Retry</button>
+      <button type="button" class="remove-upload" [disabled]="disabled" (click)="remove(entry)" [attr.aria-label]="'Remove ' + entry.file.name" title="Remove file"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+  </li>
+</ul>

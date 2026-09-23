@@ -1,0 +1,27 @@
+:host { display: block; margin-top: 1rem; }
+.proof-dropzone { display: flex; flex-direction: column; align-items: center; gap: .55rem; padding: 1.6rem 1rem; border: 2px dashed var(--border-color); border-radius: 12px; background: var(--bg-subtle); text-align: center; transition: border-color .15s, background .15s; }
+.proof-dropzone.dragging, .proof-dropzone:focus-within { border-color: var(--brand); background: var(--brand-soft); }
+.proof-dropzone.disabled { opacity: .6; }
+.upload-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; color: var(--brand); background: var(--brand-soft); font-size: 1.6rem; }
+.browse-button { color: var(--brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.upload-help, .upload-notice { font-size: .8rem; margin: .7rem 0; }
+.upload-notice { color: var(--warning); }
+.upload-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .75rem; }
+.upload-list li { display: flex; align-items: center; gap: .8rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; }
+.upload-list li.failed { border-color: var(--danger); }
+.file-icon { color: var(--brand); font-size: 1.5rem; }
+.upload-detail { flex: 1; min-width: 0; }
+.file-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .3rem .7rem; font-size: .85rem; }
+.file-heading strong { overflow-wrap: anywhere; }
+.file-heading span, .upload-status { font-size: .75rem; }
+progress { display: block; width: 100%; height: 6px; margin: .65rem 0 .4rem; border: 0; border-radius: 6px; overflow: hidden; accent-color: var(--brand); background: var(--bg-subtle); }
+progress::-webkit-progress-bar { background: var(--bg-subtle); border-radius: 6px; }
+progress::-webkit-progress-value { background: var(--brand); border-radius: 6px; }
+progress::-moz-progress-bar { background: var(--brand); border-radius: 6px; }
+.upload-status.complete { color: var(--success); }
+.file-error { color: var(--danger); font-size: .8rem; margin: .4rem 0 0; }
+.upload-actions { display: flex; align-items: center; gap: .5rem; }
+.remove-upload { padding: .5rem; color: var(--text-soft); border-radius: 6px; }
+.remove-upload:hover { background: var(--danger-soft); color: var(--danger); }
+@media(max-width: 560px) { .upload-list li { flex-wrap: wrap; }.upload-actions { margin-left: auto; }.proof-dropzone { padding: 1.2rem .75rem; } }

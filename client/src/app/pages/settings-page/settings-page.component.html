@@ -24,12 +24,17 @@
           (change)="cacheEnabled.set($any($event.target).checked)"
         />
         <label class="ui-form-check-label font-semibold" for="cacheEnabled">
-          Enable Redis Read Cache
+          Enable Read Cache
         </label>
       </div>
 
       <p class="text-muted text-xs mb-6">
-        Applies to API read endpoints. Write operations clear cache automatically.
+        Reuses recent lists and totals. Changes clear cached data automatically;
+        cached responses expire after {{ cacheTtlSeconds() }} seconds.
+      </p>
+      <p class="text-muted text-xs mb-6" aria-live="polite">
+        Current backend:
+        <strong>{{ cacheBackend() === 'memory' ? 'Server memory (no Redis required)' : cacheBackend() === 'redis' ? 'Redis' : cacheBackend() === 'disabled' ? 'Disabled' : 'Unavailable' }}</strong>.
       </p>
 
       <hr class="my-6" />

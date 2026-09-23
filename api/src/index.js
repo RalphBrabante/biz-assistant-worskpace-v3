@@ -1,4 +1,5 @@
 const express = require('express');
+const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('./jobs/order-upload-cleanup-job');
 const http = require('http');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
@@ -26,11 +27,11 @@ const withholdingTaxTypesRoutes = require('./routes/withholding-tax-types-routes
 const profileRoutes = require('./routes/profile-routes');
 const messagesRoutes = require('./routes/messages-routes');
 const dashboardRoutes = require('./routes/dashboard-routes');
+const bugReportsRoutes = require('./routes/bug-reports-routes');
 const devRoutes = require('./routes/dev-routes');
 const { authenticateRequest } = require('./middleware/authz');
 const { requestLogger } = require('./middleware/request-logger');
 const {
-  readCacheMiddleware,
   invalidateCacheOnWriteMiddleware,
 } = require('./middleware/cache');
 const {
@@ -284,7 +285,6 @@ if (process.env.NODE_ENV !== 'production' && process.env.APP_ENV !== 'staging') 
   app.use('/api/v1/dev', devRoutes);
 }
 app.use('/api/v1', authenticateRequest);
-app.use('/api/v1', readCacheMiddleware);
 app.use('/api/v1', invalidateCacheOnWriteMiddleware);
 app.use('/api/v1/items', itemsRoutes);
 app.use('/api/v1/organizations', organizationsRoutes);
@@ -304,6 +304,7 @@ app.use('/api/v1/withholding-tax-types', withholdingTaxTypesRoutes);
 app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/messages', messagesRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/bug-reports', bugReportsRoutes);
 app.use('/api/v1', systemRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -334,6 +335,7 @@ async function bootstrap() {
   }
 
   startLicenseExpiryJob();
+  startOrderUploadCleanupJob();
 
   // Conservative HTTP timeout tuning for low-resource hosts (1 vCPU).
   const server = httpServer.listen(port, () => {
@@ -347,6 +349,7 @@ async function bootstrap() {
 process.on('SIGINT', async () => {
   try {
     stopLicenseExpiryJob();
+    stopOrderUploadCleanupJob();
     if (sequelize) {
       await sequelize.close();
     }

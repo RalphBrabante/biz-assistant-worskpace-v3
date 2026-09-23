@@ -44,6 +44,7 @@
         <div class="flex items-center gap-2 text-xs min-w-0"><span class="text-muted hidden sm:inline">Workspace</span><i class="bi bi-chevron-right text-[9px] text-muted hidden sm:inline" aria-hidden="true"></i><span class="truncate font-medium">{{ organizationDisplayName }}</span></div>
       </div>
       <div class="flex items-center gap-2 sm:gap-3">
+        <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm shrink-0" (click)="bugReporter.open()" aria-label="Report a bug" title="Report a bug" aria-haspopup="dialog"><i class="bi bi-bug" aria-hidden="true"></i><span class="hidden sm:inline">Report a bug</span></button>
         <span class="hidden md:inline-flex items-center gap-1.5 text-[10px] text-muted border-r pr-4 mr-1"><i class="bi bi-building" aria-hidden="true"></i>Business workspace</span>
         <button class="topbar-icon" type="button" (click)="toggleTheme()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'" [title]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()" aria-hidden="true"></i></button>
         <button class="topbar-icon relative" type="button" (click)="toggleNotifications()" aria-label="Notifications" title="Notifications"><i class="bi bi-bell" aria-hidden="true"></i><span *ngIf="unreadMessageCount > 0" class="notification-dot"></span></button>
@@ -53,6 +54,8 @@
     <main id="workspace-content" class="workspace-content" tabindex="-1"><router-outlet></router-outlet></main>
   </div>
 </div>
+
+<app-bug-report #bugReporter></app-bug-report>
 
 <div class="fixed bottom-0 right-0 p-4" style="z-index: 3200;" *ngIf="realtimePopup as popup">
   <div class="ui-toast show border-0 shadow-panel" role="alert" aria-live="assertive" aria-atomic="true">

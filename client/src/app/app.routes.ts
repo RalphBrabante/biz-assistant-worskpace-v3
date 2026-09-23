@@ -1,9 +1,11 @@
 import { Routes } from '@angular/router';
+import { administratorGuard } from './core/administrator.guard';
+import { BugReportsPageComponent } from './pages/bug-reports-page/bug-reports-page.component';
 import { authGuard } from './core/auth.guard';
 import { permissionGuard } from './core/permission.guard';
 import { AppShellComponent } from './layout/app-shell.component';
 import { DashboardPageComponent } from './pages/dashboard-page/dashboard-page.component';
-import { CreateOrderPageComponent } from './pages/create-order-page/create-order-page.component';
+import { OrderWorkspacePageComponent } from './pages/order-workspace-page/order-workspace-page.component';
 import { CustomersPageComponent } from './pages/customers-page/customers-page.component';
 import { ExpenseDetailPageComponent } from './pages/expense-detail-page/expense-detail-page.component';
 import { ExpensesPageComponent } from './pages/expenses-page/expenses-page.component';
@@ -15,7 +17,6 @@ import { ResetPasswordPageComponent } from './pages/reset-password-page/reset-pa
 import { OrganizationDetailPageComponent } from './pages/organization-detail-page/organization-detail-page.component';
 import { OrganizationsPageComponent } from './pages/organizations-page/organizations-page.component';
 import { OrdersPageComponent } from './pages/orders-page/orders-page.component';
-import { OrderPreviewPageComponent } from './pages/order-preview-page/order-preview-page.component';
 import { PermissionsPageComponent } from './pages/permissions-page/permissions-page.component';
 import { ReportsPageComponent } from './pages/reports-page/reports-page.component';
 import { ReportPreviewPageComponent } from './pages/report-preview-page/report-preview-page.component';
@@ -48,6 +49,7 @@ export const routes: Routes = [
     component: AppShellComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'bug-reports', component: BugReportsPageComponent, canActivate: [administratorGuard] },
       { path: 'dashboard', component: DashboardPageComponent, canActivate: [permissionGuard], data: { permissions: ['dashboard.read'] } },
       { path: 'organizations', component: OrganizationsPageComponent, canActivate: [permissionGuard], data: { permissions: ['organizations.read'] } },
       { path: 'organizations/:id', component: OrganizationDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['organizations.read'] } },
@@ -64,8 +66,8 @@ export const routes: Routes = [
       { path: 'settings', component: SettingsPageComponent, canActivate: [permissionGuard], data: { permissions: ['settings.update'] } },
       { path: 'items', component: ItemsPageComponent, canActivate: [permissionGuard], data: { permissions: ['items.read'] } },
       { path: 'orders', component: OrdersPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
-      { path: 'orders/create', component: CreateOrderPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.create'] } },
-      { path: 'orders/:id', component: OrderPreviewPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
+      { path: 'orders/create', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.create'] } },
+      { path: 'orders/:id', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
       { path: 'customers', component: CustomersPageComponent, canActivate: [permissionGuard], data: { permissions: ['organizations.read'] } },
       { path: 'expenses/:id', component: ExpenseDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },
       { path: 'expenses', component: ExpensesPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },

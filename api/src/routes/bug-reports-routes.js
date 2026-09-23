@@ -1,0 +1,10 @@
+const express = require('express');
+const { authorize } = require('../middleware/authz');
+const { createBugReport, listBugReports, updateBugReport, getBugReportBoard, createBugReportColumn } = require('../controllers/bug-reports-controller');
+const router = express.Router();
+router.get('/board', getBugReportBoard);
+router.post('/columns', createBugReportColumn);
+router.post('/', authorize([]), createBugReport);
+router.get('/', listBugReports);
+router.put('/:id', updateBugReport);
+module.exports = router;

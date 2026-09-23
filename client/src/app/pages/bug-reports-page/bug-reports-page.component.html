@@ -1,0 +1,72 @@
+<section class="page-heading flex flex-wrap items-end justify-between gap-4">
+  <div><div class="section-eyebrow mb-2">Administration / Issue tracking</div><h1>Bug reports</h1><p class="text-muted">Track issues from report to resolution.</p></div>
+  <div class="flex gap-2">
+    <button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="busy" (click)="load()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh</button>
+    <button type="button" class="ui-btn ui-btn-primary" [disabled]="busy || !canCreateColumn" (click)="openColumnModal()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add column</button>
+  </div>
+</section>
+<div class="board-toolbar">
+  <form class="board-search" (ngSubmit)="applySearch()">
+    <label for="bug-board-search" class="sr-only">Search bug reports</label>
+    <div class="relative flex-1"><i class="bi bi-search absolute left-3 top-3 text-muted" aria-hidden="true"></i><input id="bug-board-search" name="search" class="ui-form-control !pl-9" placeholder="Search reports…" [(ngModel)]="search" maxlength="200" [disabled]="saving || creatingColumn" /></div>
+    <button type="submit" class="ui-btn ui-btn-outline-secondary" [disabled]="busy">Search</button>
+    <button *ngIf="search" type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="busy" (click)="clearSearch()" aria-label="Clear search"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+  </form>
+  <div class="flex items-center flex-wrap gap-3 text-xs text-muted"><span class="board-view-label"><i class="bi bi-kanban" aria-hidden="true"></i> Board</span><span>{{ allOrganizations ? 'All organizations' : 'Current organization' }}</span><span *ngIf="!loading">{{ total | number }} {{ total === 1 ? 'report' : 'reports' }}</span></div>
+</div>
+<div class="flex flex-wrap justify-between gap-2 mb-4 text-xs text-muted"><p id="board-instructions">Drag a card to change its status, or open it and choose “Move to”.</p><p *ngIf="allOrganizations">Select an organization to add its own columns.</p></div>
+<div *ngIf="notice" class="ui-alert ui-alert-success" role="status">{{ notice }}</div>
+<div *ngIf="error" class="ui-alert ui-alert-danger" role="alert">{{ error }} <button type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm ml-2" [disabled]="busy" (click)="load()">Refresh board</button></div>
+<p *ngIf="loading" class="text-xs text-muted mb-3" role="status">Updating board…</p>
+<p *ngIf="saving" class="text-xs text-muted mb-3" role="status">Saving move…</p>
+<div class="bug-board" role="region" aria-label="Bug report status board" aria-describedby="board-instructions" tabindex="0" [attr.aria-busy]="loading || saving">
+  <section *ngFor="let column of columns; trackBy: trackColumn" class="board-column" [attr.data-color]="column.color" [class.drop-target]="dropTargetId === column.id" [class.drop-unavailable]="draggedReport && !canUseColumn(draggedReport, column)" [attr.aria-labelledby]="'column-' + column.id" (dragover)="dragOver($event, column)" (dragleave)="dragLeave($event, column)" (drop)="drop($event, column)">
+    <header class="board-column-header"><div class="flex items-center gap-2 min-w-0"><span class="column-dot" aria-hidden="true"></span><h2 [id]="'column-' + column.id" class="column-name">{{ column.name }}</h2><span class="column-count">{{ column.total }}</span></div><p *ngIf="allOrganizations && !column.isSystem" class="text-xs text-muted mt-2 truncate">{{ column.organization?.name || 'Removed organization' }}</p></header>
+    <div class="board-column-body">
+      <article *ngFor="let report of column.rows; trackBy: trackReport" class="bug-card" [class.card-dragging]="draggedReport?.id === report.id" [class.card-saving]="movingId === report.id" [draggable]="!busy" (dragstart)="startDrag($event, report)" (dragend)="endDrag()">
+        <div class="bug-card-top"><span class="issue-key"><i class="bi bi-bug-fill" aria-hidden="true"></i>{{ reportKey(report) }}</span><span class="drag-handle" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span></div>
+        <button type="button" class="card-open" [disabled]="busy" (click)="open(report)" [attr.aria-label]="'Open ' + reportKey(report) + ': ' + report.title"><h3>{{ report.title }}</h3><p class="card-description">{{ report.description }}</p></button>
+        <div class="card-path" [title]="report.pagePath"><i class="bi bi-link-45deg" aria-hidden="true"></i>{{ report.pagePath }}</div>
+        <p *ngIf="allOrganizations" class="text-xs text-muted truncate mb-3">{{ report.organization?.name || 'Global / removed organization' }}</p>
+        <footer class="bug-card-footer"><span class="reporter" [title]="reporterName(report)"><span class="reporter-avatar">{{ reporterName(report).slice(0, 1) }}</span><span class="truncate">{{ reporterName(report) }}</span></span><time class="text-xs text-muted whitespace-nowrap" [attr.datetime]="report.createdAt">{{ report.createdAt | date:'MMM d' }}</time></footer>
+      </article>
+      <div *ngIf="!column.rows.length" class="empty-column"><i class="bi bi-inbox text-xl" aria-hidden="true"></i><p>{{ dropTargetId === column.id ? 'Drop report here' : 'No reports' }}</p><span>{{ dropTargetId === column.id ? 'The status will be saved.' : 'Reports in this status appear here.' }}</span></div>
+      <div *ngIf="column.error" class="text-xs text-danger py-2" role="alert">{{ column.error }}</div>
+      <button *ngIf="column.rows.length < column.total" type="button" class="ui-btn ui-btn-outline-secondary ui-btn-sm w-full" [disabled]="busy || column.loading" (click)="loadMore(column)">{{ column.loading ? 'Loading…' : 'Load more' }} <span *ngIf="!column.loading">({{ column.rows.length }}/{{ column.total }})</span></button>
+    </div>
+  </section>
+  <button *ngIf="canCreateColumn" type="button" class="add-column-tile" [disabled]="busy" (click)="openColumnModal()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add column</button>
+</div>
+<p class="mt-4 text-xs text-muted"><i class="bi bi-shield-lock mr-1" aria-hidden="true"></i>Only superusers and administrators can view this board.</p>
+
+<div *ngIf="columnModalOpen" class="ui-modal-backdrop fade show" (click)="closeColumnModal()"></div>
+<div *ngIf="columnModalOpen" appModal class="ui-modal fade show" tabindex="-1" aria-labelledby="add-column-title">
+  <div class="ui-modal-dialog ui-modal-dialog-centered"><div class="ui-modal-content">
+    <div class="ui-modal-header"><h2 id="add-column-title" class="ui-modal-title">Add status column</h2><button type="button" class="ui-btn-close" [disabled]="creatingColumn" (click)="closeColumnModal()" aria-label="Close add column"></button></div>
+    <form (ngSubmit)="createColumn()" #columnForm="ngForm">
+      <div class="ui-modal-body space-y-4"><p class="text-sm text-muted">Create a workflow stage for this organization, such as “Needs testing” or “Ready to release”.</p><div *ngIf="columnError" class="ui-alert ui-alert-danger" role="alert">{{ columnError }}</div>
+        <div><label for="column-name" class="ui-form-label">Column name</label><input id="column-name" name="columnName" class="ui-form-control" [(ngModel)]="columnName" required maxlength="60" [disabled]="creatingColumn" placeholder="e.g. Needs testing" /></div>
+        <div><label for="column-color" class="ui-form-label">Color</label><select id="column-color" name="columnColor" class="ui-form-select" [(ngModel)]="columnColor" [disabled]="creatingColumn"><option *ngFor="let color of colors" [value]="color.value">{{ color.label }}</option></select></div>
+      </div><div class="ui-modal-footer"><button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="creatingColumn" (click)="closeColumnModal()">Cancel</button><button type="submit" class="ui-btn ui-btn-primary" [disabled]="creatingColumn || !columnForm.valid || !columnName.trim()">{{ creatingColumn ? 'Creating…' : 'Create column' }}</button></div>
+    </form>
+  </div></div>
+</div>
+
+<div *ngIf="selected" class="ui-modal-backdrop fade show" (click)="close()"></div>
+<div *ngIf="selected as report" appModal class="ui-modal fade show" tabindex="-1" aria-labelledby="review-bug-title" [attr.aria-busy]="saving">
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable"><div class="ui-modal-content">
+    <div class="ui-modal-header"><h2 id="review-bug-title" class="ui-modal-title">{{ reportKey(report) }}</h2><button type="button" class="ui-btn-close" aria-label="Close report" [disabled]="saving" (click)="close()"></button></div>
+    <div class="ui-modal-body space-y-4">
+      <h3 class="text-base font-semibold break-words">{{ report.title }}</h3>
+      <p class="text-xs text-muted">Reported by {{ reporterName(report) }} · {{ report.createdAt | date:'medium' }}</p>
+      <p class="text-xs text-muted break-all">Page: {{ report.pagePath }}</p>
+      <div><h4 class="text-sm font-semibold mb-1">What went wrong</h4><p class="text-sm whitespace-pre-wrap break-words">{{ report.description }}</p></div>
+      <div *ngIf="report.steps"><h4 class="text-sm font-semibold mb-1">Steps to reproduce</h4><p class="text-sm whitespace-pre-wrap break-words">{{ report.steps }}</p></div>
+      <div *ngIf="report.expectedResult"><h4 class="text-sm font-semibold mb-1">Expected result</h4><p class="text-sm whitespace-pre-wrap break-words">{{ report.expectedResult }}</p></div>
+      <p class="text-xs text-muted">Last updated {{ report.updatedAt | date:'medium' }}<span *ngIf="report.reviewer"> by {{ report.reviewer.firstName }} {{ report.reviewer.lastName }}</span></p>
+      <div *ngIf="saveError" class="ui-alert ui-alert-danger" role="alert">{{ saveError }}</div>
+      <div><label for="bug-review-status" class="ui-form-label">Move to</label><select id="bug-review-status" class="ui-form-select" [(ngModel)]="selectedStatus" [disabled]="saving"><option *ngFor="let column of availableColumns" [value]="column.id">{{ column.name }}</option></select></div>
+    </div>
+    <div class="ui-modal-footer"><button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="saving" (click)="close()">Close</button><button type="button" class="ui-btn ui-btn-primary" [disabled]="saving || selectedStatus === report.status" (click)="save()">{{ saving ? 'Saving…' : 'Move report' }}</button></div>
+  </div></div>
+</div>

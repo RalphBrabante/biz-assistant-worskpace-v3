@@ -4,6 +4,11 @@ import { proxyLegacyRoute } from '../../legacy/legacy-route-proxy';
 
 @Controller('api/v1/dashboard')
 export class DashboardController {
+  @Get('action-center')
+  async actionCenter(@Req() req: Request, @Res() res: Response, @Next() next: NextFunction) {
+    return proxyLegacyRoute('dashboard', req, res, next);
+  }
+
   @Get('monthly-summary')
   async monthlySummary(@Req() req: Request, @Res() res: Response, @Next() next: NextFunction) {
     return proxyLegacyRoute('dashboard', req, res, next);

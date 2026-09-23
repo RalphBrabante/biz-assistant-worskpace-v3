@@ -1,4 +1,5 @@
 import { ModalDirective } from '../shared/modal.directive';
+import { BugReportComponent } from '../shared/bug-report.component';
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, ViewChild, HostListener, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -19,6 +20,7 @@ interface NavItem {
   icon: string;
   permissions?: string[];
   superuserOnly?: boolean;
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -34,7 +36,7 @@ interface BeforeInstallPromptEvent extends Event {
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [BugReportComponent, ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.css',
 })
@@ -81,6 +83,7 @@ export class AppShellComponent {
     {
       title: 'Administration',
       items: [
+        { label: 'Bug reports', path: '/bug-reports', icon: 'bi-bug', adminOnly: true },
         { label: 'Organizations', path: '/organizations', icon: 'bi-buildings', permissions: ['organizations.read'] },
         { label: 'Users', path: '/users', icon: 'bi-people', permissions: ['users.read'] },
         { label: 'Roles', path: '/roles', icon: 'bi-shield-check', permissions: ['roles.manage'] },
@@ -247,6 +250,7 @@ export class AppShellComponent {
 
   readonly visibleNavSections = computed<NavSection[]>(() => {
     const canSee = (item: NavItem): boolean => {
+      if (item.adminOnly && !this.auth.isPrivileged()) return false;
       if (item.superuserOnly && !this.organizationContext.isSuperuser()) {
         return false;
       }

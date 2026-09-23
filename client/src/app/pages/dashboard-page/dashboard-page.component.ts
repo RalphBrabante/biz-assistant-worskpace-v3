@@ -71,6 +71,34 @@ interface MonthlySummaryResponse {
   months: MonthlyDataPoint[];
 }
 
+type ActionKind = 'invoices' | 'expenses';
+interface ActionRecord {
+  id: string;
+  reference: string;
+  party: string;
+  date: string;
+  daysOverdue: number | null;
+  totalAmount: number;
+  currency: string;
+  partiallyPaid: boolean;
+}
+interface ActionPage {
+  rows: ActionRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+interface ActionQueue {
+  kind: ActionKind;
+  title: string;
+  description: string;
+  route: string;
+  loading: boolean;
+  error: string;
+  data: ActionPage | null;
+  subscription?: Subscription;
+}
+
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
@@ -92,6 +120,10 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
   lastUpdated: Date | null = null;
   recentActivity: ActivityRow[] = [];
   activityError = '';
+  readonly actionQueues: ActionQueue[] = [
+    { kind: 'invoices', title: 'Collect overdue invoices', description: 'Unpaid invoices past their due date, oldest first.', route: '/sales-invoices', loading: false, error: '', data: null },
+    { kind: 'expenses', title: 'Review pending expenses', description: 'Submitted expenses awaiting approval, oldest expense date first.', route: '/expenses', loading: false, error: '', data: null },
+  ];
   workQueue: Array<{ label: string; count: number | null; route: string; status: string; icon: string; description: string }> = [];
   chartCurrency = '';
   loading = false;
@@ -137,6 +169,9 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
   }
 
   get canViewExpenses(): boolean { return this.auth.hasPermission('expenses.read'); }
+  get visibleActionQueues(): ActionQueue[] {
+    return this.actionQueues.filter(queue => queue.kind === 'invoices' ? this.canViewSalesInvoices : this.canViewExpenses);
+  }
   get hasOrganization(): boolean { return Boolean(this.orgParamValue); }
   get canShowFinancials(): boolean { return this.canViewReports && this.canViewFinancialCharts && this.hasOrganization; }
   get quickLinks() {
@@ -234,12 +269,20 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.actionQueues.forEach(queue => queue.subscription?.unsubscribe());
     this.overviewSubscription?.unsubscribe();
     this.chartSubscription?.unsubscribe();
     this.destroyChart();
   }
 
   refresh(): void {
+    this.actionQueues.forEach(queue => {
+      queue.subscription?.unsubscribe();
+      queue.data = null;
+      queue.error = '';
+      queue.loading = false;
+    });
+    this.visibleActionQueues.forEach(queue => this.loadActions(queue));
     this.loading = true;
     this.error = '';
     this.overviewSubscription?.unsubscribe();
@@ -265,9 +308,7 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
       processingOrders: this.canViewOrders ? this.fetchTotal(`/api/v1/orders?limit=1&status=processing${orgParam}`) : of(null),
       completedOrders: this.canViewOrders ? this.fetchTotal(`/api/v1/orders?limit=1&status=completed${orgParam}`) : of(null),
       cancelledOrders: this.canViewOrders ? this.fetchTotal(`/api/v1/orders?limit=1&status=cancelled${orgParam}`) : of(null),
-      submittedExpenses: this.canViewExpenses && this.hasOrganization ? this.fetchTotal(`/api/v1/expenses?limit=1&status=submitted${orgParam}`) : of(null),
       approvedExpenses: this.canViewExpenses && this.hasOrganization ? this.fetchTotal(`/api/v1/expenses?limit=1&status=approved${orgParam}`) : of(null),
-      overdueInvoices: this.canViewSalesInvoices && this.hasOrganization ? this.fetchTotal(`/api/v1/sales-invoices?limit=1&status=overdue${orgParam}`) : of(null),
       recentInvoices: this.canViewSalesInvoices && this.hasOrganization ? this.fetchRecent(`/api/v1/sales-invoices?limit=6&sortBy=createdAt&sortDirection=DESC${orgParam}`) : of([] as RecentRecord[]),
       recentExpenses: this.canViewExpenses && this.hasOrganization ? this.fetchRecent(`/api/v1/expenses?limit=6${orgParam}`) : of([] as RecentRecord[]),
     }).subscribe({
@@ -278,10 +319,8 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
         this.workQueue = [
           ...(this.canViewOrders ? [{ label: 'Pending orders', count: result.pendingOrders, route: '/orders', status: 'pending', icon: 'bi-receipt', description: 'Awaiting confirmation' }] : []),
           ...(this.canViewExpenses && this.hasOrganization ? [
-            { label: 'Expenses to review', count: result.submittedExpenses, route: '/expenses', status: 'submitted', icon: 'bi-clipboard-check', description: 'Submitted for approval' },
             { label: 'Expenses to pay', count: result.approvedExpenses, route: '/expenses', status: 'approved', icon: 'bi-wallet2', description: 'Approved, not yet marked paid' },
           ] : []),
-          ...(this.canViewSalesInvoices && this.hasOrganization ? [{ label: 'Invoices marked overdue', count: result.overdueInvoices, route: '/sales-invoices', status: 'overdue', icon: 'bi-calendar-event', description: 'Review collection follow-ups' }] : []),
         ];
         if (result.recentInvoices === null || result.recentExpenses === null) this.activityError = 'Some recent records could not be loaded. Refresh to try again.';
         this.recentActivity = [
@@ -312,6 +351,35 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
       error: () => {
         this.loading = false;
         this.error = 'Unable to load dashboard metrics.';
+      },
+    });
+  }
+
+  loadActions(queue: ActionQueue, page = 1): void {
+    queue.subscription?.unsubscribe();
+    if (!this.hasOrganization || !this.visibleActionQueues.includes(queue)) return;
+    queue.loading = true;
+    queue.error = '';
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const params = new URLSearchParams({ organizationId: this.orgParamValue, kind: queue.kind, page: String(page), today });
+    queue.subscription = this.api.get<ActionPage>(`/api/v1/dashboard/action-center?${params}`).subscribe({
+      next: response => {
+        queue.loading = false;
+        if (!response.data) {
+          queue.data = null;
+          queue.error = 'Actions are unavailable. Please try again.';
+          return;
+        }
+        // A record may have been resolved while the user was on the last page.
+        const lastPage = Math.max(1, Math.ceil(response.data.total / response.data.pageSize));
+        if (page > lastPage) { this.loadActions(queue, lastPage); return; }
+        queue.data = response.data;
+      },
+      error: () => {
+        queue.loading = false;
+        queue.data = null;
+        queue.error = 'Actions could not be loaded. Please try again.';
       },
     });
   }

@@ -690,20 +690,29 @@ async function listOrders(req, res) {
     }
     if (req.query.userId) where.userId = req.query.userId;
     if (req.query.customerId) where.customerId = req.query.customerId;
-    if (req.query.status) where.status = req.query.status;
+    if (req.query.status) where[Op.and] = [{ status: req.query.status }];
     if (req.query.paymentStatus) where.paymentStatus = req.query.paymentStatus;
     if (req.query.fulfillmentStatus) where.fulfillmentStatus = req.query.fulfillmentStatus;
     if (req.query.source) where.source = req.query.source;
+    if (req.query.invoicingStatus) where.invoicingStatus = req.query.invoicingStatus;
+    if (req.query.view === 'awaiting_approval') { where.status = 'pending'; where['workflow.approval'] = 'pending'; }
+    if (req.query.view === 'ready_to_fulfill') { where.status = ['confirmed', 'processing']; where.fulfillmentStatus = { [Op.ne]: 'fulfilled' }; }
+    if (req.query.view === 'ready_to_invoice') { where.status = ['confirmed', 'processing', 'completed']; where.invoicingStatus = { [Op.ne]: 'invoiced' }; }
+    if (req.query.view === 'late') { where.status = ['confirmed', 'processing']; where.fulfillmentStatus = { [Op.ne]: 'fulfilled' }; where.promisedDate = { [Op.lt]: new Date().toISOString().slice(0, 10) }; }
+
 
     if (req.query.q) {
-      where[Op.or] = [{ orderNumber: { [Op.like]: `%${req.query.q}%` } }];
+      const customers = await Customer.findAll({ where: { ...(where.organizationId ? { organizationId: where.organizationId } : {}), name: { [Op.like]: `%${String(req.query.q).slice(0, 120)}%` } }, attributes: ['id'] });
+      where[Op.or] = [{ orderNumber: { [Op.like]: `%${String(req.query.q).slice(0, 120)}%` } }, { customerPoNumber: { [Op.like]: `%${String(req.query.q).slice(0, 120)}%` } }, { customerId: customers.map(c => c.id) }];
     }
 
     const { rows, count } = await Order.findAndCountAll({
+      distinct: true,
       where,
       limit,
       offset,
       include: [
+        { association: 'user', attributes: ['id', 'firstName', 'lastName'], required: false },
         {
           model: Organization,
           as: 'organization',
@@ -1405,6 +1414,7 @@ async function deleteOrder(req, res) {
 }
 
 module.exports = {
+  notifyOrderCreated,
   createOrder,
   listOrders,
   getOrderById,

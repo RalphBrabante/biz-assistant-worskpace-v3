@@ -20,13 +20,15 @@ const withholdingTaxTypesRoutes = require('../../routes/withholding-tax-types-ro
 const profileRoutes = require('../../routes/profile-routes');
 const messagesRoutes = require('../../routes/messages-routes');
 const dashboardRoutes = require('../../routes/dashboard-routes');
+const bugReportsRoutes = require('../../routes/bug-reports-routes');
 const devRoutes = require('../../routes/dev-routes');
 
 const { authenticateRequest } = require('../../middleware/authz');
-const { readCacheMiddleware, invalidateCacheOnWriteMiddleware } = require('../../middleware/cache');
+const { invalidateCacheOnWriteMiddleware } = require('../../middleware/cache');
 const { errorHandler, notFoundHandler } = require('../../middleware/error-handler');
 
 type RouteKey =
+  | 'bug-reports'
   | 'auth'
   | 'dev'
   | 'system'
@@ -56,6 +58,7 @@ type RouteConfig = {
 };
 
 const ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+  'bug-reports': { prefix: '/api/v1/bug-reports', router: bugReportsRoutes, protected: true },
   auth: { prefix: '/api/v1/auth', router: authRoutes, protected: false },
   dev: { prefix: '/api/v1/dev', router: devRoutes, protected: false },
   system: { prefix: '/api/v1', router: systemRoutes, protected: true },
@@ -90,19 +93,33 @@ function runMiddleware(
   next: NextFunction,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    middleware(req, res, (err?: any) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve();
-    });
+    const finish = (err?: any) => {
+      res.off('finish', onResponse);
+      res.off('close', onResponse);
+      if (err) reject(err);
+      else resolve();
+    };
+    const onResponse = () => finish();
+    res.once('finish', onResponse);
+    res.once('close', onResponse);
+    try {
+      Promise.resolve(middleware(req, res, finish)).catch(finish);
+    } catch (err) { finish(err); }
   });
 }
 
 function dispatchToRouter(config: RouteConfig, req: Request, res: Response, next: NextFunction): Promise<void> {
   return new Promise((resolve) => {
     const originalUrl = req.url;
+    const finish = () => {
+      req.url = originalUrl;
+      res.off('finish', finish);
+      res.off('close', finish);
+      resolve();
+    };
+    // Controllers and cache hits end the response without calling router.next.
+    res.once('finish', finish);
+    res.once('close', finish);
 
     try {
       const target = req.originalUrl || req.url || '';
@@ -117,18 +134,18 @@ function dispatchToRouter(config: RouteConfig, req: Request, res: Response, next
 
         if (err) {
           errorHandler(err, req, res, next);
-          resolve();
+          finish();
           return;
         }
         if (!res.headersSent) {
           notFoundHandler(req, res, next);
         }
-        resolve();
+        finish();
       });
     } catch (err) {
       req.url = originalUrl;
       errorHandler(err, req, res, next);
-      resolve();
+      finish();
     }
   });
 }
@@ -148,10 +165,6 @@ export async function proxyLegacyRoute(
   try {
     if (config.protected) {
       await runMiddleware(authenticateRequest, req, res, next);
-      if (res.headersSent) {
-        return;
-      }
-      await runMiddleware(readCacheMiddleware, req, res, next);
       if (res.headersSent) {
         return;
       }

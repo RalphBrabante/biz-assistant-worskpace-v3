@@ -9,6 +9,7 @@ const {
   deleteItem,
 } = require('../controllers/items-controller');
 const { authorize } = require('../middleware/authz');
+const { readCacheMiddleware } = require('../middleware/cache');
 const { uploadImportCsv } = require('../middleware/upload');
 
 const router = express.Router();
@@ -16,8 +17,8 @@ const router = express.Router();
 router.post('/', authorize('items.create'), createItem);
 router.post('/import', authorize('items.create'), uploadImportCsv, importItems);
 router.get('/export', authorize('items.read'), exportItems);
-router.get('/', authorize('items.read'), listItems);
-router.get('/:id', authorize('items.read'), getItemById);
+router.get('/', authorize('items.read'), readCacheMiddleware, listItems);
+router.get('/:id', authorize('items.read'), readCacheMiddleware, getItemById);
 router.put('/:id', authorize('items.update'), updateItem);
 router.patch('/:id', authorize('items.update'), updateItem);
 router.delete('/:id', authorize('items.delete'), deleteItem);

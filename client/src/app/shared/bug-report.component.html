@@ -1,0 +1,31 @@
+<div *ngIf="visible" class="ui-modal-backdrop fade show" (click)="close()"></div>
+<div *ngIf="visible" appModal class="ui-modal fade show" tabindex="-1" aria-labelledby="bug-report-title" [attr.aria-busy]="submitting">
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content">
+      <div class="ui-modal-header">
+        <h2 id="bug-report-title" class="ui-modal-title">Report a bug</h2>
+        <button type="button" class="ui-btn-close" aria-label="Close bug report" [disabled]="submitting" (click)="close()"></button>
+      </div>
+      <div *ngIf="submitted" class="ui-modal-body" role="status">
+        <div class="ui-alert ui-alert-success">Your bug report has been submitted.</div>
+        <p class="text-sm text-muted">Only superusers and administrators can review submissions.</p>
+        <button type="button" class="ui-btn ui-btn-primary mt-4" (click)="close()">Done</button>
+      </div>
+      <form *ngIf="!submitted" (ngSubmit)="submit()" #reportForm="ngForm" class="flex flex-col min-h-0">
+        <div class="ui-modal-body space-y-4">
+          <p class="text-sm text-muted">Tell us what went wrong. Your report is only visible to superusers and administrators.</p>
+          <p class="text-xs text-muted break-all">Page: {{ pagePath }}</p>
+          <div *ngIf="error" class="ui-alert ui-alert-danger" role="alert">{{ error }}</div>
+          <div><label for="bug-title" class="ui-form-label">Title <span aria-hidden="true">*</span></label><input id="bug-title" name="title" class="ui-form-control" [(ngModel)]="title" required maxlength="200" [disabled]="submitting" placeholder="A short summary of the issue" /></div>
+          <div><label for="bug-description" class="ui-form-label">What went wrong? <span aria-hidden="true">*</span></label><textarea id="bug-description" name="description" class="ui-form-control" [(ngModel)]="description" required maxlength="10000" rows="4" [disabled]="submitting" placeholder="Describe the problem and any error message you saw"></textarea></div>
+          <div><label for="bug-steps" class="ui-form-label">Steps to reproduce <span class="text-muted">(optional)</span></label><textarea id="bug-steps" name="steps" class="ui-form-control" [(ngModel)]="steps" maxlength="5000" rows="3" [disabled]="submitting" placeholder="What did you do before the issue occurred?"></textarea></div>
+          <div><label for="bug-expected" class="ui-form-label">Expected result <span class="text-muted">(optional)</span></label><textarea id="bug-expected" name="expectedResult" class="ui-form-control" [(ngModel)]="expectedResult" maxlength="5000" rows="2" [disabled]="submitting"></textarea></div>
+        </div>
+        <div class="ui-modal-footer">
+          <button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="submitting" (click)="close()">Cancel</button>
+          <button type="submit" class="ui-btn ui-btn-primary" [disabled]="submitting || !reportForm.valid || !title.trim() || !description.trim()">{{ submitting ? 'Submitting…' : 'Submit report' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

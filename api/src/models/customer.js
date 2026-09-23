@@ -82,6 +82,7 @@ function initCustomerModel(sequelize) {
         type: DataTypes.DECIMAL(14, 2),
         allowNull: true,
       },
+      requiresPurchaseOrder: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       paymentTermsDays: {
         type: DataTypes.INTEGER,
         allowNull: true,

@@ -5,6 +5,7 @@ class Organization extends Model {}
 function initOrganizationModel(sequelize) {
   Organization.init(
     {
+      orderWorkflowSettings: { type: DataTypes.JSON, allowNull: true },
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,

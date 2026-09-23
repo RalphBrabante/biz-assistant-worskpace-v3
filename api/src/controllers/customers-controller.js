@@ -41,6 +41,7 @@ function pickCustomerPayload(body = {}) {
     postalCode: body.postalCode,
     country: body.country,
     creditLimit: body.creditLimit,
+    requiresPurchaseOrder: body.requiresPurchaseOrder,
     paymentTermsDays: body.paymentTermsDays,
     status: body.status,
     notes: body.notes,

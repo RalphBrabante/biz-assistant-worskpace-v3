@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from './types';
 
@@ -23,6 +23,12 @@ export class ApiService {
     });
   }
 
+  uploadFormData<T>(endpoint: string, payload: FormData): Observable<HttpEvent<ApiResponse<T>>> {
+    return this.http.post<ApiResponse<T>>(endpoint, payload, {
+      headers: this.bypassSwHeaders, observe: 'events', reportProgress: true,
+    });
+  }
+
   update<T>(endpoint: string, id: string, payload: Record<string, unknown>): Observable<ApiResponse<T>> {
     return this.http.put<ApiResponse<T>>(`${endpoint}/${id}`, payload);
   }
@@ -36,7 +42,7 @@ export class ApiService {
   }
 
   getFresh<T>(endpoint: string): Observable<ApiResponse<T>> {
-    return this.http.get<ApiResponse<T>>(endpoint, { headers: this.bypassSwHeaders });
+    return this.http.get<ApiResponse<T>>(endpoint, { headers: this.bypassSwHeaders.set('Cache-Control', 'no-cache') });
   }
 
   put<T>(endpoint: string, payload: Record<string, unknown>): Observable<ApiResponse<T>> {

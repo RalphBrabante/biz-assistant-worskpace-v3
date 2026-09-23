@@ -1,22 +1,29 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { AuthService } from '../../core/auth.service';
 import { ApiService } from '../../core/api.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
 import { OrganizationContextService } from '../../core/organization-context.service';
 import { ApiResponse } from '../../core/types';
 import { loadTablePreferences, saveTablePreferences, toPositiveInt, toTableViewMode, TableViewMode } from '../../core/table-preferences';
+import { OrderBoardComponent } from './board/order-board.component';
 import { TooltipDirective } from '../../shared/tooltip.directive';
 
 @Component({
   selector: 'app-orders-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TooltipDirective],
+  imports: [CommonModule, FormsModule, RouterLink, TooltipDirective, OrderBoardComponent],
   templateUrl: './orders-page.component.html',
 })
 export class OrdersPageComponent {
   private readonly api = inject(ApiService);
+  readonly auth = inject(AuthService);
+  queueFilter = "";
+  private initialized = false;
+  private loadGeneration = 0;
+  constructor() { effect(() => { this.organizationContext.selectedOrganizationId(); if (this.initialized) { this.page = 1; this.load(); } }); }
   private readonly dashboardRoute = inject(ActivatedRoute);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly organizationContext = inject(OrganizationContextService);
@@ -33,7 +40,10 @@ export class OrdersPageComponent {
   readonly pageSizeOptions = [10, 20, 50, 100];
   total = 0;
   totalPages = 1;
-  viewMode: TableViewMode = 'table';
+  viewMode: TableViewMode | 'board' = 'board';
+  boardRefreshKey = 0;
+  boardBusy = false;
+  get activeOrganizationId(): string { return this.organizationContext.getActiveOrganizationId(); }
   private readonly tablePrefsKey = 'orders-page';
   private readonly currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 
@@ -42,6 +52,7 @@ export class OrdersPageComponent {
   }
 
   ngOnInit(): void {
+    this.initialized = true;
     this.restoreTablePreferences();
     const requestedStatus = this.dashboardRoute.snapshot.queryParamMap.get('status');
     if (requestedStatus && ['pending', 'confirmed', 'processing', 'completed', 'cancelled'].includes(requestedStatus)) {
@@ -54,11 +65,17 @@ export class OrdersPageComponent {
   }
 
   load(): void {
+    const generation = ++this.loadGeneration;
+    this.error = "";
+    if (this.viewMode === 'board') { this.loading = false; this.boardRefreshKey++; return; }
     this.loading = true;
     const params = new URLSearchParams({
       page: String(this.page),
       limit: String(this.pageSize),
     });
+    const organizationId = this.organizationContext.getActiveOrganizationId();
+    if (organizationId) params.set("organizationId", organizationId);
+    if (this.queueFilter) params.set("view", this.queueFilter);
     const q = this.searchQuery.trim();
     if (q) {
       params.set('q', q);
@@ -72,6 +89,7 @@ export class OrdersPageComponent {
 
     this.api.list<Record<string, unknown>>(`/api/v1/orders?${params.toString()}`).subscribe({
       next: (response: ApiResponse<Record<string, unknown>[]>) => {
+        if (generation !== this.loadGeneration) return;
         this.loading = false;
         this.rows = response.data || [];
         const meta = response.meta || {};
@@ -85,6 +103,7 @@ export class OrdersPageComponent {
         }
       },
       error: (err) => {
+        if (generation !== this.loadGeneration) return;
         this.loading = false;
         this.error = err?.error?.message || 'Unable to load orders.';
       },
@@ -108,7 +127,8 @@ export class OrdersPageComponent {
     }
 
     this.deletingId = orderId;
-    this.api.remove('/api/v1/orders', orderId).subscribe({
+    const revision = this.rows.find(row => row['id'] === orderId)?.['revision'];
+    this.api.remove('/api/v1/orders', `${orderId}?revision=${revision}`).subscribe({
       next: () => {
         this.deletingId = '';
         this.load();
@@ -209,7 +229,7 @@ export class OrdersPageComponent {
   }
 
   get hasActiveFilters(): boolean {
-    return !!(this.searchQuery.trim() || this.statusFilter || this.paymentFilter);
+    return !!(this.searchQuery.trim() || this.statusFilter || this.paymentFilter || this.queueFilter);
   }
 
   get activeFilterCount(): number {
@@ -217,6 +237,7 @@ export class OrdersPageComponent {
     if (this.searchQuery.trim()) count++;
     if (this.statusFilter) count++;
     if (this.paymentFilter) count++;
+    if (this.queueFilter) count++;
     return count;
   }
 
@@ -224,9 +245,12 @@ export class OrdersPageComponent {
     this.searchQuery = '';
     this.statusFilter = '';
     this.paymentFilter = '';
+    this.queueFilter = '';
     this.page = 1;
     this.load();
   }
+
+  stateLabel(value: unknown): string { return String(value || '').replace(/_/g, ' '); }
 
   orderStatusLabel(value: string): string {
     const labels: Record<string, string> = {
@@ -237,7 +261,7 @@ export class OrdersPageComponent {
   }
 
   orderPaymentLabel(value: string): string {
-    const labels: Record<string, string> = { unpaid: 'Unpaid', partial: 'Partial', paid: 'Paid', refunded: 'Refunded' };
+    const labels: Record<string, string> = { unpaid: 'Unpaid', partially_paid: 'Partially paid', paid: 'Paid', refunded: 'Refunded' };
     return labels[value] || value;
   }
 
@@ -249,9 +273,10 @@ export class OrdersPageComponent {
     this.load();
   }
 
-  setViewMode(mode: TableViewMode): void {
-    this.viewMode = mode;
-    this.persistTablePreferences();
+  setViewMode(mode: TableViewMode | 'board'): void {
+    if (this.boardBusy || mode === this.viewMode) return;
+    this.viewMode = mode; this.page = 1;
+    this.persistTablePreferences(); this.load();
   }
 
   goToPage(page: number): void {
@@ -267,7 +292,7 @@ export class OrdersPageComponent {
     const prefs = loadTablePreferences(this.tablePrefsKey);
     this.page = toPositiveInt(prefs['page'], this.page);
     this.pageSize = toPositiveInt(prefs['pageSize'], this.pageSize);
-    this.viewMode = toTableViewMode(prefs['viewMode'], this.viewMode);
+    this.viewMode = prefs['viewMode'] === 'table' || prefs['viewMode'] === 'card' ? toTableViewMode(prefs['viewMode']) : 'board';
   }
 
   private persistTablePreferences(): void {

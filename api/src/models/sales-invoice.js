@@ -2,6 +2,13 @@ const { indexesFor } = require('../database/schema-indexes-v1');
 const { DataTypes, Model } = require('sequelize');
 
 class SalesInvoice extends Model {}
+async function protectOrderInvoice(invoice, options) {
+  if (options.orderWorkflow) return;
+  const orderId = invoice.orderId || invoice.previous('orderId');
+  if (!orderId) return;
+  const order = await invoice.sequelize.models.Order.findByPk(orderId, { transaction: options.transaction });
+  if (order?.workflow) throw new Error('Manage this invoice through its order workspace to preserve financial history.');
+}
 
 function initSalesInvoiceModel(sequelize) {
   SalesInvoice.init(
@@ -115,12 +122,13 @@ function initSalesInvoiceModel(sequelize) {
     {
       sequelize,
       modelName: 'SalesInvoice',
+      hooks: { beforeCreate: protectOrderInvoice, beforeUpdate: protectOrderInvoice, beforeDestroy: protectOrderInvoice },
       tableName: 'sales_invoices',
       timestamps: true,
       underscored: true,
       indexes: [
         ...indexesFor('sales_invoices'),
-        { unique: true, fields: ['order_id'] },
+        { fields: ['order_id'] },
         { unique: true, fields: ['organization_id', 'invoice_number'] },
         { fields: ['organization_id'] },
         { fields: ['status'] },
