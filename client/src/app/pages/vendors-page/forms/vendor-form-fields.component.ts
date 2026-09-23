@@ -1,3 +1,4 @@
+import { CountrySelectComponent } from '../../../shared/country-select.component';
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { AbstractControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -12,13 +13,12 @@ interface OrganizationOption {
 @Component({
   selector: 'app-vendor-form-fields',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, TooltipDirective],
+  imports: [CountrySelectComponent, CommonModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './vendor-form-fields.component.html',
 })
 export class VendorFormFieldsComponent {
   @Input({ required: true }) form!: FormGroup;
   @Input() submitted = false;
-  @Input() countryOptions: string[] = [];
   @Input() organizationOptions: OrganizationOption[] = [];
   @Input() showOrganizationAssignments = false;
   @Input() ownerOrganizationId = '';

@@ -76,9 +76,7 @@
   <div class="col-span-12 md:col-span-3">
     <label class="ui-form-label font-semibold">Country <span *ngIf="isRequired('country')" class="text-danger">*</span></label>
     <div class="relative">
-      <select class="ui-form-select" formControlName="country" [class.is-invalid]="hasError('country')">
-        <option *ngFor="let country of countryOptions" [value]="country">{{ country }}</option>
-      </select>
+      <app-country-select formControlName="country" [invalid]="hasError('country')" [required]="isRequired('country')"></app-country-select>
       <div *ngIf="hasError('country')" class="field-validation-icon-select" appTooltip [attr.title]="error('country')">
         <i class="bi bi-exclamation-circle-fill text-danger"></i>
       </div>

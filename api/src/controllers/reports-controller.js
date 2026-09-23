@@ -185,7 +185,7 @@ async function notifyQuarterlyExpenseReportGenerated(models, report) {
 async function computeQuarterlySalesInvoiceReport(req, res, next) {
   try {
     const models = getModels();
-    if (!models || !models.SalesInvoice || !models.QuarterlySalesReport) {
+    if (!models || !models.SalesInvoice || !models.QuarterlySalesReport || !models.Organization) {
       return res.status(503).json({
         code: 'SERVICE_UNAVAILABLE',
         message: 'Database models are not ready yet.',
@@ -198,6 +198,10 @@ async function computeQuarterlySalesInvoiceReport(req, res, next) {
         code: 'BAD_REQUEST',
         message: 'organizationId could not be resolved from authenticated user.',
       });
+    }
+
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId does not reference an existing organization.' });
     }
 
     const year = parseYear(req.body?.year);
@@ -584,7 +588,7 @@ async function deleteQuarterlySalesReport(req, res, next) {
 async function computeQuarterlyExpenseReport(req, res, next) {
   try {
     const models = getModels();
-    if (!models || !models.Expense || !models.QuarterlyExpenseReport) {
+    if (!models || !models.Expense || !models.QuarterlyExpenseReport || !models.Organization) {
       return res.status(503).json({
         code: 'SERVICE_UNAVAILABLE',
         message: 'Database models are not ready yet.',
@@ -597,6 +601,10 @@ async function computeQuarterlyExpenseReport(req, res, next) {
         code: 'BAD_REQUEST',
         message: 'organizationId could not be resolved from authenticated user.',
       });
+    }
+
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId does not reference an existing organization.' });
     }
 
     const year = parseYear(req.body?.year);

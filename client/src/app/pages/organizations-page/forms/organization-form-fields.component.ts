@@ -1,3 +1,4 @@
+import { CountrySelectComponent } from '../../../shared/country-select.component';
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { AbstractControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -18,12 +19,11 @@ interface CurrencyOption {
 @Component({
   selector: 'app-organization-form-fields',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, TooltipDirective],
+  imports: [CountrySelectComponent, CommonModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './organization-form-fields.component.html',
 })
 export class OrganizationFormFieldsComponent {
   @Input({ required: true }) form!: FormGroup;
-  @Input() countryOptions: string[] = [];
   @Input() currencyOptions: CurrencyOption[] = [];
   @Input() taxTypes: TaxTypeOption[] = [];
   @Output() taxIdInput = new EventEmitter<Event>();

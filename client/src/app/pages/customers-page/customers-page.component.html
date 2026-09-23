@@ -201,7 +201,7 @@
         </div>
         <div *ngIf="createModalError()" class="ui-alert ui-alert-danger mb-4">{{ createModalError() }}</div>
         <form [formGroup]="createCustomerForm" (ngSubmit)="createCustomer()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
-          <app-customer-form-fields [form]="createCustomerForm" [countryOptions]="countryOptions" (taxIdInput)="onCreateTaxIdInput($event)"></app-customer-form-fields>
+          <app-customer-form-fields [form]="createCustomerForm" (taxIdInput)="onCreateTaxIdInput($event)"></app-customer-form-fields>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">
@@ -267,7 +267,7 @@
         </div>
         <div *ngIf="editModalError()" class="ui-alert ui-alert-danger mb-4">{{ editModalError() }}</div>
         <form [formGroup]="editCustomerForm" (ngSubmit)="saveEdit()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
-          <app-customer-form-fields [form]="editCustomerForm" [countryOptions]="countryOptions" (taxIdInput)="onEditTaxIdInput($event)"></app-customer-form-fields>
+          <app-customer-form-fields [form]="editCustomerForm" (taxIdInput)="onEditTaxIdInput($event)"></app-customer-form-fields>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">

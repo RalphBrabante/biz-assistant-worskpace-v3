@@ -251,9 +251,7 @@
           </div>
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Country</label>
-            <select class="ui-form-select" formControlName="country">
-              <option *ngFor="let country of countryOptions" [value]="country">{{ country }}</option>
-            </select>
+            <app-country-select formControlName="country"></app-country-select>
           </div>
 
           <div class="col-span-12">

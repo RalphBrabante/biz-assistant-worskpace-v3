@@ -1,3 +1,4 @@
+import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
@@ -73,7 +74,6 @@ export class CustomersPageComponent {
   readonly importModalError = signal('');
   readonly createModalError = signal('');
   readonly editModalError = signal('');
-  readonly countryOptions = this.buildCountryOptions();
   private readonly createFieldLabels: Record<string, string> = {
     customerCode: 'Customer Code',
     type: 'Type',
@@ -401,7 +401,7 @@ export class CustomersPageComponent {
       city: row.city || '',
       state: row.state || '',
       postalCode: row.postalCode || '',
-      country: row.country || 'Philippines',
+      country: row.country || getBrowserCountry(),
       creditLimit: row.creditLimit ?? 0,
       paymentTermsDays: row.paymentTermsDays ?? 30,
       status: row.status || 'active',
@@ -674,7 +674,7 @@ export class CustomersPageComponent {
       city: '',
       state: '',
       postalCode: '',
-      country: 'Philippines',
+      country: getBrowserCountry(),
       creditLimit: 0,
       paymentTermsDays: 30,
       status: 'active',
@@ -770,33 +770,5 @@ export class CustomersPageComponent {
     const p3 = digits.slice(6, 9);
     const p4 = digits.slice(9, 14);
     return [p1, p2, p3, p4].filter(Boolean).join('-');
-  }
-
-  private buildCountryOptions(): string[] {
-    const fallback = ['United States'];
-    try {
-      const intlAny = Intl as unknown as {
-        DisplayNames?: new (locales: string[], options: { type: 'region' }) => Intl.DisplayNames;
-      };
-      if (!intlAny.DisplayNames) {
-        return fallback;
-      }
-      const regionNames = new intlAny.DisplayNames(['en'], { type: 'region' });
-      const names = new Set<string>();
-      for (let first = 65; first <= 90; first += 1) {
-        for (let second = 65; second <= 90; second += 1) {
-          const code = String.fromCharCode(first, second);
-          const value = regionNames.of(code);
-          if (!value || value === code || /unknown region/i.test(value)) {
-            continue;
-          }
-          names.add(value);
-        }
-      }
-      const result = Array.from(names).sort((a, b) => a.localeCompare(b));
-      return result.length > 0 ? result : fallback;
-    } catch (_err) {
-      return fallback;
-    }
   }
 }

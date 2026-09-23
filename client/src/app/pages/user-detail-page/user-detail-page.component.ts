@@ -1,3 +1,5 @@
+import { CountrySelectComponent } from '../../shared/country-select.component';
+import { getBrowserCountry } from '../../shared/countries';
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -66,7 +68,7 @@ interface UserOrganizationRow {
 @Component({
   selector: 'app-user-detail-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CountrySelectComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './user-detail-page.component.html',
 })
 export class UserDetailPageComponent {
@@ -136,7 +138,7 @@ export class UserDetailPageComponent {
           city: user?.city || '',
           state: user?.state || '',
           postalCode: user?.postalCode || '',
-          country: user?.country || 'United States',
+          country: user?.country || getBrowserCountry(),
           status: user?.status || 'pending_verification',
           role: user?.role || '',
           isEmailVerified: user?.isEmailVerified === true,

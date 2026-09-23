@@ -98,6 +98,10 @@ async function createItem(req, res) {
     const { Item, Vendor } = models;
 
     const payload = cleanUndefined(pickItemPayload(req.body));
+    const actorId = req.auth?.userId || req.auth?.user?.id || null;
+    payload.createdBy = actorId;
+    payload.updatedBy = actorId;
+    payload.vendorId = String(payload.vendorId || '').trim() || null;
 
     if (!isPrivilegedRequest(req)) {
       payload.organizationId = getAuthenticatedOrganizationId(req);
@@ -105,6 +109,9 @@ async function createItem(req, res) {
 
     if (!payload.organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
+    }
+    if (!await models.Organization.findByPk(payload.organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
     }
     if (!payload.name) {
       return res.status(400).json({ ok: false, message: 'name is required.' });
@@ -262,6 +269,10 @@ async function importItems(req, res) {
     const organizationId = resolveImportOrganizationId(req);
     if (!organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
+    }
+
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
     }
 
     const { Item } = models;

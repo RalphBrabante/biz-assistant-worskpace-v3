@@ -292,6 +292,9 @@ async function createUser(req, res) {
     if (!payload.organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
     }
+    if (!await Organization.findByPk(payload.organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
+    }
 
     const requestedRoleIds = parseRoleIds(req.body?.roleIds);
     const requestedRoleCodes = parseRoleCodes(req.body?.role);

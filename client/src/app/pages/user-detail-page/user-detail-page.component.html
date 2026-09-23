@@ -53,6 +53,11 @@
         <input class="ui-form-control" [(ngModel)]="form['addressLine1']" />
       </div>
 
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label">Country</label>
+        <app-country-select [(ngModel)]="form['country']"></app-country-select>
+      </div>
+
       <div class="col-span-12 md:col-span-4 flex items-end">
         <div class="ui-form-check">
           <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isEmailVerified']" />

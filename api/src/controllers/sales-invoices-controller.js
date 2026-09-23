@@ -426,6 +426,10 @@ async function createSalesInvoice(req, res) {
     const { SalesInvoice, Organization } = models;
 
     const payload = cleanUndefined(pickSalesInvoicePayload(req.body));
+    const actorId = req.auth?.userId || req.auth?.user?.id || null;
+    payload.createdBy = actorId;
+    payload.updatedBy = actorId;
+    payload.withholdingTaxTypeId = String(payload.withholdingTaxTypeId || '').trim() || null;
     if (!isPrivilegedRequest(req)) {
       payload.organizationId = getAuthenticatedOrganizationId(req);
     }

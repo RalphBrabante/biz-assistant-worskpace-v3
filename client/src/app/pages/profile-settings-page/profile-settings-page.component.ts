@@ -1,3 +1,5 @@
+import { CountrySelectComponent } from '../../shared/country-select.component';
+import { getBrowserCountry } from '../../shared/countries';
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -24,7 +26,7 @@ interface ProfileResponse {
 @Component({
   selector: 'app-profile-settings-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CountrySelectComponent, CommonModule, FormsModule],
   templateUrl: './profile-settings-page.component.html',
 })
 export class ProfileSettingsPageComponent {
@@ -47,7 +49,7 @@ export class ProfileSettingsPageComponent {
     city: '',
     state: '',
     postalCode: '',
-    country: '',
+    country: getBrowserCountry(),
     password: '',
     confirmPassword: '',
   };
@@ -88,7 +90,7 @@ export class ProfileSettingsPageComponent {
           city: String(profile.city || ''),
           state: String(profile.state || ''),
           postalCode: String(profile.postalCode || ''),
-          country: String(profile.country || ''),
+          country: String(profile.country || getBrowserCountry()),
           password: '',
           confirmPassword: '',
         };

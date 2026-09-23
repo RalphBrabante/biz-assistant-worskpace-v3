@@ -45,7 +45,7 @@ function initOrganizationModel(sequelize) {
       country: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        defaultValue: 'United States',
+        defaultValue: 'Philippines',
       },
       currency: {
         type: DataTypes.STRING(3),

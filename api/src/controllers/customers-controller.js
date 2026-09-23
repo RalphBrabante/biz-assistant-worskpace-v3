@@ -120,6 +120,10 @@ async function importCustomers(req, res) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
     }
 
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
+    }
+
     let imported = 0;
     let skipped = 0;
     const errors = [];
@@ -308,6 +312,9 @@ async function createCustomer(req, res) {
 
     const { Customer } = models;
     const payload = cleanUndefined(pickCustomerPayload(req.body));
+    const actorId = req.auth?.userId || req.auth?.user?.id || null;
+    payload.createdBy = actorId;
+    payload.updatedBy = actorId;
     if (payload.email) {
       payload.email = String(payload.email).toLowerCase().trim();
     }
@@ -317,6 +324,9 @@ async function createCustomer(req, res) {
 
     if (!payload.organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
+    }
+    if (!await models.Organization.findByPk(payload.organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
     }
     if (!payload.name) {
       return res.status(400).json({ ok: false, message: 'name is required.' });

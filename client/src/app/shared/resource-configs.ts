@@ -14,7 +14,7 @@ export const RESOURCE_CONFIGS: Record<string, CrudResourceConfig> = {
       { key: 'city', label: 'City', required: true },
       { key: 'state', label: 'State' },
       { key: 'postalCode', label: 'Postal Code' },
-      { key: 'country', label: 'Country', required: true, placeholder: 'United States' },
+      { key: 'country', label: 'Country', required: true },
       { key: 'contactName', label: 'Contact Name' },
       { key: 'contactEmail', label: 'Contact Email', type: 'email', required: true },
       { key: 'phone', label: 'Phone', required: true },
@@ -24,7 +24,7 @@ export const RESOURCE_CONFIGS: Record<string, CrudResourceConfig> = {
       { key: 'notes', label: 'Notes', type: 'textarea' },
       { key: 'isActive', label: 'Active', type: 'checkbox' },
     ],
-    createDefaults: { isActive: true, country: 'United States' },
+    createDefaults: { isActive: true },
   },
   users: {
     title: 'Users',

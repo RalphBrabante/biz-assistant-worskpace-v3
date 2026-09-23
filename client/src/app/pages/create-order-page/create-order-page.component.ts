@@ -1,3 +1,5 @@
+import { CountrySelectComponent } from '../../shared/country-select.component';
+import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
 import { CommonModule } from '@angular/common';
@@ -67,7 +69,7 @@ interface WithholdingTaxTypeOption {
 @Component({
   selector: 'app-create-order-page',
   standalone: true,
-  imports: [ModalDirective, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [CountrySelectComponent, ModalDirective, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './create-order-page.component.html',
 })
 export class CreateOrderPageComponent implements OnInit, OnDestroy {
@@ -380,7 +382,7 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
     return {
       name: '', legalName: '', taxId: '', contactPerson: '',
       email: '', phone: '', addressLine1: '', addressLine2: '',
-      city: '', state: '', postalCode: '', country: '',
+      city: '', state: '', postalCode: '', country: getBrowserCountry(),
     };
   }
 

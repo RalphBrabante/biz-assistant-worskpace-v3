@@ -188,7 +188,7 @@ async function createOrganization(req, res) {
       return res.status(400).json({ ok: false, message: 'city is required.' });
     }
     if (!payload.country) {
-      payload.country = 'United States';
+      payload.country = 'Philippines';
     }
     payload.currency = String(payload.currency || 'USD').toUpperCase().slice(0, 3) || 'USD';
     if (!payload.taxTypeId) {

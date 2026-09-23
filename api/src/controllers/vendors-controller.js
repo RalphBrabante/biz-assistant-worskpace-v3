@@ -264,7 +264,7 @@ function csvValue(value) {
 async function importVendors(req, res, next) {
   try {
     const models = getModels();
-    if (!models || !models.Vendor || !models.VendorOrganization) {
+    if (!models || !models.Vendor || !models.VendorOrganization || !models.Organization) {
       return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'Database models are not ready yet.' });
     }
 
@@ -285,6 +285,10 @@ async function importVendors(req, res, next) {
     const organizationId = resolveOrganizationId(req, req.body?.organizationId);
     if (!organizationId) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId could not be resolved from authenticated user.' });
+    }
+
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId does not reference an existing organization.' });
     }
 
     const { Vendor } = models;
@@ -565,8 +569,8 @@ async function createVendor(req, res, next) {
     const payload = cleanUndefined(pickVendorPayload(req.body));
     payload.organizationId = organizationId;
     payload.category = normalizeVendorCategory(payload.category);
-    payload.createdBy = req.auth?.user?.id || payload.createdBy || null;
-    payload.updatedBy = req.auth?.user?.id || payload.updatedBy || null;
+    payload.createdBy = getAuthenticatedUserId(req);
+    payload.updatedBy = getAuthenticatedUserId(req);
 
     if (!payload.name) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'name is required.' });
@@ -583,6 +587,14 @@ async function createVendor(req, res, next) {
     const organizationIds = await resolveAllowedOrganizationIds(req, models, organizationId);
     if (!organizationIds.includes(organizationId)) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not have access to this organization.' });
+    }
+
+    const organizations = await models.Organization.findAll({
+      where: { id: organizationIds },
+      attributes: ['id'],
+    });
+    if (organizations.length !== organizationIds.length) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'One or more selected organizations no longer exist.' });
     }
 
     const taxId = String(payload.taxId || '').trim();

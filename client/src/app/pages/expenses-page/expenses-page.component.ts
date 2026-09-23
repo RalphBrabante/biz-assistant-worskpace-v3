@@ -1,3 +1,5 @@
+import { CountrySelectComponent } from '../../shared/country-select.component';
+import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
@@ -134,7 +136,7 @@ interface ExpenseImportSummary {
 @Component({
   selector: 'app-expenses-page',
   standalone: true,
-  imports: [ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [CountrySelectComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
   templateUrl: './expenses-page.component.html',
 })
 export class ExpensesPageComponent {
@@ -1328,7 +1330,7 @@ export class ExpensesPageComponent {
       barangay: ['', [Validators.maxLength(120)]],
       province: ['', [Validators.maxLength(120)]],
       postalCode: ['', [Validators.maxLength(50)]],
-      country: ['United States', [Validators.maxLength(100)]],
+      country: [getBrowserCountry(), [Validators.maxLength(100)]],
       paymentTerms: ['', [Validators.maxLength(120)]],
       status: ['active', [Validators.required]],
       notes: ['', [Validators.maxLength(2000)]],

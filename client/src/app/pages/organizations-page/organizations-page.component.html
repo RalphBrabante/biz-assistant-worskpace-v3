@@ -151,7 +151,7 @@
           {{ createModalError() }}
         </div>
         <form [formGroup]="createOrganizationForm" (ngSubmit)="createOrganization()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
-          <app-organization-form-fields [form]="createOrganizationForm" [countryOptions]="countryOptions" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onCreateTaxIdInput($event)"></app-organization-form-fields>
+          <app-organization-form-fields [form]="createOrganizationForm" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onCreateTaxIdInput($event)"></app-organization-form-fields>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">
@@ -185,7 +185,7 @@
           {{ editModalError() }}
         </div>
         <form [formGroup]="editOrganizationForm" (ngSubmit)="saveEdit()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
-          <app-organization-form-fields [form]="editOrganizationForm" [countryOptions]="countryOptions" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onEditTaxIdInput($event)"></app-organization-form-fields>
+          <app-organization-form-fields [form]="editOrganizationForm" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onEditTaxIdInput($event)"></app-organization-form-fields>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">

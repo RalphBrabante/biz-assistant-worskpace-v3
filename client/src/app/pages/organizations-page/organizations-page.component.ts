@@ -1,3 +1,4 @@
+import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -79,7 +80,6 @@ export class OrganizationsPageComponent {
   readonly taxTypes = signal<TaxTypeOption[]>([]);
   readonly createModalError = signal('');
   readonly editModalError = signal('');
-  readonly countryOptions = this.buildCountryOptions();
   readonly currencyOptions = this.buildCurrencyOptions();
   private readonly createFieldLabels: Record<string, string> = {
     name: 'Name',
@@ -146,8 +146,8 @@ export class OrganizationsPageComponent {
     return String(this.auth.currentUser()?.currency || 'USD').toUpperCase();
   }
 
-  get currentUserCountry(): string {
-    return String(this.auth.currentUser()?.country || '').trim() || 'United States';
+  get defaultCountry(): string {
+    return getBrowserCountry();
   }
 
   load(): void {
@@ -323,7 +323,7 @@ export class OrganizationsPageComponent {
       city: row.city || '',
       state: row.state || '',
       postalCode: row.postalCode || '',
-      country: row.country || this.currentUserCountry,
+      country: row.country || this.defaultCountry,
       currency: row.currency || this.currentOrganizationCurrency,
       taxTypeId: row.taxTypeId || row.taxType?.id || '',
       taxpayerClassification: row.taxpayerClassification || '',
@@ -517,7 +517,7 @@ export class OrganizationsPageComponent {
       city: '',
       state: '',
       postalCode: '',
-      country: this.currentUserCountry,
+      country: this.defaultCountry,
       currency: this.currentOrganizationCurrency,
       taxTypeId: '',
       taxpayerClassification: '',
@@ -641,34 +641,6 @@ export class OrganizationsPageComponent {
     }
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : undefined;
-  }
-
-  private buildCountryOptions(): string[] {
-    const fallback = ['United States'];
-    try {
-      const intlAny = Intl as unknown as {
-        DisplayNames?: new (locales: string[], options: { type: 'region' }) => Intl.DisplayNames;
-      };
-      if (!intlAny.DisplayNames) {
-        return fallback;
-      }
-      const regionNames = new intlAny.DisplayNames(['en'], { type: 'region' });
-      const names = new Set<string>();
-      for (let first = 65; first <= 90; first += 1) {
-        for (let second = 65; second <= 90; second += 1) {
-          const code = String.fromCharCode(first, second);
-          const value = regionNames.of(code);
-          if (!value || value === code || /unknown region/i.test(value)) {
-            continue;
-          }
-          names.add(value);
-        }
-      }
-      const result = Array.from(names).sort((a, b) => a.localeCompare(b));
-      return result.length > 0 ? result : fallback;
-    } catch (_err) {
-      return fallback;
-    }
   }
 
   private buildCurrencyOptions(): CurrencyOption[] {

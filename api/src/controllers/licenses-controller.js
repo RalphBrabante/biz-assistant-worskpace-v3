@@ -140,14 +140,20 @@ async function notifyOrganizationUsersLicenseRevoked(models, license) {
 
 async function createLicense(req, res) {
   try {
-    const License = getLicenseModel();
-    if (!License) {
+    const models = getModels();
+    const License = models?.License;
+    if (!License || !models.Organization) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
 
     const payload = cleanUndefined(pickLicensePayload(req.body));
     if (!isPrivilegedRequest(req)) {
       payload.organizationId = getAuthenticatedOrganizationId(req);
+    }
+
+    payload.organizationId = String(payload.organizationId || '').trim() || null;
+    if (payload.organizationId && !await models.Organization.findByPk(payload.organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
     }
 
     if (!payload.key) {

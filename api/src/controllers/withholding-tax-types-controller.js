@@ -100,7 +100,7 @@ async function listWithholdingTaxTypes(req, res) {
 async function createWithholdingTaxType(req, res) {
   try {
     const models = getModels();
-    if (!models || !models.WithholdingTaxType) {
+    if (!models || !models.WithholdingTaxType || !models.Organization) {
       return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'Database models are not ready yet.' });
     }
 
@@ -112,6 +112,9 @@ async function createWithholdingTaxType(req, res) {
 
     if (!organizationId) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId is required.' });
+    }
+    if (!await models.Organization.findByPk(organizationId, { attributes: ['id'] })) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId does not reference an existing organization.' });
     }
     if (!payload.code) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'code is required.' });

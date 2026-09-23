@@ -1,3 +1,5 @@
+import { CountrySelectComponent } from '../../shared/country-select.component';
+import { getBrowserCountry } from '../../shared/countries';
 import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -12,7 +14,7 @@ import { RESOURCE_CONFIGS } from '../../shared/resource-configs';
 @Component({
   selector: 'app-resource-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, TooltipDirective],
+  imports: [CountrySelectComponent, CommonModule, FormsModule, TooltipDirective],
   templateUrl: './resource-page.component.html',
 })
 export class ResourcePageComponent {
@@ -237,6 +239,7 @@ export class ResourcePageComponent {
     const initial: Record<string, unknown> = { ...(this.config.createDefaults || {}) };
 
     for (const field of this.config.fields) {
+      if (field.key === 'country') initial[field.key] = getBrowserCountry();
       if (field.type === 'checkbox' && initial[field.key] === undefined) {
         initial[field.key] = false;
       }

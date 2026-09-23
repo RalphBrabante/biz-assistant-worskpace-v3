@@ -21,6 +21,10 @@
         <ng-container *ngIf="!isCheckbox(field)">
           <label class="ui-form-label font-semibold" [for]="field.key">{{ field.label }}</label>
 
+          <app-country-select *ngIf="field.key === 'country'" [inputId]="field.key"
+            [name]="field.key" [required]="!!field.required" [(ngModel)]="form[field.key]">
+          </app-country-select>
+
           <textarea
             *ngIf="isTextArea(field) || isJson(field)"
             class="ui-form-control"
@@ -33,7 +37,7 @@
           ></textarea>
 
           <input
-            *ngIf="!isTextArea(field) && !isJson(field)"
+            *ngIf="field.key !== 'country' && !isTextArea(field) && !isJson(field)"
             class="ui-form-control"
             [type]="inputType(field)"
             [id]="field.key"
