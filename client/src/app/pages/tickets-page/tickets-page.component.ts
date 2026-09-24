@@ -9,7 +9,9 @@ import { ModalDirective } from '../../shared/modal.directive';
 interface Person { id: string; firstName: string; lastName: string; }
 interface Customer { id: string; name: string; }
 interface Ticket { id: string; subject: string; requesterEmail: string; status: string; priority: number; customerId: string | null; assigneeId: string | null; dueAt: string | null; lastMessageAt: string; version: number; mailboxId?: string; gmailThreadId?: string; customer?: Customer; assignee?: Person; }
-interface Message { id: string; kind: string; body: string; sender?: string; createdAt: string; sentAt?: string; deliveryStatus?: string; author?: Person; }
+interface Attachment {id: string; filename: string; contentType: string; size: number; unavailable: boolean;}
+interface Recipients {to: string[]; cc: string[];}
+interface Message { envelope?: {to: string[]; cc: string[]; replyTo: string[]; replyToMessageId?: string; deliveryWarning?: string}; attachments?: Attachment[]; replyRecipients?: Recipients; replyAllRecipients?: Recipients; id: string; kind: string; body: string; sender?: string; createdAt: string; sentAt?: string; deliveryStatus?: string; author?: Person; }
 interface Options { users: Person[]; customers: Customer[]; gmailConfigured: boolean; hostingerConfigured?: boolean; automaticSync?: boolean; mailbox: {provider?: string; email: string; connected: boolean; lastSyncedAt?: string; lastError?: string; importing: boolean} | null; }
 interface Detail {ticket: Ticket; messages: Message[]; hasMore: boolean;}
 @Component({selector: 'app-tickets-page', standalone: true, imports: [CommonModule, FormsModule, ModalDirective], templateUrl: './tickets-page.component.html', styleUrl: './tickets-page.component.css'})
@@ -25,6 +27,17 @@ export class TicketsPageComponent implements OnDestroy {
   selected: Ticket | null = null; messages: Message[] = []; hasMore = false; detailLoading = false;
   editStatus = ''; editPriority = 2; editCustomer = ''; editAssignee = ''; editDue = '';
   compose = ''; composeMode = 'note'; private replyKey = crypto.randomUUID();
+  replyTargetId = ''; files: File[] = []; deliveryUncertain = false;
+  attachmentLoading = ''; previewUrl = ''; previewName = '';
+  refreshingMessage = ''; showActivity = true;
+  get visibleMessages(): Message[] { return this.showActivity ? this.messages : this.messages.filter(message => message.kind !== 'activity'); }
+  get replyTarget(): Message | undefined { return this.messages.find(message => message.id === this.replyTargetId); }
+  get recipients(): Recipients | undefined { return this.composeMode === 'replyAll' ? this.replyTarget?.replyAllRecipients : this.replyTarget?.replyRecipients; }
+  get emailMode(): boolean { return this.composeMode !== 'note'; }
+  get canSendEmail(): boolean { return this.canReply && !!this.selected?.mailboxId && !!this.options.mailbox?.connected; }
+  resetComposer(): void { this.compose = ''; this.files = []; this.replyTargetId = ''; this.deliveryUncertain = false; this.replyKey = crypto.randomUUID(); }
+  closePreview(): void { if (this.previewUrl) URL.revokeObjectURL(this.previewUrl); this.previewUrl = ''; this.previewName = ''; }
+
   hostingerOpen = false; hostingerEmail = ''; hostingerPassword = ''; hostingerProvider = 'hostinger'; hostingerError = '';
   createOpen = false; newSubject = ''; newEmail = ''; newBody = ''; disconnectOpen = false;
   private subscriptions = new Subscription(); private listSub?: Subscription; private detailSub?: Subscription; private optionsSub?: Subscription;
@@ -34,12 +47,13 @@ export class TicketsPageComponent implements OnDestroy {
       this.subscriptions.unsubscribe(); this.subscriptions = new Subscription();
       this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.optionsSub?.unsubscribe();
       this.hostingerOpen = false; this.hostingerEmail = ''; this.hostingerPassword = ''; this.hostingerError = '';
+      this.resetComposer(); this.closePreview(); this.attachmentLoading = ''; this.refreshingMessage = '';
       this.selected = null; this.messages = []; this.rows = []; this.createOpen = false; this.disconnectOpen = false; this.saving = false;
       this.page = 1; this.customer = ''; this.assignee = ''; this.error = ''; this.notice = ''; this.options = {users: [], customers: [], gmailConfigured: false, mailbox: null};
       if (this.organizations.getActiveOrganizationId()) { this.loadOptions(); this.load(); }
     });
   }
-  ngOnDestroy(): void { this.hostingerPassword = ''; this.subscriptions.unsubscribe(); this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.optionsSub?.unsubscribe(); }
+  ngOnDestroy(): void { this.closePreview(); this.hostingerPassword = ''; this.subscriptions.unsubscribe(); this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.optionsSub?.unsubscribe(); }
   get canManage(): boolean { return this.auth.hasPermission('tickets.manage'); }
   get canReply(): boolean { return this.auth.hasPermission('tickets.reply'); }
   private url(path = '', params = new URLSearchParams()): string { params.set('organizationId', this.organizations.getActiveOrganizationId()); return `/api/v1/tickets${path}?${params}`; }
@@ -68,7 +82,7 @@ export class TicketsPageComponent implements OnDestroy {
   changePage(delta: number): void { this.page += delta; this.load(); }
   open(ticket: Ticket): void {
     if (this.saving) return;
-    this.selected = ticket; this.messages = []; this.compose = ''; this.composeMode = this.canManage ? 'note' : 'reply'; this.replyKey = crypto.randomUUID(); this.detailError = ''; this.fetchDetail();
+    this.closePreview(); this.resetComposer(); this.selected = ticket; this.messages = []; this.compose = ''; this.composeMode = this.canManage ? 'note' : 'reply'; this.replyKey = crypto.randomUUID(); this.detailError = ''; this.fetchDetail();
   }
   fetchDetail(older = false): void {
     if (!this.selected) return;
@@ -78,25 +92,82 @@ export class TicketsPageComponent implements OnDestroy {
     this.detailSub = this.api.getFresh<Detail>(this.url(`/${id}`, params)).subscribe({next: response => {
       this.detailLoading = false; const data = response.data; if (!data || this.selected?.id !== id) return;
       this.selected = data.ticket; this.messages = older ? [...data.messages, ...this.messages] : data.messages; this.hasMore = data.hasMore;
+      if (!this.replyTargetId) this.replyTargetId = [...this.messages].reverse().find(message => message.kind === 'inbound')?.id || [...this.messages].reverse().find(message => message.kind === 'outbound')?.id || '';
       this.editStatus = data.ticket.status; this.editPriority = data.ticket.priority; this.editCustomer = data.ticket.customerId || ''; this.editAssignee = data.ticket.assigneeId || '';
       const due = data.ticket.dueAt ? new Date(data.ticket.dueAt) : null;
       this.editDue = due ? new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
     }, error: error => {this.detailLoading = false; this.detailError = error?.error?.message || 'Unable to load this conversation.';}});
   }
-  close(): void { if (!this.saving) {this.detailSub?.unsubscribe(); this.selected = null;} }
+  close(): void { if (!this.saving) {this.detailSub?.unsubscribe(); this.closePreview(); this.resetComposer(); this.selected = null;} }
   save(): void {
     if (!this.selected || this.saving) return; this.saving = true; this.detailError = '';
     this.subscriptions.add(this.api.put(this.url(`/${this.selected.id}`), {version: this.selected.version, status: this.editStatus, priority: this.editPriority, customerId: this.editCustomer || null, assigneeId: this.editAssignee || null, dueAt: this.editDue ? new Date(this.editDue).toISOString() : null}).subscribe({next: () => {this.saving = false; this.fetchDetail(); this.load();}, error: error => {this.saving = false; this.detailError = error?.error?.message || 'Unable to save ticket.';}}));
   }
+  replyTo(message: Message, mode: 'reply' | 'replyAll'): void {
+    if (this.saving || this.deliveryUncertain || !this.canSendEmail) return;
+    this.replyTargetId = message.id; this.composeMode = mode; this.detailError = '';
+    document.getElementById('ticket-compose')?.focus();
+  }
+  addFiles(event: Event): void {
+    if (this.saving || this.deliveryUncertain) return;
+    const input = event.target as HTMLInputElement;
+    const next = [...this.files, ...Array.from(input.files || [])]; input.value = '';
+    if (next.length > 10 || next.reduce((sum, file) => sum + file.size, 0) > 10 * 1024 * 1024) {
+      this.detailError = 'Attach up to 10 files, totaling no more than 10 MB.'; return;
+    }
+    this.files = next; this.detailError = '';
+  }
+  removeFile(index: number): void { if (!this.saving && !this.deliveryUncertain) this.files = this.files.filter((_file, i) => i !== index); }
+  fileSize(size: number): string { return size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`; }
+  canPreview(file: Attachment): boolean { return ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.contentType); }
+  downloadAttachment(message: Message, file: Attachment, preview = false): void {
+    if (!this.selected || this.attachmentLoading) return;
+    const id = this.selected.id; this.attachmentLoading = file.id;
+    this.subscriptions.add(this.api.download(this.url(`/${id}/messages/${message.id}/attachments/${file.id}`)).subscribe({next: blob => {
+      this.attachmentLoading = ''; if (this.selected?.id !== id) return;
+      const url = URL.createObjectURL(new Blob([blob], {type: this.canPreview(file) ? file.contentType : 'application/octet-stream'}));
+      if (preview && this.canPreview(file)) { this.closePreview(); this.previewUrl = url; this.previewName = file.filename; }
+      else { const link = document.createElement('a'); link.href = url; link.download = file.filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    }, error: () => { this.attachmentLoading = ''; if (this.selected?.id === id) this.detailError = 'Unable to download the attachment. Check the mailbox connection or open webmail.'; }}));
+  }
+  loadOriginal(message: Message): void {
+    if (!this.selected || this.refreshingMessage || this.saving) return;
+    const id = this.selected.id; this.refreshingMessage = message.id; this.detailError = '';
+    this.subscriptions.add(this.api.create(this.url(`/${id}/messages/${message.id}/refresh`), {}).subscribe({next: () => {
+      this.refreshingMessage = ''; if (this.selected?.id === id) this.fetchDetail();
+    }, error: error => {this.refreshingMessage = ''; if (this.selected?.id === id) this.detailError = error?.error?.message || 'Unable to load the original email.';}}));
+  }
   submitMessage(): void {
-    if (!this.selected || this.saving || !this.compose.trim()) return;
+    if (!this.selected || this.saving || this.detailLoading || !this.compose.trim()) return;
+    const isReply = this.emailMode;
+    if (isReply ? !this.canSendEmail || !this.recipients : !this.canManage) return;
     this.saving = true; this.detailError = '';
-    const isReply = this.composeMode === 'reply';
-    this.subscriptions.add(this.api.create<{deliveryStatus: string}>(this.url(`/${this.selected.id}/${isReply ? 'replies' : 'notes'}`), {body: this.compose, requestKey: this.replyKey, version: this.selected.version}).subscribe({next: response => {
+    const payload = new FormData();
+    if (isReply) {
+      payload.append('body', this.compose); payload.append('requestKey', this.replyKey);
+      payload.append('version', String(this.selected.version)); payload.append('mode', this.composeMode);
+      payload.append('replyToMessageId', this.replyTargetId);
+      this.files.forEach(file => payload.append('attachments', file, file.name));
+    }
+    const request = isReply
+      ? this.api.createFormData<{deliveryStatus: string; warning?: string}>(this.url(`/${this.selected.id}/replies`), payload)
+      : this.api.create<{deliveryStatus: string; warning?: string}>(this.url(`/${this.selected.id}/notes`), {body: this.compose});
+    this.subscriptions.add(request.subscribe({next: response => {
       this.saving = false;
-      if (isReply && response.data?.deliveryStatus !== 'sent') this.detailError = response.message || 'Check the mailbox Sent folder to confirm delivery.';
-      this.compose = ''; this.replyKey = crypto.randomUUID(); this.fetchDetail(); this.load();
-    }, error: error => {this.saving = false; this.detailError = error?.error?.message || 'Unable to submit. For replies, check Gmail Sent before trying again.';}}));
+      if (isReply && response.data?.deliveryStatus !== 'sent') {
+        this.detailError = response.message || 'Check the mailbox Sent folder to confirm delivery.';
+        this.deliveryUncertain = response.data?.deliveryStatus !== 'failed';
+        if (!this.deliveryUncertain) this.replyKey = crypto.randomUUID();
+      } else {
+        this.resetComposer();
+        if (response.data?.warning) this.detailError = response.data.warning;
+      }
+      this.fetchDetail(); this.load();
+    }, error: error => {
+      this.saving = false;
+      if (isReply && (!error.status || error.status >= 500)) this.deliveryUncertain = true;
+      this.detailError = error?.error?.message || 'Unable to confirm delivery. Check delivery before composing another reply.';
+    }}));
   }
   create(): void {
     if (this.saving) return; this.saving = true; this.error = '';

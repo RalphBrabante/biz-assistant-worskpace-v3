@@ -3,6 +3,7 @@ const {Op, literal} = require('sequelize');
 const {getModels} = require('../sequelize');
 const gmail = require('../services/gmail-tickets');
 const hostinger = require('../services/hostinger-tickets');
+const conversation = require('../services/ticket-conversation');
 const STATUSES = ['open', 'pending', 'resolved', 'closed'];
 const INCLUDE = [{association: 'customer', attributes: ['id', 'name']}, {association: 'assignee', attributes: ['id', 'firstName', 'lastName']}];
 const fail = (status, message) => Object.assign(new Error(message), {status});
@@ -95,8 +96,17 @@ const detail = endpoint(async (req, res) => {
     const beforeId = text(req.query.beforeId, 'conversation cursor', 36);
     where[Op.or] = [{createdAt: {[Op.lt]: before}}, {createdAt: before, id: {[Op.lt]: beforeId}}];
   }
-  const messages = await models.TicketMessage.findAll({where, include: [{association: 'author', attributes: ['firstName', 'lastName']}], order: [['createdAt', 'DESC'], ['id', 'DESC']], limit: 100});
-  return res.json({data: {ticket, messages: messages.reverse(), hasMore: messages.length === 100}});
+  const messages = await models.TicketMessage.findAll({where, include: [{association: 'author', attributes: ['firstName', 'lastName']}, {association: 'attachments', attributes: ['id', 'filename', 'contentType', 'size', 'unavailable']}], order: [['createdAt', 'DESC'], ['id', 'DESC']], limit: 100});
+  const mailbox = ticket.mailboxId && await models.GmailMailbox.findOne({where: {id: ticket.mailboxId, organizationId: ticket.organizationId}});
+  const rows = messages.reverse().map(message => {
+    const row = message.toJSON();
+    if (mailbox && ['inbound', 'outbound'].includes(row.kind)) {
+      try { row.replyRecipients = conversation.recipients(row, ticket, mailbox); } catch {}
+      try { row.replyAllRecipients = conversation.recipients(row, ticket, mailbox, 'replyAll'); } catch {}
+    }
+    return row;
+  });
+  return res.json({data: {ticket, messages: rows, hasMore: messages.length === 100}});
 });
 const create = endpoint(async (req, res) => {
   const models = getModels(), {organizationId} = scope(req), body = req.body || {};
@@ -145,6 +155,9 @@ const note = endpoint(async (req, res) => {
 const reply = endpoint(async (req, res) => {
   const models = getModels(), body = text(req.body.body, 'reply', 50000);
   if (!/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(req.body.requestKey || '')) throw fail(400, 'A valid reply request key is required.');
+  const mode = req.body.mode || 'reply';
+  if (!['reply', 'replyAll'].includes(mode)) throw fail(400, 'Choose reply or reply-all.');
+  const files = conversation.uploads(req.files);
   let ticket, message, alreadyExists = false;
   // Commit the send intent before the external operation. Repeating its key never sends twice.
   await models.EmailTicket.sequelize.transaction(async transaction => {
@@ -152,9 +165,18 @@ const reply = endpoint(async (req, res) => {
     message = await models.TicketMessage.findOne({where: {ticketId: ticket.id, requestKey: req.body.requestKey}, transaction});
     if (message) { alreadyExists = true; return; }
     if (!ticket.mailboxId) throw fail(400, 'Email replies are available for imported email tickets.');
-    if (req.body.version !== ticket.version) throw fail(409, 'This ticket changed. Reopen it before sending.');
+    if (String(req.body.version) !== String(ticket.version)) throw fail(409, 'This ticket changed. Reopen it before sending.');
+    const parent = await models.TicketMessage.findOne({where: {ticketId: ticket.id, organizationId: ticket.organizationId,
+      ...(req.body.replyToMessageId ? {id: text(req.body.replyToMessageId, 'reply target', 36), kind: {[Op.in]: ['inbound', 'outbound']}} : {kind: 'inbound'})}, order: [['sentAt', 'DESC'], ['id', 'DESC']], transaction});
+    if (req.body.replyToMessageId && !parent) throw fail(404, 'The email being replied to was not found in this ticket.');
+    const mailbox = await models.GmailMailbox.findOne({where: {id: ticket.mailboxId, organizationId: ticket.organizationId}, transaction});
+    if (!mailbox) throw fail(400, 'Reconnect the mailbox before sending.');
+    const target = conversation.recipients(parent, ticket, mailbox, mode);
+    const envelope = {...target, replyTo: [], inReplyTo: parent?.internetMessageId || null,
+      references: conversation.messageIds([...(parent?.envelope?.references || []), parent?.internetMessageId || '']), subject: parent?.envelope?.subject || ticket.subject, replyToMessageId: parent?.id || null, mode};
     const internetMessageId = `<${crypto.randomUUID()}@bizassistant.invalid>`;
-    message = await models.TicketMessage.create({organizationId: ticket.organizationId, mailboxId: ticket.mailboxId, ticketId: ticket.id, kind: 'outbound', body, createdBy: req.auth.userId, requestKey: req.body.requestKey, internetMessageId, externalMessageKey: hostinger.messageKey(internetMessageId), deliveryStatus: 'sending'}, {transaction});
+    message = await models.TicketMessage.create({organizationId: ticket.organizationId, mailboxId: ticket.mailboxId, ticketId: ticket.id, kind: 'outbound', body, envelope, createdBy: req.auth.userId, requestKey: req.body.requestKey, internetMessageId, externalMessageKey: hostinger.messageKey(internetMessageId), deliveryStatus: 'sending'}, {transaction});
+    await conversation.saveAttachments(models, message, files, transaction);
     await ticket.update({version: ticket.version + 1}, {transaction});
   });
   if (!alreadyExists) {
@@ -163,15 +185,15 @@ const reply = endpoint(async (req, res) => {
       await models.GmailMailbox.sequelize.transaction(async transaction => {
         const mailbox = await models.GmailMailbox.findOne({where: {id: ticket.mailboxId, organizationId: ticket.organizationId}, transaction, lock: transaction.LOCK.UPDATE});
         if (!mailbox || !(mailbox.provider && mailbox.provider !== 'gmail' ? mailbox.encryptedPassword : mailbox.encryptedRefreshToken)) throw fail(400, 'Reconnect the mailbox before sending.');
-        const parent = await models.TicketMessage.findOne({where: {ticketId: ticket.id, kind: 'inbound'}, order: [['sentAt', 'DESC']], transaction});
+        const mailOptions = {...message.envelope, attachments: files};
         let identity;
         if (mailbox.provider && mailbox.provider !== 'gmail') {
-          const sent = await hostinger.sendReply(mailbox, ticket, message, body, parent?.internetMessageId, () => {sendAttempted = true;});
+          const sent = await hostinger.sendReply(mailbox, ticket, message, body, message.envelope.inReplyTo, () => {sendAttempted = true;}, mailOptions);
           identity = {externalMessageKey: sent.externalMessageKey};
-          if (sent.warning) await mailbox.update({lastError: sent.warning}, {transaction});
+          if (sent.warning) { await mailbox.update({lastError: sent.warning}, {transaction}); await message.update({envelope: {...message.envelope, deliveryWarning: sent.warning}}, {transaction}); }
         } else {
           const token = await gmail.accessToken(mailbox);
-          const raw = await gmail.replyMime({mailbox, ticket, body, internetMessageId: message.internetMessageId, parentId: parent?.internetMessageId});
+          const raw = await gmail.replyMime({mailbox, ticket, body, internetMessageId: message.internetMessageId, parentId: message.envelope.inReplyTo, ...mailOptions});
           sendAttempted = true;
           const sent = await gmail.gmail(token, 'messages/send', {method: 'POST', body: JSON.stringify({threadId: ticket.gmailThreadId, raw: Buffer.from(raw).toString('base64url')})});
           identity = {gmailMessageId: sent.id};
@@ -184,7 +206,51 @@ const reply = endpoint(async (req, res) => {
       await message.update({deliveryStatus: !sendAttempted || (error.httpStatus && error.httpStatus < 500) || (error.responseCode >= 400 && error.responseCode < 600) ? 'failed' : 'unknown'});
     }
   }
-  return res.json({data: {deliveryStatus: message.deliveryStatus}, message: message.deliveryStatus === 'sent' ? 'Reply sent.' : 'Delivery is unconfirmed or failed. Check the mailbox Sent folder before sending another reply.'});
+  return res.json({data: {deliveryStatus: message.deliveryStatus, warning: message.envelope?.deliveryWarning || null}, message: message.deliveryStatus === 'sent' ? 'Reply sent.' : 'Delivery is unconfirmed or failed. Check the mailbox Sent folder before sending another reply.'});
+});
+const refreshMessage = endpoint(async (req, res) => {
+  const models = getModels(), ticket = await ticketFor(models, req);
+  await models.GmailMailbox.sequelize.transaction(async transaction => {
+    const mailbox = await models.GmailMailbox.findOne({where: {id: ticket.mailboxId, organizationId: ticket.organizationId}, transaction, lock: transaction.LOCK.UPDATE});
+    if (!mailbox) throw fail(400, 'Connect the original mailbox to load this email.');
+    const message = await models.TicketMessage.findOne({where: {id: req.params.messageId, ticketId: ticket.id, organizationId: ticket.organizationId, kind: {[Op.in]: ['inbound', 'outbound']}}, transaction, lock: transaction.LOCK.UPDATE});
+    if (!message) throw fail(404, 'Email not found.');
+    if (message.envelope) return;
+    if (mailbox.provider && mailbox.provider !== 'gmail') {
+      if (!mailbox.encryptedPassword) throw fail(400, 'Reconnect the mailbox first.');
+      const parsed = await hostinger.loadOriginal(mailbox, message);
+      await conversation.enrichImap(models, message, parsed, transaction);
+    } else {
+      if (!mailbox.encryptedRefreshToken || !message.gmailMessageId) throw fail(400, 'Reconnect the original Gmail mailbox first.');
+      const token = await gmail.accessToken(mailbox);
+      const original = await gmail.gmail(token, `messages/${encodeURIComponent(message.gmailMessageId)}?format=full`);
+      await gmail.enrichMessage(models, message, original, transaction);
+    }
+    await models.EmailTicket.increment('version', {where: {id: ticket.id, organizationId: ticket.organizationId}, transaction});
+  });
+  return res.json({message: 'Email recipients and attachments loaded.'});
+});
+const attachment = endpoint(async (req, res) => {
+  const models = getModels(), ticket = await ticketFor(models, req);
+  const file = await models.TicketAttachment.unscoped().findOne({where: {id: req.params.attachmentId, messageId: req.params.messageId, ticketId: ticket.id, organizationId: ticket.organizationId}});
+  if (!file) throw fail(404, 'Attachment not found.');
+  if (file.unavailable || file.size > conversation.MAX_ATTACHMENT_BYTES) throw fail(413, 'This attachment exceeds the 10 MB limit. Open webmail to download it.');
+  let content = file.content;
+  if (!content && file.providerAttachmentId) {
+    const message = await models.TicketMessage.findOne({where: {id: file.messageId, ticketId: ticket.id, organizationId: ticket.organizationId}});
+    const mailbox = await models.GmailMailbox.findOne({where: {id: ticket.mailboxId, organizationId: ticket.organizationId}});
+    if (!message?.gmailMessageId || !mailbox?.encryptedRefreshToken) throw fail(400, 'Reconnect the Gmail mailbox to download this attachment.');
+    const token = await gmail.accessToken(mailbox);
+    const data = await gmail.gmail(token, `messages/${encodeURIComponent(message.gmailMessageId)}/attachments/${encodeURIComponent(file.providerAttachmentId)}`);
+    content = Buffer.from(data.data || '', 'base64url');
+    if (content.length > conversation.MAX_ATTACHMENT_BYTES) throw fail(413, 'This attachment exceeds the 10 MB limit.');
+  }
+  if (!content) throw fail(404, 'Attachment content is unavailable. Open webmail to view the original email.');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.attachment(conversation.filename(file.filename));
+  res.type(conversation.contentType(file.contentType));
+  return res.send(content);
 });
 const connect = endpoint(async (req, res) => {
   if (!gmail.configured()) throw fail(400, 'Ask your server administrator to configure Gmail OAuth and the token encryption key.');
@@ -258,4 +324,4 @@ const connectHostinger = endpoint(async (req, res) => {
   });
   return res.json({message: 'Mailbox connected to this organization. Use Sync now to import email, or wait for automatic sync.'});
 });
-module.exports = {connectHostinger, permit, admin, scope, fields, member, list, options, detail, create, update, note, reply, connect, callback, disconnect, sync};
+module.exports = {attachment, refreshMessage, connectHostinger, permit, admin, scope, fields, member, list, options, detail, create, update, note, reply, connect, callback, disconnect, sync};

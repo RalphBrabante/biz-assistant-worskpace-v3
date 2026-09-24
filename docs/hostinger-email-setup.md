@@ -98,3 +98,7 @@ node scripts/verify-email-tickets.js
 ```
 
 The MySQL verification uses fixtures that are rolled back and never sends mail. Live credential verification, IMAP import, and SMTP delivery require an organization administrator to connect a real mailbox using the frontend form.
+
+## Threaded replies and attachments
+
+Apply `20260924020000-add-ticket-conversations.js` before deploying this version. See [conversation, reply-all and attachment behavior](email-tickets-setup.md#conversations-replies-and-files). Incoming To/Cc/Reply-To and thread headers are retained, and attachments from imported messages are stored privately in MySQL. Existing messages can load their original details from Inbox or Sent. Reply attachments allow 10 files totaling 10 MiB; incoming IMAP emails still have a 10 MiB whole-message import limit. Back up the new `ticket_attachments` table with the ticket history.

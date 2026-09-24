@@ -118,7 +118,7 @@ function syncSetup({lastUid = 0, count = 27, failFetch = false} = {}) {
     async fetchOne(uid, fields) {if(failFetch) throw new Error('secret-provider-response');return fields.source ? {source: Buffer.from(String(uid))} : {size: 10, internalDate: new Date(1000)};}
     close() {}
   }
-  const models = {GmailMailbox: {sequelize: {transaction: fn=>fn(tx)}, findByPk: async ()=>mailbox, update: async values=>writes.push(values)}, TicketMessage: {findOne: async ()=>({kind:'inbound'})}};
+  const models = {GmailMailbox: {sequelize: {transaction: fn=>fn(tx)}, findByPk: async ()=>mailbox, update: async values=>writes.push(values)}, TicketMessage: {findOne: async ()=>({kind:'inbound', envelope: {}})}};
   const service = sandbox('../src/services/hostinger-tickets.js', {imapflow:{ImapFlow:Imap}, '../sequelize':{getModels:()=>models}, mailparser:{simpleParser:async source=>({messageId:`<${source.toString()}@example.com>`})}}, {process:{env:{EMAIL_TICKET_ENCRYPTION_KEY:'a'.repeat(64)}}});
   mailbox.encryptedPassword = service.encrypt('password');
   return {service, mailbox, searches, opens, writes};
@@ -136,4 +136,19 @@ test('failed IMAP fetch keeps the checkpoint and hides provider error details', 
   const e = syncSetup({lastUid:5,failFetch:true}); await e.service.syncMailbox('box');
   assert.equal(e.mailbox.imapState.INBOX.lastUid,5); assert.equal(e.writes.length,1);
   assert.match(e.writes[0].lastError,/sync failed/); assert.doesNotMatch(e.writes[0].lastError,/secret-provider-response/);
+});
+
+test('SMTP reply-all uses every visible recipient and preserves partial acceptance warnings', async () => {
+  let envelope, mime;
+  class Imap {on() {} async connect() {} async list() {return [{specialUse: '\\Sent', path: 'Sent'}];} async append() {} close() {}}
+  const service = sandbox('../src/services/hostinger-tickets.js', {
+    imapflow: {ImapFlow: Imap},
+    nodemailer: {createTransport: () => ({sendMail: async options => {envelope = options.envelope; return {accepted: ['client@example.com'], rejected: ['cc@example.com']};}, close() {}})},
+    './gmail-tickets': {...gmail, replyMime: async options => {mime = options; return Buffer.from('email');}},
+  }, {process: {env: {EMAIL_TICKET_ENCRYPTION_KEY: 'a'.repeat(64)}}});
+  const attachments = [{filename: 'file.txt', content: Buffer.from('hello')}];
+  const result = await service.sendReply({...mailboxA, provider: 'hostinger', encryptedPassword: service.encrypt('password')}, {requesterEmail: 'requester@example.com'}, {internetMessageId: '<sent@example.com>'}, 'reply', '<parent@example.com>', () => {}, {to: ['client@example.com'], cc: ['cc@example.com'], references: ['<root@example.com>'], attachments});
+  assert.deepEqual([...envelope.to], ['client@example.com', 'cc@example.com']);
+  assert.equal(mime.attachments, attachments); assert.equal(mime.parentId, '<parent@example.com>');
+  assert.match(result.warning, /Some recipients were rejected/);
 });

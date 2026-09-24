@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const c = require('../controllers/tickets-controller');
+const {uploadTicketAttachments} = require('../middleware/ticket-attachments');
 router.post('/mailbox/hostinger', c.admin, c.connectHostinger);
 router.post('/mailbox/disconnect', c.admin, c.disconnect);
 router.post('/mailbox/sync', c.permit('tickets.manage'), c.sync);
@@ -13,5 +14,7 @@ router.post('/', c.permit('tickets.manage'), c.create);
 router.get('/:id', c.permit('tickets.read'), c.detail);
 router.put('/:id', c.permit('tickets.manage'), c.update);
 router.post('/:id/notes', c.permit('tickets.manage'), c.note);
-router.post('/:id/replies', c.permit('tickets.reply'), c.reply);
+router.post('/:id/replies', c.permit('tickets.reply'), uploadTicketAttachments, c.reply);
+router.post('/:id/messages/:messageId/refresh', c.permit('tickets.read'), c.refreshMessage);
+router.get('/:id/messages/:messageId/attachments/:attachmentId', c.permit('tickets.read'), c.attachment);
 module.exports = router;

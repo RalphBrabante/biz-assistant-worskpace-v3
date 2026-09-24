@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
+const conversation = require('./ticket-conversation');
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
 function encryptionKey() {
   const value = process.env.GMAIL_TOKEN_ENCRYPTION_KEY || '';
@@ -50,7 +51,28 @@ function plainBody(payload, snippet = '') {
   }
   walk(payload);
   // Never render sender-provided HTML or remote images. HTML-only mail uses Gmail's text snippet.
-  return `${texts.join('\n') || snippet || '[No plain-text content. Open in Gmail to view.]'}${attachments.length ? `\n\nAttachments (open in Gmail): ${attachments.join(', ')}` : ''}`.slice(0, 200000);
+  return `${texts.join('\n') || snippet || '[No plain-text content. Open in Gmail to view.]'}${attachments.length ? `\n\nAttachments: ${attachments.join(', ')}` : ''}`.slice(0, 200000);
+}
+function messageEnvelope(message) {
+  return {to: conversation.addresses(header(message, 'To')), cc: conversation.addresses(header(message, 'Cc')), replyTo: conversation.addresses(header(message, 'Reply-To')), references: conversation.messageIds(header(message, 'References')), inReplyTo: conversation.messageIds(header(message, 'In-Reply-To'))[0] || null, subject: header(message, 'Subject').slice(0, 500)};
+}
+async function enrichMessage(models, row, message, transaction) {
+  if (row.envelope) return;
+  const files = [];
+  function walk(part) {
+    if (!part) return;
+    if (part.filename || (part.mimeType && !part.mimeType.startsWith('multipart/') && !['text/plain', 'text/html'].includes(part.mimeType))) {
+      const size = Number(part.body?.size || 0);
+      files.push({filename: conversation.filename(part.filename), contentType: conversation.contentType(part.mimeType), size,
+        content: size <= conversation.MAX_ATTACHMENT_BYTES && part.body?.data ? Buffer.from(part.body.data, 'base64url') : null,
+        providerAttachmentId: part.body?.attachmentId || null, unavailable: size > conversation.MAX_ATTACHMENT_BYTES});
+      return;
+    }
+    for (const child of part.parts || []) walk(child);
+  }
+  walk(message.payload);
+  await conversation.saveAttachments(models, row, files, transaction);
+  await row.update({envelope: messageEnvelope(message)}, {transaction});
 }
 async function importThread(models, mailbox, thread, transaction) {
   const messages = (thread.messages || []).filter(m => !(m.labelIds || []).some(label => ['DRAFT', 'SPAM', 'TRASH'].includes(label))).sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
@@ -67,14 +89,16 @@ async function importThread(models, mailbox, thread, transaction) {
   }
   let changed = false, newInbound = false, latest = new Date(ticket.lastMessageAt || 0);
   for (const message of messages) {
-    if (await models.TicketMessage.findOne({where: {ticketId: ticket.id, gmailMessageId: message.id}, transaction})) continue;
+    const existing = await models.TicketMessage.findOne({where: {ticketId: ticket.id, gmailMessageId: message.id}, transaction});
+    if (existing) { if (!existing.envelope) changed = true; await enrichMessage(models, existing, message, transaction); continue; }
     const internetMessageId = header(message, 'Message-ID').slice(0, 998);
     const pending = internetMessageId && await models.TicketMessage.findOne({where: {ticketId: ticket.id, internetMessageId, kind: 'outbound'}, transaction});
-    if (pending) { await pending.update({gmailMessageId: message.id, deliveryStatus: 'sent', sender: mailbox.email, sentAt: new Date(Number(message.internalDate))}, {transaction}); continue; }
+    if (pending) { if (!pending.envelope) changed = true; await enrichMessage(models, pending, message, transaction); await pending.update({gmailMessageId: message.id, deliveryStatus: 'sent', sender: mailbox.email, sentAt: new Date(Number(message.internalDate))}, {transaction}); continue; }
     const sender = emailAddress(header(message, 'From'));
     const outbound = (message.labelIds || []).includes('SENT') || sender === mailbox.email;
     const sentAt = new Date(Number(message.internalDate));
-    await models.TicketMessage.create({organizationId: mailbox.organizationId, ticketId: ticket.id, kind: outbound ? 'outbound' : 'inbound', body: plainBody(message.payload, message.snippet), sender, gmailMessageId: message.id, internetMessageId, deliveryStatus: 'sent', sentAt, createdAt: sentAt}, {transaction});
+    const row = await models.TicketMessage.create({organizationId: mailbox.organizationId, mailboxId: mailbox.id, ticketId: ticket.id, kind: outbound ? 'outbound' : 'inbound', body: plainBody(message.payload, message.snippet), sender, gmailMessageId: message.id, internetMessageId, deliveryStatus: 'sent', sentAt, createdAt: sentAt}, {transaction});
+    await enrichMessage(models, row, message, transaction);
     changed = true;
     if (!outbound && sentAt > new Date(ticket.lastMessageAt || 0)) newInbound = true;
     if (sentAt > latest) latest = sentAt;
@@ -107,13 +131,13 @@ async function syncMailbox(id) {
     await models.GmailMailbox.update({lastError, ...(error.httpStatus === 400 ? {pageToken: null, syncStartedAt: null} : {})}, {where: {id}});
   }
 }
-async function replyMime({mailbox, ticket, body, internetMessageId, parentId}) {
+async function replyMime({mailbox, ticket, body, internetMessageId, parentId, references = [], to, cc = [], attachments = [], subject}) {
   const MailComposer = require('nodemailer/lib/mail-composer');
   const clean = value => String(value || '').replace(/[\r\n]/g, '');
   // MailComposer folds long Unicode headers and MIME body lines correctly.
-  return new MailComposer({from: clean(mailbox.email), to: clean(ticket.requesterEmail),
-    subject: clean(ticket.subject), text: body, messageId: clean(internetMessageId),
-    ...(parentId ? {inReplyTo: clean(parentId), references: clean(parentId)} : {}),
+  return new MailComposer({from: clean(mailbox.email), to: to || [clean(ticket.requesterEmail)], cc, attachments,
+    subject: clean(subject || ticket.subject), text: body, messageId: clean(internetMessageId),
+    ...(parentId ? {inReplyTo: clean(parentId), references: conversation.messageIds([...references, parentId])} : {}),
     textEncoding: 'base64', disableFileAccess: true, disableUrlAccess: true,
   }).compile().build();
 }
@@ -148,4 +172,4 @@ function startGmailTicketJob() {
   timer = setInterval(tick, 60000); timer.unref(); tick();
 }
 async function stopGmailTicketJob() { clearInterval(timer); timer = null; if (running) await running; await Promise.allSettled([...queued.values()]); }
-module.exports = {SCOPES, configured, encrypt, decrypt, redirectUri, tokenRequest, accessToken, gmail, header, emailAddress, plainBody, importThread, syncMailbox, replyMime, queueSync, startGmailTicketJob, stopGmailTicketJob};
+module.exports = {SCOPES, configured, encrypt, decrypt, redirectUri, tokenRequest, accessToken, gmail, header, emailAddress, plainBody, messageEnvelope, enrichMessage, importThread, syncMailbox, replyMime, queueSync, startGmailTicketJob, stopGmailTicketJob};

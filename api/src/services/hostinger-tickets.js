@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const {Op} = require('sequelize');
 const {getModels} = require('../sequelize');
 const {emailAddress, replyMime} = require('./gmail-tickets');
+const conversation = require('./ticket-conversation');
 const PROVIDERS = Object.freeze({
   hostinger: {imap: 'imap.hostinger.com', smtp: 'smtp.hostinger.com', webmail: 'https://mail.hostinger.com/'},
   titan: {imap: 'imap.titan.email', smtp: 'smtp.titan.email', webmail: 'https://app.titan.email/'},
@@ -60,6 +61,12 @@ async function importMessage(models, mailbox, parsed, source, transaction) {
   const externalMessageKey = messageKey(mid, source.identity);
   const existing = await models.TicketMessage.findOne({where: {mailboxId: mailbox.id, externalMessageKey}, transaction});
   if (existing) {
+    const needsDetails = !existing.envelope;
+    await conversation.enrichImap(models, existing, parsed, transaction);
+    if (needsDetails) {
+      const ticket = await models.EmailTicket.findOne({where: {id: existing.ticketId, organizationId: mailbox.organizationId, mailboxId: mailbox.id}, transaction, lock: transaction.LOCK.UPDATE});
+      if (ticket) await ticket.update({version: ticket.version + 1}, {transaction});
+    }
     if (existing.kind === 'outbound' && existing.deliveryStatus !== 'sent') await existing.update({deliveryStatus: 'sent', sender: mailbox.email, sentAt: source.date}, {transaction});
     return;
   }
@@ -86,10 +93,11 @@ async function importMessage(models, mailbox, parsed, source, transaction) {
     created = true;
   }
   const attachments = (parsed.attachments || []).map(item => item.filename || 'Attachment').join(', ');
-  const body = `${parsed.text || '[No text content. Open webmail to view this email.]'}${attachments ? `\n\nAttachments (open webmail): ${attachments}` : ''}`.slice(0, 200000);
-  await models.TicketMessage.create({organizationId: mailbox.organizationId, mailboxId: mailbox.id, ticketId: ticket.id,
+  const body = `${parsed.text || '[No text content. Open webmail to view this email.]'}${attachments ? `\n\nAttachments: ${attachments}` : ''}`.slice(0, 200000);
+  const row = await models.TicketMessage.create({organizationId: mailbox.organizationId, mailboxId: mailbox.id, ticketId: ticket.id,
     externalMessageKey, internetMessageId: mid, kind: outbound ? 'outbound' : 'inbound', body, sender,
     deliveryStatus: 'sent', sentAt: source.date, createdAt: source.date}, {transaction});
+  await conversation.enrichImap(models, row, parsed, transaction);
   const newer = source.date > new Date(ticket.lastMessageAt || 0);
   await ticket.update({version: ticket.version + 1,
     ...(newer ? {lastMessageAt: source.date} : {}),
@@ -131,7 +139,7 @@ async function syncMailbox(id) {
               const {simpleParser} = require('mailparser');
               const threadHeaders = await simpleParser(headers?.headers || Buffer.alloc(0));
               parsed = {subject: e.subject, messageId: e.messageId, inReplyTo: e.inReplyTo || threadHeaders.inReplyTo, references: threadHeaders.references,
-                from: {value: e.from}, replyTo: {value: e.replyTo}, text: '[Email exceeds the 10 MB import limit. Open webmail to view its contents and attachments.]'};
+                from: {value: e.from}, to: {value: e.to}, cc: {value: e.cc}, replyTo: {value: e.replyTo}, text: '[Email exceeds the 10 MB import limit. Open webmail to view its contents and attachments.]'};
             } else {
               const fetched = await client.fetchOne(uid, {source: true}, {uid: true});
               if (!fetched) continue;
@@ -150,18 +158,43 @@ async function syncMailbox(id) {
     await models.GmailMailbox.update({lastError: 'Mailbox sync failed. Check the mailbox password, provider, and IMAP access, then reconnect or retry.'}, {where: {id}});
   }
 }
-async function sendReply(mailbox, ticket, message, body, parentId, onSending) {
+async function loadOriginal(mailbox, message) {
+  if (!message.internetMessageId) throw Object.assign(new Error('The original message has no email identifier. Open webmail to view it.'), {status: 404});
+  const client = imapClient(mailbox.provider, mailbox.email, decrypt(mailbox.encryptedPassword));
+  try {
+    await client.connect();
+    const folders = await client.list();
+    const sent = folders.find(folder => folder.specialUse === '\\Sent') || folders.find(folder => /^(INBOX[./])?Sent( Items| Mail)?$/i.test(folder.path));
+    for (const folder of ['INBOX', ...(sent && sent.path !== 'INBOX' ? [sent.path] : [])]) {
+      await client.mailboxOpen(folder, {readOnly: true});
+      const uids = await client.search({header: {'Message-ID': message.internetMessageId}}, {uid: true});
+      for (const uid of (uids || []).slice(-5)) {
+        const metadata = await client.fetchOne(uid, {size: true}, {uid: true});
+        if (!metadata) continue;
+        if (metadata.size > conversation.MAX_ATTACHMENT_BYTES) throw Object.assign(new Error('This email exceeds the 10 MB import limit. Open webmail to view it.'), {status: 413});
+        const fetched = await client.fetchOne(uid, {source: true}, {uid: true});
+        if (!fetched) continue;
+        const parsed = await require('mailparser').simpleParser(fetched.source, {skipTextToHtml: true, skipImageLinks: true});
+        if (messageIds(parsed.messageId)[0] === message.internetMessageId) return parsed;
+      }
+    }
+    throw Object.assign(new Error('The original email is no longer in the Inbox or Sent folder.'), {status: 404});
+  } finally { client.close(); }
+}
+async function sendReply(mailbox, ticket, message, body, parentId, onSending, options = {}) {
   const password = decrypt(mailbox.encryptedPassword);
-  const raw = await replyMime({mailbox, ticket, body, internetMessageId: message.internetMessageId, parentId});
+  const raw = await replyMime({mailbox, ticket, body, internetMessageId: message.internetMessageId, parentId, ...options});
   const smtp = smtpClient(mailbox.provider, mailbox.email, password);
+  let deliveryWarning = null;
   try {
     onSending();
-    const result = await smtp.sendMail({envelope: {from: mailbox.email, to: [ticket.requesterEmail]}, raw});
-    if (!result.accepted?.length) throw new Error('Recipient not accepted.');
+    const result = await smtp.sendMail({envelope: {from: mailbox.email, to: [...(options.to || [ticket.requesterEmail]), ...(options.cc || [])]}, raw});
+    if (result.rejected?.length) deliveryWarning = 'Some recipients were rejected by the mail server. Accepted recipients were sent the reply; do not resend to everyone.';
+    if (!result.accepted?.length) throw Object.assign(new Error('Recipient not accepted.'), {responseCode: 550});
   } finally { smtp.close(); }
   // SMTP acceptance is success even if appending the Sent copy fails. Never resend.
   const client = imapClient(mailbox.provider, mailbox.email, password);
-  let warning = null;
+  let warning = deliveryWarning;
   try {
     await client.connect();
     const folders = await client.list();
@@ -172,4 +205,4 @@ async function sendReply(mailbox, ticket, message, body, parentId, onSending) {
   finally { client.close(); }
   return {externalMessageKey: messageKey(message.internetMessageId), warning};
 }
-module.exports = {PROVIDERS, configured, encrypt, decrypt, providerConfig, verifyCredentials, messageKey, messageIds, importMessage, syncMailbox, sendReply};
+module.exports = {PROVIDERS, configured, encrypt, decrypt, providerConfig, verifyCredentials, messageKey, messageIds, importMessage, syncMailbox, loadOriginal, sendReply};

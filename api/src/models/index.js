@@ -1,4 +1,4 @@
-const {EmailTicket, TicketMessage, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
+const {EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
 const { StorageMigration, StorageMigrationItem, initStorageMigrationModels } = require('./storage-migration');
 const { initOrganizationModel, Organization } = require('./organization');
 const { initUserModel, User } = require('./user');
@@ -1383,9 +1383,10 @@ function initModels(sequelize) {
 
   EmailTicket.belongsTo(Customer, {foreignKey: "customerId", as: "customer"});
   EmailTicket.belongsTo(User, {foreignKey: "assigneeId", as: "assignee"});
+  TicketMessage.hasMany(TicketAttachment, {foreignKey: "messageId", as: "attachments"});
   TicketMessage.belongsTo(User, {foreignKey: "createdBy", as: "author"});
   return {
-    EmailTicket, TicketMessage, GmailMailbox, GmailOAuthState,
+    EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState,
     Organization,
     User,
     License,

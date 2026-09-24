@@ -12,13 +12,28 @@ Open **Email tickets** in the sidebar after selecting an organization. Tickets s
 - Search by subject or requester address; sorting by latest conversation, oldest ticket, priority, or due date; paginated lists and conversation history.
 - Private team notes, an activity history for changes to ticket details, and protection against overwriting another teammate's changes.
 - Manual internal tickets and Gmail email threads imported as tickets.
-- Plain-text replies from the connected Gmail account, with delivery status and duplicate-request protection.
+- Reply or reply-all to a selected email, with To/Cc preview, threading headers, attachments, delivery status, and duplicate-request protection.
+- Attachment downloads and image previews inside the conversation; earlier messages and optional ticket activity history.
 
 Each organization has one connected mailbox. The following import behavior describes Gmail; Hostinger behavior is documented in its separate guide. Use a dedicated support address: imported conversations are available to organization members granted ticket access. Initial import scans threads with activity in the last **30 days**, including archived mail; spam, trash, and drafts are excluded. Full conversation history in each matching thread is imported. Threads containing only sent messages do not create new tickets.
 
 New tickets automatically link to a customer only when exactly one active customer in the organization matches the requester's email. Set the customer's email in Customers first. If there are multiple matches, choose the customer manually. Matching uses Reply-To when present, otherwise From. Customer links do not change the email reply recipient.
 
 New inbound messages reopen Pending, Resolved, and Closed tickets. Existing assignment and customer links are preserved.
+
+## Conversations, replies and files
+
+Open a ticket to read its chronological email and note history. **Load earlier messages** pages older history; **Show ticket updates in history** toggles status/assignment activity. Each email has **Reply** and **Reply all** controls. The composer shows the selected email and the exact To/Cc recipients before sending. Reply respects that message's Reply-To (or From); reply-all also includes its visible To/Cc recipients, deduplicated, excluding the connected mailbox. Replies to sent messages use their original recipients. Selecting a different customer does not change recipients.
+
+Threading retains the parent Message-ID and References chain. Gmail also receives the original thread ID and matching subject, following its [threading requirements](https://developers.google.com/workspace/gmail/api/guides/threads). Hostinger/Titan use the same headers through SMTP. Unrelated messages are never grouped by subject alone.
+
+Attach up to **10 files totaling 10 MiB** per email reply. Files are stored with the outgoing message before delivery. Private notes do not send attachments. Downloads require ticket read access and verify the organization, ticket, message, and attachment IDs. File content is excluded from conversation responses and never exposed under public `/uploads` URLs. Downloads use attachment disposition; sender HTML and remote images are not rendered.
+
+Imported Hostinger files and sent attachments live in `ticket_attachments` in MySQL, so include this table in database backups and capacity planning. Gmail attachment bodies are downloaded through the authenticated [Gmail attachment endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages.attachments/get) when needed; the original message and connected mailbox must remain available. Individual downloads are limited to 10 MiB. Hostinger's existing 10 MiB whole-email import limit still applies, including MIME encoding overhead; larger emails remain accessible in webmail.
+
+For messages imported before this release, use **Load email details and attachments** on the message. Gmail retrieves the original by its saved ID; Hostinger/Titan searches Inbox and Sent by Message-ID. Deleted/moved originals or oversized IMAP emails may require webmail. Reply-all stays unavailable until the original recipient metadata has been retrieved.
+
+If delivery is uncertain, the draft and files stay in the composer. **Check delivery** reuses the same request key; it does not create a second send intent. Sync can reconcile a matching Sent message. SMTP acceptance with a failed Sent-folder copy or partially rejected recipients is displayed as a warning; do not resend to everyone. A confirmed failed send preserves the draft for a deliberate retry.
 
 ## 1. Install the feature
 
@@ -36,7 +51,7 @@ Build the client using the normal project build command. For the Docker developm
 docker compose exec biz-assitant-api npm run db:migrate
 ```
 
-The new migration is `20260924000000-create-email-tickets.js`. It adds `email_tickets`, `ticket_messages`, `gmail_mailboxes`, `gmail_oauth_states`, and three ticket permissions. It does not import email until you connect a mailbox. Existing customer records are reused.
+The initial migration is `20260924000000-create-email-tickets.js`. It adds `email_tickets`, `ticket_messages`, `gmail_mailboxes`, `gmail_oauth_states`, and three ticket permissions. It does not import email until you connect a mailbox. Existing customer records are reused. Apply `20260924020000-add-ticket-conversations.js` for recipient/thread metadata and the private `ticket_attachments` table before deploying the conversation UI.
 
 For Hostinger, configure the environment variables below in the server environment and redeploy using the existing [Hostinger deployment guide](../README-HOSTINGER.md). For Docker, the base, production, and staging Compose definitions pass these variables to the API. Recreate the API container after changing environment variables; a process restart alone does not change a container's environment.
 
@@ -129,7 +144,7 @@ If another user or Gmail sync changes a ticket while you edit it, reload the tic
 - **Partial import:** let subsequent cycles finish. The cursor is stored in the database and survives restarts. A successful cycle uses a five-minute overlap to catch recent delivery while deduplicating messages.
 - **Reply shows sending/unknown:** an interrupted request can leave delivery uncertain. Check Gmail Sent before composing another reply. Retrying the same request key never sends twice; sync reconciles sent messages using their Message-ID. The app does not automatically resend uncertain messages.
 - **Disconnect:** removes the stored refresh token and stops sending/importing; tickets remain. To revoke Google's grant too, remove the app from your Google Account's third-party connections. Reconnection must use the same email address to preserve thread identity. Moving/replacing mailboxes is not supported by this version.
-- **Rendering and attachments:** conversations show plain text. HTML-only mail uses Gmail's text preview. Attachment names are shown; view/download attachments and full HTML in Gmail. Reply attachments, CC/BCC, rich text, and Gmail label management are not implemented.
+- **Rendering and attachments:** conversations show plain text; HTML-only Gmail messages use its text preview. Files can be downloaded and PNG/JPEG/GIF/WebP images previewed. Reply-all retains To/Cc and excludes the connected mailbox and Bcc. Rich text, arbitrary recipient editing, Bcc sending, and Gmail label management are not implemented.
 - **Manual tickets:** support internal tracking and notes; email replies are available only on imported email conversations.
 - **Retention:** imported messages remain in the application even if the original email is removed in Gmail. Restrict database access/backups and apply your organization's retention process. There is no automatic ticket deletion in this version.
 
