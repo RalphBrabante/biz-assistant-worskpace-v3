@@ -71,7 +71,10 @@
               </div>
             </button>
             <!-- No results + Create button -->
-            <div *ngIf="customerResults.length === 0 && !searchingCustomers" class="px-4 py-2 text-center">
+            <div *ngIf="customerSearchFailed" class="px-4 py-2 text-danger text-xs text-center" role="alert">
+              Unable to search customers. <button type="button" class="ui-btn ui-btn-sm ui-btn-link" (click)="onCustomerSearchInput(customerSearchQuery)">Retry</button>
+            </div>
+            <div *ngIf="!customerSearchFailed && customerResults.length === 0 && !searchingCustomers" class="px-4 py-2 text-center">
               <div class="text-xs text-muted mb-2">No customers found for "{{ customerSearchQuery.trim() }}"</div>
               <button type="button" class="ui-btn ui-btn-sm ui-btn-primary" (mousedown)="openCustomerCreateModal()">
                 <i class="bi bi-person-plus mr-1"></i>Create New Customer

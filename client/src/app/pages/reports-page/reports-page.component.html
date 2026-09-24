@@ -464,30 +464,15 @@
   </div>
 
 
-  <div class="px-6 pb-4">
-    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
-      <div class="col-span-6 md:col-span-2">
-        <label class="ui-form-label font-semibold">Rows</label>
-        <select class="ui-form-select" [ngModel]="salesPageSize" (ngModelChange)="onSalesPageSizeChange($event)">
-          <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
-        </select>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Saved</div>
-          <div class="stat-value">{{ salesTotal }}</div>
-        </div>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Page</div>
-          <div class="stat-value">{{ salesPage }} / {{ salesTotalPages }}</div>
-        </div>
-      </div>
-    </div>
+  <div class="report-table-toolbar">
+    <label>Rows <select class="ui-form-select" aria-label="Rows per page for sales reports" [ngModel]="salesPageSize" (ngModelChange)="onSalesPageSizeChange($event)">
+      <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+    </select></label>
+    <span>Saved <strong>{{ salesTotal }}</strong></span>
+    <span>Page <strong>{{ salesPage }} / {{ salesTotalPages }}</strong></span>
   </div>
 
-  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+  <div class="ui-table-responsive table-view-wrapper report-table-scroll" tabindex="0" role="region" aria-label="Scrollable report table" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
@@ -496,10 +481,10 @@
           <th>Quarter</th>
           <th>Period</th>
           <th>Invoices</th>
-          <th>Subtotal</th>
-          <th>Tax</th>
-          <th>Discount</th>
-          <th>Total</th>
+          <th class="report-number">Subtotal</th>
+          <th class="report-number">Tax</th>
+          <th class="report-number">Discount</th>
+          <th class="report-number">Total</th>
           <th>Generated</th>
           <th class="text-right">Actions</th>
         </tr>
@@ -509,16 +494,16 @@
           <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No sales reports found.</td>
         </tr>
         <tr *ngFor="let row of salesRows(); trackBy: trackById">
-          <td *ngIf="isSuperuser" class="text-xs">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
+          <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
           <td>{{ row.year }}</td>
           <td><span class="ui-badge rounded-full ui-badge-primary">{{ quarterLabel(row.quarter) }}</span></td>
-          <td>{{ row.periodStart }} to {{ row.periodEnd }}</td>
+          <td><span class="report-date">{{ row.periodStart | date: 'MMM d, y' }}</span><span class="report-date-secondary">to {{ row.periodEnd | date: 'MMM d, y' }}</span></td>
           <td>{{ row.invoiceCount }}</td>
-          <td>{{ toCurrency(row.subtotalAmount, row.currency) }}</td>
-          <td>{{ toCurrency(row.taxAmount, row.currency) }}</td>
-          <td>{{ toCurrency(row.discountAmount, row.currency) }}</td>
-          <td class="font-semibold">{{ toCurrency(row.totalAmount, row.currency) }}</td>
-          <td>{{ row.generatedAt | date : 'medium' }}</td>
+          <td class="report-number">{{ toCurrency(row.subtotalAmount, row.currency) }}</td>
+          <td class="report-number">{{ toCurrency(row.taxAmount, row.currency) }}</td>
+          <td class="report-number">{{ toCurrency(row.discountAmount, row.currency) }}</td>
+          <td class="font-semibold report-number">{{ toCurrency(row.totalAmount, row.currency) }}</td>
+          <td><span class="report-date">{{ row.generatedAt | date: 'mediumDate' }}</span><span class="report-date-secondary">{{ row.generatedAt | date: 'shortTime' }}</span></td>
           <td class="text-right">
             <div class="table-actions-inline">
               <a
@@ -584,30 +569,15 @@
   </div>
 
 
-  <div class="px-6 pb-4">
-    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
-      <div class="col-span-6 md:col-span-2">
-        <label class="ui-form-label font-semibold">Rows</label>
-        <select class="ui-form-select" [ngModel]="expensePageSize" (ngModelChange)="onExpensePageSizeChange($event)">
-          <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
-        </select>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Saved</div>
-          <div class="stat-value">{{ expenseTotal }}</div>
-        </div>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Page</div>
-          <div class="stat-value">{{ expensePage }} / {{ expenseTotalPages }}</div>
-        </div>
-      </div>
-    </div>
+  <div class="report-table-toolbar">
+    <label>Rows <select class="ui-form-select" aria-label="Rows per page for expense reports" [ngModel]="expensePageSize" (ngModelChange)="onExpensePageSizeChange($event)">
+      <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+    </select></label>
+    <span>Saved <strong>{{ expenseTotal }}</strong></span>
+    <span>Page <strong>{{ expensePage }} / {{ expenseTotalPages }}</strong></span>
   </div>
 
-  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+  <div class="ui-table-responsive table-view-wrapper report-table-scroll" tabindex="0" role="region" aria-label="Scrollable report table" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
@@ -616,10 +586,10 @@
           <th>Quarter</th>
           <th>Period</th>
           <th>Expenses</th>
-          <th>Amount</th>
-          <th>Tax</th>
-          <th>Discount</th>
-          <th>Total</th>
+          <th class="report-number">Amount</th>
+          <th class="report-number">Tax</th>
+          <th class="report-number">Discount</th>
+          <th class="report-number">Total</th>
           <th>Generated</th>
           <th class="text-right">Actions</th>
         </tr>
@@ -629,15 +599,15 @@
           <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No expense reports found.</td>
         </tr>
         <tr *ngFor="let row of expenseRows(); trackBy: trackById">
-          <td *ngIf="isSuperuser" class="text-xs">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
+          <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
           <td>{{ row.year }}</td>
           <td><span class="ui-badge rounded-full ui-badge-warning">{{ quarterLabel(row.quarter) }}</span></td>
-          <td>{{ row.periodStart }} to {{ row.periodEnd }}</td>
+          <td><span class="report-date">{{ row.periodStart | date: 'MMM d, y' }}</span><span class="report-date-secondary">to {{ row.periodEnd | date: 'MMM d, y' }}</span></td>
           <td>{{ row.expenseCount }}</td>
-          <td>{{ toCurrency(row.amount, row.currency) }}</td>
-          <td>{{ toCurrency(row.taxAmount, row.currency) }}</td>
-          <td>{{ toCurrency(row.discountAmount, row.currency) }}</td>
-          <td class="font-semibold">
+          <td class="report-number">{{ toCurrency(row.amount, row.currency) }}</td>
+          <td class="report-number">{{ toCurrency(row.taxAmount, row.currency) }}</td>
+          <td class="report-number">{{ toCurrency(row.discountAmount, row.currency) }}</td>
+          <td class="font-semibold report-number">
             <span class="inline-flex items-center gap-1">
               {{ toCurrency(row.totalAmount, row.currency) }}
               <i
@@ -648,7 +618,7 @@
               ></i>
             </span>
           </td>
-          <td>{{ row.generatedAt | date : 'medium' }}</td>
+          <td><span class="report-date">{{ row.generatedAt | date: 'mediumDate' }}</span><span class="report-date-secondary">{{ row.generatedAt | date: 'shortTime' }}</span></td>
           <td class="text-right">
             <div class="table-actions-inline">
               <a

@@ -239,6 +239,7 @@ interface BirFilingSummary {
   standalone: true,
   imports: [OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './reports-page.component.html',
+  styleUrl: '../../shared/report-tables.css',
 })
 export class ReportsPageComponent {
   private readonly api: ApiService;

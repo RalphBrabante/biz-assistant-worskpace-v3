@@ -7,7 +7,8 @@ import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Subject, Subscription, of } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, switchMap, map } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
+import { latestSearch } from '../../core/latest-search';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
@@ -98,6 +99,7 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
   customerResults: CustomerRow[] = [];
   selectedCustomer: CustomerRow | null = null;
   searchingCustomers = false;
+  customerSearchFailed = false;
   customerDropdownOpen = false;
   isCustomerCreateModalOpen = false;
   creatingCustomer = false;
@@ -207,16 +209,12 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
   }
 
   private setupCustomerSearch(): void {
-    const orgId = this.currentOrganizationId.trim();
     this.customerSearchSub = this.customerSearchInput$.pipe(
-      debounceTime(300),
-      distinctUntilChanged(),
-      switchMap((query) => {
-        const q = query.trim();
-        if (!q || q.length < 1 || !orgId) {
+      latestSearch((q) => {
+        const orgId = this.currentOrganizationId.trim();
+        if (!orgId) {
           return of([]);
         }
-        this.searchingCustomers = true;
         const params = new URLSearchParams({
           organizationId: orgId,
           q,
@@ -224,14 +222,14 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
           limit: '15',
         });
         return this.api.list<CustomerRow>(`/api/v1/customers?${params.toString()}`).pipe(
-          map((res) => (res.data || []).filter((r) => r.isActive !== false)),
-          catchError(() => of([]))
+          map((res) => (res.data || []).filter((r) => r.isActive !== false))
         );
-      })
-    ).subscribe((results) => {
-      this.searchingCustomers = false;
-      this.customerResults = results;
-      this.customerDropdownOpen = results.length > 0;
+      }, 300, 1)
+    ).subscribe((state) => {
+      this.searchingCustomers = state.status === 'loading';
+      this.customerSearchFailed = state.status === 'error';
+      this.customerResults = state.results;
+      this.customerDropdownOpen = state.status === 'success' || state.status === 'error';
     });
   }
 
@@ -293,15 +291,11 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
 
   onCustomerSearchInput(value: string): void {
     this.customerSearchQuery = value;
-    if (!value.trim()) {
-      this.customerResults = [];
-      this.customerDropdownOpen = false;
-      return;
-    }
     this.customerSearchInput$.next(value);
   }
 
   selectCustomer(customer: CustomerRow): void {
+    this.customerSearchInput$.next('');
     this.selectedCustomer = customer;
     this.customerSearchQuery = customer.name;
     this.customerDropdownOpen = false;
@@ -309,6 +303,7 @@ export class CreateOrderPageComponent implements OnInit, OnDestroy {
   }
 
   clearCustomer(): void {
+    this.customerSearchInput$.next('');
     this.selectedCustomer = null;
     this.customerSearchQuery = '';
     this.customerResults = [];

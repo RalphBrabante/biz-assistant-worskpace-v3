@@ -370,7 +370,11 @@
                   </div>
 
                   <!-- No results -->
-                  <div *ngIf="vendors().length === 0 && vendorSearch().trim().length >= 2" class="px-4 py-4 text-muted text-xs text-center">
+                  <div *ngIf="vendorSearchFailed()" class="px-4 py-4 text-danger text-xs text-center" role="alert">
+                    Unable to search vendors. Please try again.
+                    <button type="button" class="ui-btn ui-btn-sm ui-btn-link" (mousedown)="$event.preventDefault()" (click)="onVendorSearchChange(vendorSearch())">Retry</button>
+                  </div>
+                  <div *ngIf="!vendorSearchFailed() && vendors().length === 0 && vendorSearch().trim().length >= 2" class="px-4 py-4 text-muted text-xs text-center">
                     No vendors found for "{{ vendorSearch().trim() }}"
                   </div>
                   <div *ngIf="vendorSearch().trim().length < 2" class="px-4 py-4 text-muted text-xs text-center">

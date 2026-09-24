@@ -79,7 +79,10 @@
           <div class="ui-list-group mt-1 shadow-panel" *ngIf="vendorFilterSearch.trim() && vendorFilterResults().length > 0">
             <button type="button" class="ui-list-group-item ui-list-group-item-action text-xs" *ngFor="let vendor of vendorFilterResults()" (click)="selectVendorFilter(vendor)">{{ vendorOptionLabel(vendor) }}</button>
           </div>
-          <div class="ui-form-text text-danger" *ngIf="vendorFilterSearch.trim().length >= 2 && !loadingVendorFilter() && vendorFilterResults().length === 0">No vendors found.</div>
+          <div *ngIf="vendorFilterSearchFailed()" class="ui-form-text text-danger" role="alert">
+            Unable to search vendors. <button type="button" class="ui-btn ui-btn-sm ui-btn-link" (click)="onVendorFilterSearchChange(vendorFilterSearch)">Retry</button>
+          </div>
+          <div class="ui-form-text text-danger" *ngIf="vendorFilterSearch.trim().length >= 2 && !vendorFilterSearchFailed() && !loadingVendorFilter() && vendorFilterResults().length === 0">No vendors found.</div>
         </ng-template>
       </div>
     </div>
@@ -455,7 +458,10 @@
                 </button>
               </div>
               <div class="ui-form-text" *ngIf="loadingEditVendors()">Loading vendors...</div>
-              <div class="ui-form-text text-danger" *ngIf="editVendorSearch.trim() && !loadingEditVendors() && editVendors().length === 0">
+              <div *ngIf="editVendorSearchFailed()" class="ui-form-text text-danger" role="alert">
+                Unable to search vendors. <button type="button" class="ui-btn ui-btn-sm ui-btn-link" (click)="onEditVendorSearchChange(editVendorSearch)">Retry</button>
+              </div>
+              <div class="ui-form-text text-danger" *ngIf="editVendorSearch.trim().length >= 2 && !editVendorSearchFailed() && !loadingEditVendors() && editVendors().length === 0">
                 No vendors found.
               </div>
             </ng-template>

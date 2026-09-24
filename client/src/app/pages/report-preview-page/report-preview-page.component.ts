@@ -74,6 +74,7 @@ interface PreviewResponse {
   standalone: true,
   imports: [CommonModule, RouterLink],
   templateUrl: './report-preview-page.component.html',
+  styleUrl: '../../shared/report-tables.css',
 })
 export class ReportPreviewPageComponent {
   private readonly route = inject(ActivatedRoute);

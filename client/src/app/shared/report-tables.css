@@ -1,0 +1,15 @@
+:host { display: block; min-width: 0; }
+.report-table-scroll { max-width: 100%; }
+.report-table-scroll:not(.table-card-view) .ui-table { min-width: 76rem; }
+.report-table-scroll:not(.table-card-view) th,
+.report-table-scroll:not(.table-card-view) td { white-space: nowrap; }
+.report-table-scroll:not(.table-card-view) .report-organization { min-width: 10rem; max-width: 16rem; white-space: normal; overflow-wrap: anywhere; }
+.report-table-scroll .report-date { display: block; white-space: nowrap; }
+.report-table-scroll .report-date-secondary { display: block; white-space: nowrap; font-size: .75rem; color: var(--text-soft); margin-top: .25rem; }
+.report-table-scroll:not(.table-card-view) .report-number { text-align: right; font-variant-numeric: tabular-nums; }
+.report-table-scroll .table-actions-inline { flex-wrap: nowrap; }
+.report-table-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; padding: 0 1.5rem 1rem; color: var(--text-soft); font-size: .8rem; }
+.report-table-toolbar label { display: flex; align-items: center; gap: .6rem; }
+.report-table-toolbar select { width: 5.5rem; }
+.report-table-toolbar strong { color: var(--text-main); font-variant-numeric: tabular-nums; }
+.report-invoices-table { min-width: 96rem !important; }

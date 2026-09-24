@@ -9,7 +9,8 @@ import { FormsModule } from '@angular/forms';
 import { AbstractControl, FormBuilder, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, Subscription, of } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
+import { latestSearch } from '../../core/latest-search';
 import { computeExpenseAmounts, isVatTaxType } from '../../core/expense-calculation';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -158,6 +159,7 @@ export class ExpensesPageComponent {
   readonly exporting = signal(false);
   readonly loadingTransferTargets = signal(false);
   readonly loadingVendors = signal(false);
+  readonly vendorSearchFailed = signal(false);
   readonly vendors = signal<VendorOption[]>([]);
   readonly withholdingTaxTypes = signal<WithholdingTaxTypeOption[]>([]);
   readonly transferTargetOrganizations = signal<OrganizationOption[]>([]);
@@ -269,42 +271,27 @@ export class ExpensesPageComponent {
     this.loadOrganizationTaxInfo();
     this.load();
     this.vendorSearchSub = this.vendorSearchInput$
-      .pipe(debounceTime(350), distinctUntilChanged())
       .pipe(
-        switchMap((value) => {
+        latestSearch((query) => {
           if (!this.currentOrganizationId) {
-            this.loadingVendors.set(false);
             return of([] as VendorOption[]);
           }
-
-          const cleaned = String(value || '').trim();
-          if (cleaned.length > 0 && cleaned.length < 2) {
-            this.loadingVendors.set(false);
-            return of([] as VendorOption[]);
-          }
-
-          this.loadingVendors.set(true);
           const params = new URLSearchParams({
             limit: '20',
             activeOnly: 'true',
             includeShared: 'true',
+            organizationId: this.currentOrganizationId,
+            q: query,
           });
-          if (this.currentOrganizationId) {
-            params.set('organizationId', this.currentOrganizationId);
-          }
-          if (cleaned) {
-            params.set('q', cleaned);
-          }
-
           return this.api.list<VendorOption>(`/api/v1/vendors?${params.toString()}`).pipe(
-            map((response: ApiResponse<VendorOption[]>) => response.data || []),
-            catchError(() => of([] as VendorOption[]))
+            map((response: ApiResponse<VendorOption[]>) => response.data || [])
           );
-        })
+        }, 350)
       )
-      .subscribe((vendors) => {
-        this.loadingVendors.set(false);
-        this.vendors.set(vendors);
+      .subscribe((state) => {
+        this.loadingVendors.set(state.status === 'loading');
+        this.vendorSearchFailed.set(state.status === 'error');
+        this.vendors.set(state.results);
       });
   }
 
@@ -441,6 +428,7 @@ export class ExpensesPageComponent {
   openCreateModal(): void {
     if (this.isContextLocked) return;
     this.editingId = '';
+    this.vendorSearchInput$.next('');
     this.createExpenseForm = this.newCreateExpenseForm();
     this.setupExpenseAutoCompute();
     this.loadWithholdingTaxTypes();
@@ -461,6 +449,7 @@ export class ExpensesPageComponent {
   }
 
   closeCreateModal(): void {
+    this.vendorSearchInput$.next('');
     this.isCreateModalOpen.set(false);
     this.vendorSearch.set('');
     this.selectedCreateVendor.set(null);
@@ -565,6 +554,7 @@ export class ExpensesPageComponent {
 
   startEdit(row: ExpenseRow): void {
     if (this.isContextLocked) return;
+    this.vendorSearchInput$.next('');
     this.editingId = row.id;
     this.createFile = null;
     this.createFileName.set('');
@@ -966,11 +956,7 @@ export class ExpensesPageComponent {
     if (this.isContextLocked) return;
     const query = String(value || '');
     this.vendorSearch.set(query);
-    if (!query.trim()) {
-      this.vendors.set([]);
-      this.loadingVendors.set(false);
-      return;
-    }
+    this.vendorDropdownOpen.set(true);
     this.vendorSearchInput$.next(query);
   }
 
@@ -980,6 +966,8 @@ export class ExpensesPageComponent {
 
   selectVendor(vendor: VendorOption): void {
     if (this.isContextLocked) return;
+    this.vendorSearchInput$.next('');
+    this.vendorDropdownOpen.set(false);
     this.selectedCreateVendor.set(vendor);
     this.createExpenseForm.patchValue({
       vendorId: vendor.id,
@@ -993,6 +981,7 @@ export class ExpensesPageComponent {
 
   clearSelectedVendor(): void {
     if (this.isContextLocked) return;
+    this.vendorSearchInput$.next('');
     this.selectedCreateVendor.set(null);
     this.createExpenseForm.patchValue({
       vendorId: '',

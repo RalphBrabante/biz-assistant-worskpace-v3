@@ -5,7 +5,8 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AbstractControl, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, Subscription, catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { Subject, Subscription, map, of } from 'rxjs';
+import { latestSearch } from '../../core/latest-search';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
@@ -88,9 +89,11 @@ export class ItemsPageComponent {
   readonly organizations = signal<OrganizationOption[]>([]);
   readonly vendorFilterResults = signal<VendorOption[]>([]);
   readonly loadingVendorFilter = signal(false);
+  readonly vendorFilterSearchFailed = signal(false);
   readonly selectedVendorFilter = signal<VendorOption | null>(null);
   readonly editVendors = signal<VendorOption[]>([]);
   readonly loadingEditVendors = signal(false);
+  readonly editVendorSearchFailed = signal(false);
   readonly selectedEditVendor = signal<VendorOption | null>(null);
 
   readonly message = signal('');
@@ -178,60 +181,39 @@ export class ItemsPageComponent {
 
     this.vendorFilterSearchSub = this.vendorFilterSearchInput$
       .pipe(
-        debounceTime(250),
-        distinctUntilChanged(),
-        switchMap((query) => {
-          const trimmed = query.trim();
-          const organizationId = this.currentOrganizationId;
-          if (!trimmed || trimmed.length < 2) {
-            this.loadingVendorFilter.set(false);
-            return of([] as VendorOption[]);
+        latestSearch((query) => {
+          const params = new URLSearchParams({ q: query, limit: '10' });
+          if (this.currentOrganizationId) {
+            params.set('organizationId', this.currentOrganizationId);
           }
-          const params = new URLSearchParams({
-            q: trimmed,
-            limit: '10',
-          });
-          if (organizationId) {
-            params.set('organizationId', organizationId);
-          }
-          this.loadingVendorFilter.set(true);
           return this.api.list<VendorOption>(`/api/v1/vendors?${params.toString()}`).pipe(
-            switchMap((response) => of(response.data || [])),
-            catchError(() => of([] as VendorOption[]))
+            map((response) => response.data || [])
           );
-        })
+        }, 250)
       )
-      .subscribe((vendors) => {
-        this.loadingVendorFilter.set(false);
-        this.vendorFilterResults.set(vendors);
+      .subscribe((state) => {
+        this.loadingVendorFilter.set(state.status === 'loading');
+        this.vendorFilterSearchFailed.set(state.status === 'error');
+        this.vendorFilterResults.set(state.results);
       });
 
     this.editVendorSearchSub = this.editVendorSearchInput$
       .pipe(
-        debounceTime(250),
-        distinctUntilChanged(),
-        switchMap((query) => {
-          const trimmed = query.trim();
+        latestSearch((query) => {
           const organizationId = String(this.editForm['organizationId'] || '').trim() || this.currentOrganizationId;
-          if (!trimmed || trimmed.length < 2 || !organizationId) {
-            this.loadingEditVendors.set(false);
+          if (!organizationId) {
             return of([] as VendorOption[]);
           }
-          const params = new URLSearchParams({
-            q: trimmed,
-            limit: '10',
-            organizationId,
-          });
-          this.loadingEditVendors.set(true);
+          const params = new URLSearchParams({ q: query, limit: '10', organizationId });
           return this.api.list<VendorOption>(`/api/v1/vendors?${params.toString()}`).pipe(
-            switchMap((response) => of(response.data || [])),
-            catchError(() => of([] as VendorOption[]))
+            map((response) => response.data || [])
           );
-        })
+        }, 250)
       )
-      .subscribe((vendors) => {
-        this.loadingEditVendors.set(false);
-        this.editVendors.set(vendors);
+      .subscribe((state) => {
+        this.loadingEditVendors.set(state.status === 'loading');
+        this.editVendorSearchFailed.set(state.status === 'error');
+        this.editVendors.set(state.results);
       });
 
     this.load();
@@ -257,6 +239,7 @@ export class ItemsPageComponent {
     const q = this.filter().trim();
     const currentScope = this.currentOrganizationId || (this.isSuperuser ? '__all__' : '');
     if (currentScope !== this.lastVendorScope) {
+      this.vendorFilterSearchInput$.next('');
       this.lastVendorScope = currentScope;
       this.vendorFilter = '';
       this.vendorFilterSearch = '';
@@ -406,6 +389,7 @@ export class ItemsPageComponent {
 
   openEditModal(row: ItemRow): void {
     if (this.isContextLocked) return;
+    this.editVendorSearchInput$.next('');
     this.editingId = row.id;
     this.editForm = {
       organizationId: row.organizationId || '',
@@ -434,6 +418,7 @@ export class ItemsPageComponent {
   }
 
   closeEditModal(): void {
+    this.editVendorSearchInput$.next('');
     this.editingId = '';
     this.editForm = this.newItemForm();
     this.editVendorSearch = '';
@@ -654,23 +639,16 @@ export class ItemsPageComponent {
       this.selectedVendorFilter.set(null);
       this.vendorFilter = '';
     }
+    this.vendorFilterSearchInput$.next(query);
     if (!query.trim()) {
-      this.loadingVendorFilter.set(false);
-      this.vendorFilterResults.set([]);
       this.page = 1;
       this.persistTablePreferences();
       this.load();
-      return;
     }
-    if (query.trim().length < 2) {
-      this.loadingVendorFilter.set(false);
-      this.vendorFilterResults.set([]);
-      return;
-    }
-    this.vendorFilterSearchInput$.next(query);
   }
 
   selectVendorFilter(vendor: VendorOption): void {
+    this.vendorFilterSearchInput$.next('');
     this.selectedVendorFilter.set(vendor);
     this.vendorFilter = vendor.id;
     this.vendorFilterSearch = this.vendorOptionLabel(vendor);
@@ -700,6 +678,7 @@ export class ItemsPageComponent {
 
   clearVendorFilter(): void {
     if (this.isContextLocked) return;
+    this.vendorFilterSearchInput$.next('');
     this.selectedVendorFilter.set(null);
     this.vendorFilter = '';
     this.vendorFilterSearch = '';
@@ -887,15 +866,11 @@ export class ItemsPageComponent {
       this.selectedEditVendor.set(null);
       this.editForm['vendorId'] = '';
     }
-    if (!query.trim() || query.trim().length < 2) {
-      this.editVendors.set([]);
-      this.loadingEditVendors.set(false);
-      return;
-    }
     this.editVendorSearchInput$.next(query);
   }
 
   selectEditVendor(vendor: VendorOption): void {
+    this.editVendorSearchInput$.next('');
     this.selectedEditVendor.set(vendor);
     this.editForm['vendorId'] = vendor.id;
     this.editVendorSearch = vendor.name || vendor.legalName || '';
@@ -904,6 +879,7 @@ export class ItemsPageComponent {
   }
 
   clearEditVendorSelection(): void {
+    this.editVendorSearchInput$.next('');
     this.selectedEditVendor.set(null);
     this.editForm['vendorId'] = '';
     this.editVendorSearch = '';

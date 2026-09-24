@@ -5,11 +5,18 @@
       <h1 class="text-2xl font-semibold tracking-tight mb-2">Sales Report Preview</h1>
       <p class="text-muted mb-0">Quarter details and all related sales invoices.</p>
     </div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="ui-btn ui-btn-primary" [disabled]="loading() || !report() || !!error() || exporting()" (click)="exportExcel()">
+        <i class="bi bi-file-earmark-excel mr-1" aria-hidden="true"></i>{{ exporting() ? 'Exporting…' : 'Export Excel' }}
+      </button>
     <a class="ui-btn ui-btn-outline-dark" routerLink="/reports">
       <i class="bi bi-arrow-left mr-1"></i>Back to Reports
     </a>
+    </div>
   </div>
 </section>
+
+<div *ngIf="exportError()" class="ui-alert ui-alert-danger mb-6" role="alert">{{ exportError() }}</div>
 
 <section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="error()">
   <div class="ui-card-body p-6">
@@ -46,8 +53,8 @@
 <section class="ui-card shadow-panel rounded-xl">
   <div class="ui-card-body p-6">
     <h2 class="text-base font-semibold mb-4">Sales Invoices Under This Quarter</h2>
-    <div class="ui-table-responsive">
-      <table class="ui-table ui-table-hover align-middle mb-0">
+    <div class="ui-table-responsive report-table-scroll" tabindex="0" role="region" aria-label="Scrollable report details">
+      <table class="ui-table ui-table-hover align-middle mb-0 report-invoices-table">
         <thead class="ui-table-light">
           <tr>
             <th>Issue Date</th>

@@ -1,49 +1,10 @@
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
+import { SalesInvoiceRow, SalesReportRow, downloadSalesReport } from '../../core/sales-report-export';
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { OrganizationContextService } from '../../core/organization-context.service';
-
-interface SalesInvoiceRow {
-  id: string;
-  invoiceNumber?: string;
-  issueDate?: string;
-  status?: string;
-  paymentStatus?: string;
-  currency?: string;
-  amount?: number;
-  taxableAmount?: number;
-  withHoldingTaxAmount?: number;
-  subtotalAmount?: number;
-  taxAmount?: number;
-  discountAmount?: number;
-  totalAmount?: number;
-  order?: {
-    id: string;
-    orderNumber?: string;
-    status?: string;
-    paymentStatus?: string;
-    customer?: {
-      id: string;
-      name?: string;
-      taxId?: string;
-    };
-  };
-}
-
-interface SalesReportRow {
-  id: string;
-  year: number;
-  quarter: number;
-  periodStart: string;
-  periodEnd: string;
-  currency: string;
-  organization?: {
-    id: string;
-    name?: string;
-    legalName?: string;
-  };
-}
 
 interface SalesPreviewSummary {
   invoiceCount: number;
@@ -68,6 +29,7 @@ interface SalesPreviewResponse {
   standalone: true,
   imports: [CommonModule, RouterLink],
   templateUrl: './sales-report-preview-page.component.html',
+  styleUrl: '../../shared/report-tables.css',
 })
 export class SalesReportPreviewPageComponent {
   private readonly route = inject(ActivatedRoute);
@@ -76,12 +38,16 @@ export class SalesReportPreviewPageComponent {
 
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly exportError = signal('');
+  readonly exporting = signal(false);
+  private previewSub?: Subscription;
+  private routeSub?: Subscription;
   readonly report = signal<SalesReportRow | null>(null);
   readonly summary = signal<SalesPreviewSummary | null>(null);
   readonly salesInvoices = signal<SalesInvoiceRow[]>([]);
 
   ngOnInit(): void {
-    this.route.paramMap.subscribe((params) => {
+    this.routeSub = this.route.paramMap.subscribe((params) => {
       const reportId = String(params.get('id') || '').trim();
       if (!reportId) {
         this.error.set('Report id is required.');
@@ -91,7 +57,11 @@ export class SalesReportPreviewPageComponent {
     });
   }
 
+  ngOnDestroy(): void { this.routeSub?.unsubscribe(); this.previewSub?.unsubscribe(); }
+
   private load(reportId: string): void {
+    this.previewSub?.unsubscribe();
+    this.exportError.set('');
     this.loading.set(true);
     this.error.set('');
     this.report.set(null);
@@ -105,8 +75,8 @@ export class SalesReportPreviewPageComponent {
     }
     const suffix = params.toString() ? `?${params.toString()}` : '';
 
-    this.api
-      .get<SalesPreviewResponse>(`/api/v1/reports/quarterly-sales/${reportId}/preview${suffix}`)
+    this.previewSub = this.api
+      .getFresh<SalesPreviewResponse>(`/api/v1/reports/quarterly-sales/${encodeURIComponent(reportId)}/preview${suffix}`)
       .subscribe({
         next: (response) => {
           this.loading.set(false);
@@ -119,6 +89,19 @@ export class SalesReportPreviewPageComponent {
           this.error.set(err?.error?.message || 'Unable to load sales report preview.');
         },
       });
+  }
+
+  async exportExcel(): Promise<void> {
+    const report = this.report();
+    if (!report || this.loading() || this.error() || this.exporting()) return;
+    this.exporting.set(true); this.exportError.set('');
+    try {
+      await downloadSalesReport(report, this.salesInvoices());
+    } catch (error) {
+      this.exportError.set(error instanceof Error ? error.message : 'Unable to export this report. Please try again.');
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   quarterLabel(value: number | null | undefined): string {
