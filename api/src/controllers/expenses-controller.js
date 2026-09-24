@@ -20,6 +20,8 @@ const {
 } = require('../services/request-scope');
 const { computeExpenseAmounts, ExpenseCalculationError } = require('../services/expense-calculation');
 const { isVatTaxType } = require('../services/tax-calculation');
+const { buildExpenseTransferPreview, ExpenseTransferError } = require('../services/expense-transfer');
+const { refreshTransferredExpenseReports } = require('../services/quarterly-expense-totals');
 
 function getExpenseModels() {
   const models = getModels();
@@ -37,6 +39,7 @@ function getExpenseModels() {
   }
   return {
     Expense: models.Expense,
+    QuarterlyExpenseReport: models.QuarterlyExpenseReport,
     Vendor: models.Vendor,
     VendorOrganization: models.VendorOrganization,
     Organization: models.Organization,
@@ -167,12 +170,13 @@ function expenseInclude(models) {
   ];
 }
 
-async function findVendorLinkedToOrganization(models, vendorId, organizationId) {
+async function findVendorLinkedToOrganization(models, vendorId, organizationId, transaction) {
   if (!vendorId || !organizationId) {
     return null;
   }
 
   const directVendor = await models.Vendor.findOne({
+    transaction,
     where: {
       id: vendorId,
       organizationId,
@@ -183,6 +187,7 @@ async function findVendorLinkedToOrganization(models, vendorId, organizationId) 
   }
 
   const linkedVendor = await models.Vendor.findOne({
+    transaction,
     where: { id: vendorId },
     include: [
       {
@@ -195,13 +200,14 @@ async function findVendorLinkedToOrganization(models, vendorId, organizationId) 
   return linkedVendor || null;
 }
 
-async function findVendorByTaxIdForOrganization(models, taxId, organizationId) {
+async function findVendorByTaxIdForOrganization(models, taxId, organizationId, transaction) {
   const cleanedTaxId = String(taxId || '').trim();
   if (!cleanedTaxId || !organizationId) {
     return null;
   }
 
   const ownedVendor = await models.Vendor.findOne({
+    transaction,
     where: {
       organizationId,
       taxId: cleanedTaxId,
@@ -212,6 +218,7 @@ async function findVendorByTaxIdForOrganization(models, taxId, organizationId) {
   }
 
   const linkedVendor = await models.Vendor.findOne({
+    transaction,
     where: { taxId: cleanedTaxId },
     include: [
       {
@@ -224,12 +231,13 @@ async function findVendorByTaxIdForOrganization(models, taxId, organizationId) {
   return linkedVendor || null;
 }
 
-async function ensureVendorLinkedToOrganization(models, vendor, organizationId, actorId) {
+async function ensureVendorLinkedToOrganization(models, vendor, organizationId, actorId, transaction) {
   if (!vendor?.id || !organizationId || !models.VendorOrganization) {
     return;
   }
 
   await models.VendorOrganization.findOrCreate({
+    transaction,
     where: {
       vendorId: vendor.id,
       organizationId,
@@ -1059,213 +1067,147 @@ async function getExpenseById(req, res) {
   }
 }
 
+async function prepareExpenseTransfer(models, req, selection, transaction) {
+  const targetOrganizationId = String(selection.organizationId || selection.targetOrganizationId || '').trim();
+  if (!targetOrganizationId) throw new ExpenseTransferError('Target organization is required.');
+  const where = { id: req.params.id };
+  if (!isPrivilegedRequest(req) && !applyOrganizationWhereScope(where, req)) {
+    throw new ExpenseTransferError('Expense not found.', 404);
+  }
+  const options = transaction ? { transaction, lock: transaction.LOCK.UPDATE } : {};
+  // Lock only the expense first. Locking joined source tax rows here can
+  // deadlock opposite-direction transfers before organization locks are acquired.
+  if (transaction) await models.Expense.findOne({ where, ...options });
+  const expense = await models.Expense.findOne({
+    where, transaction,
+    include: [
+      { association: 'taxType', attributes: ['code', 'name', 'percentage'], required: false },
+      { association: 'withholdingTaxType', attributes: ['code'], required: false },
+    ],
+  });
+  if (!expense) throw new ExpenseTransferError('Expense not found.', 404);
+  if (expense.organizationId === targetOrganizationId) throw new ExpenseTransferError('Expense is already in the target organization.', 409);
+  if (!await userCanAccessOrganization(models, req, targetOrganizationId)) {
+    throw new ExpenseTransferError('You must be an active member of the target organization to transfer this expense.', 403);
+  }
+  // Serialize opposite-direction transfers and report generation in the same order.
+  if (transaction) {
+    for (const organizationId of [expense.organizationId, targetOrganizationId].sort()) {
+      await models.Organization.findByPk(organizationId, options);
+    }
+  }
+  const target = await models.Organization.findByPk(targetOrganizationId, {
+    ...options, include: [{ association: 'taxType', required: false }],
+  });
+  const types = await models.WithholdingTaxType.findAll({
+    where: { organizationId: targetOrganizationId, isActive: true, appliesTo: { [Op.in]: ['expense', 'both'] } },
+    order: [['code', 'ASC']], ...options,
+  });
+  const preview = buildExpenseTransferPreview(expense, target, types, selection);
+  if (expense.expenseNumber) {
+    const duplicate = await models.Expense.findOne({
+      where: { organizationId: targetOrganizationId, expenseNumber: expense.expenseNumber, id: { [Op.ne]: expense.id } },
+      attributes: ['id'], transaction,
+    });
+    if (duplicate) throw new ExpenseTransferError('Target organization already has an expense with this expense number.', 409);
+  }
+  return { expense, target, preview };
+}
+
+function expenseTransferFailure(res, err) {
+  if (err instanceof ExpenseTransferError || err instanceof ExpenseCalculationError) {
+    return res.status(err.status || 400).json({ ok: false, message: err.message });
+  }
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({ ok: false, message: 'Target organization already has an expense with this expense number.' });
+  }
+  console.error('Expense transfer error:', err);
+  return res.status(500).json({ ok: false, message: 'Unable to transfer expense. No transfer changes were saved.' });
+}
+
+async function previewExpenseTransfer(req, res) {
+  try {
+    const models = getExpenseModels();
+    if (!models) return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
+    const { preview } = await prepareExpenseTransfer(models, req, req.query || {});
+    return res.status(200).json({ ok: true, data: preview });
+  } catch (err) { return expenseTransferFailure(res, err); }
+}
+
 async function transferExpense(req, res) {
   try {
     const models = getExpenseModels();
-    if (!models) {
-      return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
-    }
-
-    const { Expense, Vendor, Organization, WithholdingTaxType } = models;
-    const targetOrganizationId = String(req.body?.organizationId || req.body?.targetOrganizationId || '').trim();
-    if (!targetOrganizationId) {
-      return res.status(400).json({ ok: false, message: 'target organizationId is required.' });
-    }
-
-    const where = { id: req.params.id };
-    if (!isPrivilegedRequest(req)) {
-      const scopedWhere = applyOrganizationWhereScope(where, req);
-      if (!scopedWhere) {
-        return res.status(404).json({ ok: false, message: 'Expense not found.' });
+    if (!models) return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
+    const userId = getAuthenticatedUserId(req);
+    const { Expense, Vendor } = models;
+    const result = await Expense.sequelize.transaction({ isolationLevel: 'READ COMMITTED' }, async (transaction) => {
+      const { expense, target, preview } = await prepareExpenseTransfer(models, req, req.body || {}, transaction);
+      if (!preview.ready) throw new ExpenseTransferError('Review the destination withholding tax and supplier VAT before transferring.');
+      if (!req.body?.previewToken || req.body.previewToken !== preview.previewToken) {
+        throw new ExpenseTransferError('The expense or tax settings changed, or no tax preview was reviewed. Refresh the transfer preview and confirm again.', 409);
       }
-    }
-
-    const expense = await Expense.findOne({
-      where, include: [{ association: 'taxType', attributes: ['code', 'name', 'percentage'], required: false }],
-    });
-    if (!expense) {
-      return res.status(404).json({ ok: false, message: 'Expense not found.' });
-    }
-
-    if (expense.organizationId === targetOrganizationId) {
-      return res.status(400).json({ ok: false, message: 'Expense is already in the target organization.' });
-    }
-
-    const userId = req.auth?.userId || req.auth?.user?.id || null;
-    if (!isPrivilegedRequest(req)) {
-      const hasTargetMembership = await userHasActiveOrganizationMembership(
-        models,
-        userId,
-        targetOrganizationId
-      );
-      if (!hasTargetMembership) {
-        return res.status(403).json({
-          ok: false,
-          message: 'You must be an active member of the target organization to transfer this expense.',
-        });
-      }
-    }
-
-    const targetOrganization = await Organization.findByPk(targetOrganizationId, {
-      include: [
-        {
-          association: 'taxType',
-          attributes: ['id', 'code', 'name', 'percentage', 'isActive'],
-          required: false,
-        },
-      ],
-    });
-    if (
-      !targetOrganization
-      || targetOrganization.isActive === false
-      || !targetOrganization.taxTypeId
-      || !targetOrganization.taxType
-      || targetOrganization.taxType.isActive === false
-    ) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Target organization tax type is required and must be active before transferring expenses.',
-      });
-    }
-
-    if (expense.expenseNumber) {
-      const duplicate = await Expense.findOne({
-        where: {
-          organizationId: targetOrganizationId,
-          expenseNumber: expense.expenseNumber,
-          id: { [Op.ne]: expense.id },
-        },
-        attributes: ['id'],
-      });
-      if (duplicate) {
-        return res.status(409).json({
-          ok: false,
-          message: 'Target organization already has an expense with this expense number.',
-        });
-      }
-    }
-
-    const payload = {
-      organizationId: targetOrganizationId,
-      currency: await getOrganizationCurrency(targetOrganizationId),
-      taxTypeId: targetOrganization.taxTypeId,
-      updatedBy: userId,
-    };
-
-    const requestedVendorId = String(req.body?.vendorId || '').trim();
-    const requestedVendorTaxId = String(req.body?.vendorTaxId || '').trim();
-    if (requestedVendorId) {
-      const vendor = await findVendorLinkedToOrganization(models, requestedVendorId, targetOrganizationId);
-      if (!vendor) {
-        return res.status(400).json({ ok: false, message: 'Selected vendor is invalid for the target organization.' });
-      }
-      payload.vendorId = vendor.id;
-      payload.vendorTaxId = requestedVendorTaxId || vendor.taxId || expense.vendorTaxId || null;
-    } else {
-      let resolvedVendor = null;
-      if (expense.vendorId) {
-        resolvedVendor = await findVendorLinkedToOrganization(models, expense.vendorId, targetOrganizationId);
-        if (!resolvedVendor) {
-          const sourceVendor = await Vendor.findByPk(expense.vendorId);
-          if (sourceVendor) {
-            const sourceTaxId = sourceVendor.taxId || expense.vendorTaxId;
-            resolvedVendor = await findVendorByTaxIdForOrganization(models, sourceTaxId, targetOrganizationId);
-            if (!resolvedVendor) {
-              await ensureVendorLinkedToOrganization(models, sourceVendor, targetOrganizationId, userId);
-              resolvedVendor = sourceVendor;
+      const targetOrganizationId = target.id;
+      const payload = {
+        organizationId: targetOrganizationId, currency: preview.currency, taxTypeId: target.taxTypeId,
+        withholdingTaxTypeId: preview.withholdingTaxTypeId, ...preview.amounts, updatedBy: userId,
+      };
+      const requestedVendorId = String(req.body?.vendorId || '').trim();
+      const requestedVendorTaxId = String(req.body?.vendorTaxId || '').trim();
+      if (requestedVendorId) {
+        const vendor = await findVendorLinkedToOrganization(models, requestedVendorId, targetOrganizationId, transaction);
+        if (!vendor) {
+          throw new ExpenseTransferError('Selected vendor is invalid for the target organization.');
+        }
+        payload.vendorId = vendor.id;
+        payload.vendorTaxId = requestedVendorTaxId || vendor.taxId || expense.vendorTaxId || null;
+      } else {
+        let resolvedVendor = null;
+        if (expense.vendorId) {
+          resolvedVendor = await findVendorLinkedToOrganization(models, expense.vendorId, targetOrganizationId, transaction);
+          if (!resolvedVendor) {
+            const sourceVendor = await Vendor.findByPk(expense.vendorId, { transaction });
+            if (sourceVendor) {
+              const sourceTaxId = sourceVendor.taxId || expense.vendorTaxId;
+              resolvedVendor = await findVendorByTaxIdForOrganization(models, sourceTaxId, targetOrganizationId, transaction);
+              if (!resolvedVendor) {
+                await ensureVendorLinkedToOrganization(models, sourceVendor, targetOrganizationId, userId, transaction);
+                resolvedVendor = sourceVendor;
+              }
             }
           }
         }
+        if (!resolvedVendor && expense.vendorTaxId) {
+          resolvedVendor = await findVendorByTaxIdForOrganization(models, expense.vendorTaxId, targetOrganizationId, transaction);
+        }
+        if (resolvedVendor) {
+          payload.vendorId = resolvedVendor.id;
+          payload.vendorTaxId = resolvedVendor.taxId || expense.vendorTaxId || null;
+        } else {
+          payload.vendorId = null;
+          payload.vendorTaxId = requestedVendorTaxId || expense.vendorTaxId || null;
+        }
       }
-      if (!resolvedVendor && expense.vendorTaxId) {
-        resolvedVendor = await findVendorByTaxIdForOrganization(models, expense.vendorTaxId, targetOrganizationId);
-      }
-      if (resolvedVendor) {
-        payload.vendorId = resolvedVendor.id;
-        payload.vendorTaxId = resolvedVendor.taxId || expense.vendorTaxId || null;
-      } else {
-        payload.vendorId = null;
-        payload.vendorTaxId = requestedVendorTaxId || expense.vendorTaxId || null;
-      }
-    }
 
-    let withholdingTaxPercentage = 0;
-    let withholdingMinimumBase = 0;
-    const requestedWithholdingTaxTypeId = String(req.body?.withholdingTaxTypeId || '').trim();
-    if (requestedWithholdingTaxTypeId) {
-      const withholdingTaxType = await WithholdingTaxType.findOne({
-        where: { appliesTo: { [Op.in]: ['expense', 'both'] },
-          id: requestedWithholdingTaxTypeId,
-          organizationId: targetOrganizationId,
-          isActive: true,
-        },
+      const previousOrganizationId = expense.organizationId;
+      await expense.update(payload, { transaction });
+      await refreshTransferredExpenseReports(models, [previousOrganizationId, targetOrganizationId], expense.expenseDate, userId, transaction);
+      const updated = await Expense.findByPk(expense.id, { include: expenseInclude(models), transaction });
+      return { updated: updated || expense, previousOrganizationId, targetOrganizationId, preview };
+    });
+    // Send notifications only after the complete transfer has committed.
+    try {
+      await createOrganizationMessage({
+        organizationId: result.targetOrganizationId, entityType: 'expense', entityId: result.updated.id,
+        title: 'Expense transferred',
+        message: `${getActorDisplayName(req.auth?.user)} transferred expense "${result.updated.category}" into this organization.`,
+        createdBy: userId,
+        metadata: { previousOrganizationId: result.previousOrganizationId, amount: result.preview.amounts.amount,
+          currency: result.preview.currency, taxAmount: result.preview.amounts.taxAmount,
+          withHoldingTaxAmount: result.preview.amounts.withHoldingTaxAmount },
       });
-      if (!withholdingTaxType) {
-        return res.status(400).json({ ok: false, message: 'withholdingTaxTypeId is invalid for the target organization.' });
-      }
-      payload.withholdingTaxTypeId = withholdingTaxType.id;
-      withholdingTaxPercentage = Number(withholdingTaxType.percentage || 0);
-      withholdingMinimumBase = withholdingTaxType.minimumBaseAmount || 0;
-    } else if (expense.withholdingTaxTypeId) {
-      const existingWithholdingInTarget = await WithholdingTaxType.findOne({
-        where: { appliesTo: { [Op.in]: ['expense', 'both'] },
-          id: expense.withholdingTaxTypeId,
-          organizationId: targetOrganizationId,
-          isActive: true,
-        },
-      });
-      payload.withholdingTaxTypeId = existingWithholdingInTarget ? expense.withholdingTaxTypeId : null;
-      withholdingTaxPercentage = Number(existingWithholdingInTarget?.percentage || 0);
-      withholdingMinimumBase = existingWithholdingInTarget?.minimumBaseAmount || 0;
-    }
-
-    Object.assign(
-      payload,
-      computeExpenseAmounts({
-        amount: expense.amount,
-        vatExemptAmount: expense.vatExemptAmount,
-        // Legacy PT amounts are not supplier VAT. Preserve only a recorded VAT split.
-        receiptVatAmount: expense.receiptVatAmount ?? (isVatTaxType(expense.taxType) ? expense.taxAmount : 0),
-        serviceCharge: expense.serviceCharge,
-        discountAmount: expense.discountAmount,
-        taxType: targetOrganization.taxType,
-        withholdingPercentage: withholdingTaxPercentage,
-        withholdingMinimumBaseAmount: withholdingMinimumBase,
-      })
-    );
-
-    const previousOrganizationId = expense.organizationId;
-    await expense.update(payload);
-
-    const actorName = getActorDisplayName(req.auth?.user);
-    await createOrganizationMessage({
-      organizationId: targetOrganizationId,
-      entityType: 'expense',
-      entityId: expense.id,
-      title: 'Expense transferred',
-      message: `${actorName} transferred expense "${expense.category}" into this organization.`,
-      createdBy: userId,
-      metadata: {
-        previousOrganizationId,
-        amount: expense.amount || 0,
-        currency: payload.currency || null,
-      },
-    });
-
-    const updated = await Expense.findByPk(expense.id, {
-      include: expenseInclude(models),
-    });
-
-    return res.status(200).json({
-      ok: true,
-      message: 'Expense transferred successfully.',
-      data: updated || expense,
-    });
-  } catch (err) {
-    if (err instanceof ExpenseCalculationError) return res.status(400).json({ ok: false, message: err.message });
-    console.error('Transfer expense error:', err);
-    return res.status(500).json({ ok: false, message: 'Unable to transfer expense.' });
-  }
+    } catch (err) { console.error('Expense transfer notification error:', err); }
+    return res.status(200).json({ ok: true, message: 'Expense transferred and affected saved expense reports refreshed.', data: result.updated });
+  } catch (err) { return expenseTransferFailure(res, err); }
 }
 
 async function updateExpense(req, res) {
@@ -1376,7 +1318,12 @@ async function updateExpense(req, res) {
       delete payload.organizationId;
     }
 
-    await expense.update(payload);
+    // A transfer may have committed while attachments/tax context were loading.
+    // Never save calculations made for the former organization over that transfer.
+    const [updatedCount] = await Expense.update(payload, {
+      where: { ...where, organizationId: expense.organizationId, updatedAt: expense.updatedAt },
+    });
+    if (!updatedCount) return res.status(409).json({ ok: false, message: 'This expense changed while you were editing. Reload it before saving.' });
     if (payload.file) {
       const currentFiles = collectExpenseFileUrls(payload);
       const filesToDelete = previousFiles.filter((url) => !currentFiles.includes(url));
@@ -1470,6 +1417,7 @@ module.exports = {
   listTransferTargetOrganizations,
   listExpenses,
   getExpenseById,
+  previewExpenseTransfer,
   transferExpense,
   updateExpense,
   deleteExpense,

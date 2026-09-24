@@ -9,7 +9,7 @@ function setup(code = 'VAT') {
  const organization = { id: 'org-a', currency: 'PHP', taxTypeId: 'tax-a', taxType: { code, percentage: code === 'VAT' ? '12.00' : '3.00', isActive: true } };
  const existing = { id: 'expense-a', organizationId: 'org-a', vendorId: 'vendor-a', amount: '11200.00', vatExemptAmount: '0.00', discountAmount: '0.00', serviceCharge: '0.00', receiptVatAmount: '1200.00', withholdingTaxTypeId: 'ewt-a', withHoldingTaxAmount: '200.00', totalAmount: '11000.00', update: async (payload) => { writes.push(payload); Object.assign(existing, payload); } };
  const models = {
-  Expense: { findOne: async () => existing, findByPk: async () => existing, create: async (payload) => { writes.push(payload); return { id: 'new', ...payload }; } },
+  Expense: { update: async (payload) => { await existing.update(payload); return [1]; }, findOne: async () => existing, findByPk: async () => existing, create: async (payload) => { writes.push(payload); return { id: 'new', ...payload }; } },
   Vendor: { findOne: async () => ({ id: 'vendor-a', organizationId: 'org-a' }) },
   VendorOrganization: {}, OrganizationUser: { findOne: async () => null }, TaxType: {},
   Organization: { findByPk: async () => organization },
@@ -25,6 +25,8 @@ function setup(code = 'VAT') {
   '../services/message-service': { createOrganizationMessage: async () => {}, getActorDisplayName: () => 'Test' },
   '../services/request-scope': require('../src/services/request-scope'),
   '../services/expense-calculation': require('../src/services/expense-calculation'),
+  '../services/expense-transfer': require('../src/services/expense-transfer'),
+  '../services/quarterly-expense-totals': require('../src/services/quarterly-expense-totals'),
   '../services/tax-calculation': require('../src/services/tax-calculation'),
  };
  const module = { exports: {} };
@@ -76,20 +78,6 @@ test('CSV import reports malformed financial rows instead of saving zero',async(
  await controller.importExpenses(req,res);assert.equal(res.statusCode,200);assert.equal(res.body.data.imported,1);assert.equal(res.body.data.skipped,1);assert.equal(writes[0].taxAmount,1200);
 });
 
-for (const source of [
- { code: 'VAT', receiptVatAmount: null, taxAmount: 1200, expectedVat: 1200 },
- { code: 'PT', receiptVatAmount: null, taxAmount: 171.5, expectedVat: 0 },
- { code: 'PT', receiptVatAmount: 1200, taxAmount: 0, expectedVat: 1200 },
-]) test(`transfer preserves actual supplier VAT for ${source.code}, stored VAT ${source.receiptVatAmount}`, async () => {
- const { controller, req, res, writes, existing, organization, models } = setup();
- Object.assign(existing, { organizationId: 'source-org', vendorId: null, vendorTaxId: null, withholdingTaxTypeId: null, taxType: { code: source.code }, receiptVatAmount: source.receiptVatAmount, taxAmount: source.taxAmount });
- req.body = { organizationId: 'org-a' };
- await controller.transferExpense(req, res);
- assert.equal(res.statusCode, 200, JSON.stringify(res.body));
- assert.equal(writes[0].receiptVatAmount, source.expectedVat);
- assert.equal(writes[0].taxAmount, source.expectedVat);
- assert.equal(writes[0].totalAmount, 11200);
-});
 
 for (const auditFields of [
  { createdBy: 'deleted-user', updatedBy: 'deleted-user' },

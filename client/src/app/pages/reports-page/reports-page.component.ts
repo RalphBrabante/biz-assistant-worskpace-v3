@@ -887,7 +887,7 @@ export class ReportsPageComponent {
       return '';
     }
     const relation = Math.abs(difference) < 0.005 ? 'equal to' : 'greater than';
-    return `Expense total is ${relation} sales total for ${this.quarterLabel(expenseReport.quarter)} ${expenseReport.year}. Consider transferring eligible expenses to another organization, then regenerate the quarterly expense report.`;
+    return `Expense total is ${relation} sales total for ${this.quarterLabel(expenseReport.quarter)} ${expenseReport.year}. Review that expenses belong to the correct organization. Transfers automatically refresh affected saved expense reports.`;
   }
 
   matchingSalesReportForExpense(expenseReport: QuarterlyExpenseReportRow): QuarterlySalesReportRow | null {

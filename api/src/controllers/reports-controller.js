@@ -1,3 +1,4 @@
+const { quarterlyExpenseTotals } = require('../services/quarterly-expense-totals');
 const { Op, fn, col } = require('sequelize');
 const { getModels } = require('../sequelize');
 const { getOrganizationCurrency } = require('../services/organization-currency');
@@ -627,55 +628,21 @@ async function computeQuarterlyExpenseReport(req, res, next) {
     const { Expense, QuarterlyExpenseReport } = models;
     const { periodStart, periodEnd } = getQuarterDates(year, quarter);
 
-    const aggregates = await Expense.findOne({
-      where: {
-        organizationId,
-        expenseDate: {
-          [Op.between]: [periodStart, periodEnd],
-        },
-        status: {
-          [Op.ne]: 'cancelled',
-        },
-      },
-      attributes: [
-        [fn('COUNT', col('id')), 'expenseCount'],
-        [fn('COALESCE', fn('SUM', col('amount')), 0), 'amount'],
-        [fn('COALESCE', fn('SUM', col('tax_amount')), 0), 'taxAmount'],
-        [fn('COALESCE', fn('SUM', col('discount_amount')), 0), 'discountAmount'],
-        [fn('COALESCE', fn('SUM', col('total_amount')), 0), 'totalAmount'],
-      ],
-      raw: true,
+    const { report, created } = await Expense.sequelize.transaction({ isolationLevel: 'READ COMMITTED' }, async (transaction) => {
+      const organization = await models.Organization.findByPk(organizationId, { transaction, lock: transaction.LOCK.UPDATE });
+      const payload = {
+        organizationId, year, quarter, periodStart, periodEnd,
+        ...await quarterlyExpenseTotals(Expense, organizationId, periodStart, periodEnd, transaction),
+        currency: organization.currency,
+        generatedBy: req.auth?.userId || req.auth?.user?.id || null,
+        generatedAt: new Date(), notes: req.body?.notes ? String(req.body.notes) : null,
+      };
+      const [report, created] = await QuarterlyExpenseReport.findOrCreate({
+        where: { organizationId, year, quarter }, defaults: payload, transaction,
+      });
+      if (!created) await report.update(payload, { transaction });
+      return { report, created };
     });
-
-    const payload = {
-      organizationId,
-      year,
-      quarter,
-      periodStart,
-      periodEnd,
-      expenseCount: Math.trunc(toNumber(aggregates?.expenseCount)),
-      currency: await getOrganizationCurrency(organizationId),
-      amount: toNumber(aggregates?.amount),
-      taxAmount: toNumber(aggregates?.taxAmount),
-      discountAmount: toNumber(aggregates?.discountAmount),
-      totalAmount: toNumber(aggregates?.totalAmount),
-      generatedBy: req.auth?.user?.id || null,
-      generatedAt: new Date(),
-      notes: req.body?.notes ? String(req.body.notes) : null,
-    };
-
-    const [report, created] = await QuarterlyExpenseReport.findOrCreate({
-      where: {
-        organizationId,
-        year,
-        quarter,
-      },
-      defaults: payload,
-    });
-
-    if (!created) {
-      await report.update(payload);
-    }
 
     const savedReport = await QuarterlyExpenseReport.findByPk(report.id);
     if (savedReport) {

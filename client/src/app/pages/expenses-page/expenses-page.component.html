@@ -687,8 +687,8 @@
         </div>
 
         <ng-container *ngIf="!loadingTransferTargets()">
-          <label class="ui-form-label font-semibold">Target Organization <span class="text-danger">*</span></label>
-          <select class="ui-form-select" [(ngModel)]="selectedTransferOrganizationId">
+          <label for="transfer-organization" class="ui-form-label font-semibold">Target Organization <span class="text-danger">*</span></label>
+          <select id="transfer-organization" class="ui-form-select" [(ngModel)]="selectedTransferOrganizationId" (ngModelChange)="onTransferOrganizationChange()" [disabled]="!!transferringId()">
             <option value="">Select organization</option>
             <option *ngFor="let organization of transferTargetOrganizations()" [value]="organization.id">
               {{ organizationOptionLabel(organization) }}
@@ -699,13 +699,41 @@
           </div>
         </ng-container>
 
+        <div *ngIf="transferPreview() as preview" class="mt-4">
+          <label for="transfer-withholding" class="ui-form-label font-semibold">Destination withholding tax</label>
+          <select id="transfer-withholding" class="ui-form-select" [(ngModel)]="selectedTransferWithholdingId" (ngModelChange)="loadTransferPreview()" [disabled]="!!transferringId()">
+            <option value="__auto__" disabled>Select the applicable withholding tax</option>
+            <option value="">None — no withholding</option>
+            <option *ngFor="let tax of preview.withholdingTaxTypes" [value]="tax.id">{{ tax.code }} — {{ tax.name }} ({{ tax.percentage }}%)</option>
+          </select>
+          <p *ngIf="preview.requiresWithholdingSelection" class="text-warning text-xs mt-2">The source withholding tax has no matching destination code. Select the applicable tax or explicitly choose None.</p>
+          <div *ngIf="preview.receiptVatEditable" class="mt-4">
+            <label for="transfer-receipt-vat" class="ui-form-label font-semibold">Supplier VAT shown on the receipt</label>
+            <input id="transfer-receipt-vat" class="ui-form-control" type="number" min="0" step="0.01" [(ngModel)]="transferReceiptVat" (ngModelChange)="loadTransferPreview()" [disabled]="!!transferringId()">
+            <p class="text-xs text-muted mt-2">This older expense has no recorded supplier VAT split. Enter the receipt's VAT amount, or 0 if it contains no VAT.</p>
+          </div>
+          <div *ngIf="preview.ready && preview.amounts as amounts" class="bg-subtle rounded-lg p-4 mt-4" aria-live="polite">
+            <div class="font-semibold mb-2">Tax preview · {{ preview.taxType.name || preview.taxType.code }}</div>
+            <dl class="grid grid-cols-2 gap-2 text-sm">
+              <dt>Receipt total</dt><dd class="text-right">{{ formatMoney(amounts.amount, preview.currency) }}</dd>
+              <dt>Supplier VAT</dt><dd class="text-right">{{ formatMoney(amounts.receiptVatAmount, preview.currency) }}</dd>
+              <dt>Destination input VAT</dt><dd class="text-right">{{ formatMoney(amounts.taxAmount, preview.currency) }}</dd>
+              <dt>Withholding base</dt><dd class="text-right">{{ formatMoney(amounts.withholdingTaxBase, preview.currency) }}</dd>
+              <dt>Withholding tax</dt><dd class="text-right">{{ formatMoney(amounts.withHoldingTaxAmount, preview.currency) }}</dd>
+              <dt class="font-semibold">Payable after transfer</dt><dd class="text-right font-semibold">{{ formatMoney(amounts.totalAmount, preview.currency) }}</dd>
+            </dl>
+          </div>
+          <p class="text-xs text-muted mt-3">The receipt total and supplier VAT are preserved. Existing expense reports for both organizations will be refreshed.</p>
+        </div>
+        <p *ngIf="loadingTransferPreview()" class="text-muted text-sm mt-4" role="status">Calculating destination taxes...</p>
         <div *ngIf="transferModalError()" class="ui-alert ui-alert-danger py-2 mt-4 mb-0">{{ transferModalError() }}</div>
+        <button *ngIf="transferModalError() && selectedTransferOrganizationId" class="ui-btn ui-btn-outline-secondary mt-2" (click)="loadTransferPreview()" [disabled]="loadingTransferPreview() || !!transferringId()">Refresh tax preview</button>
       </div>
       <div class="ui-modal-footer border-0 pt-0">
         <button class="ui-btn ui-btn-outline-secondary" (click)="closeTransferModal()" [disabled]="!!transferringId()">Cancel</button>
         <button
           class="ui-btn ui-btn-primary"
-          [disabled]="!!transferringId() || loadingTransferTargets() || !selectedTransferOrganizationId"
+          [disabled]="!canTransferExpense"
           (click)="transferExpense()"
         >
           {{ transferringId() ? 'Transferring...' : 'Transfer Expense' }}

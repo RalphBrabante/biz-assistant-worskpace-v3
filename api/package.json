@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test:expenses": "node --test tests/expense-calculation.test.js tests/expenses-controller.test.js",
+    "test:expenses": "node --test tests/expense-calculation.test.js tests/expenses-controller.test.js tests/expense-transfer.test.js",
     "start": "node dist/main.js",
     "start:legacy": "node src/index.js",
     "start:nest:ts": "node -r ts-node/register src/main.ts",
@@ -14,7 +14,8 @@
     "db:migrate": "sequelize-cli db:migrate",
     "test:schema": "node --test tests/schema-indexes.test.js tests/invoice-relationship.test.js",
     "db:audit": "node scripts/audit-schema.js",
-    "test:schema:mysql": "node scripts/verify-schema-indexes.js"
+    "test:schema:mysql": "node scripts/verify-schema-indexes.js",
+    "test:expenses:mysql": "node scripts/verify-expense-transfers.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

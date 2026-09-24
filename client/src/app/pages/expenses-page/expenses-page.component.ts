@@ -127,6 +127,21 @@ interface OrganizationTaxInfo {
   };
 }
 
+interface ExpenseTransferPreview {
+  targetOrganizationId: string;
+  currency: string;
+  taxType: { name?: string; code?: string };
+  withholdingTaxTypes: WithholdingTaxTypeOption[];
+  withholdingTaxTypeId: string | null;
+  requiresWithholdingSelection: boolean;
+  requiresReceiptVat: boolean;
+  receiptVatEditable: boolean;
+  receiptVatAmount: number | string | null;
+  ready: boolean;
+  previewToken: string | null;
+  amounts: { amount: number; receiptVatAmount: number; taxAmount: number; withholdingTaxBase: number; withHoldingTaxAmount: number; totalAmount: number } | null;
+}
+
 interface ExpenseImportSummary {
   imported: number;
   skipped: number;
@@ -208,6 +223,12 @@ export class ExpensesPageComponent {
   editingId = '';
   transferRow: ExpenseRow | null = null;
   selectedTransferOrganizationId = '';
+  selectedTransferWithholdingId = '__auto__';
+  transferReceiptVat: number | string | null = null;
+  readonly transferPreview = signal<ExpenseTransferPreview | null>(null);
+  readonly loadingTransferPreview = signal(false);
+  private transferTargetsSub?: Subscription;
+  private transferPreviewSub?: Subscription;
   private readonly vendorSearchInput$ = new Subject<string>();
   private vendorSearchSub?: Subscription;
   private createFile: File | null = null;
@@ -296,6 +317,8 @@ export class ExpensesPageComponent {
   }
 
   ngOnDestroy(): void {
+    this.transferTargetsSub?.unsubscribe();
+    this.transferPreviewSub?.unsubscribe();
     this.taxContextSub?.unsubscribe();
     this.vendorSearchSub?.unsubscribe();
     this.expenseComputeSub?.unsubscribe();
@@ -680,6 +703,11 @@ export class ExpensesPageComponent {
 
   openTransferModal(row: ExpenseRow): void {
     if (this.isContextLocked) return;
+    if (this.transferringId()) return;
+    this.transferTargetsSub?.unsubscribe();
+    this.transferPreviewSub?.unsubscribe();
+    this.transferPreview.set(null);
+    this.loadingTransferPreview.set(false);
     this.transferRow = row;
     this.selectedTransferOrganizationId = '';
     this.transferModalError.set('');
@@ -692,13 +720,14 @@ export class ExpensesPageComponent {
       params.set('excludeOrganizationId', row.organizationId);
     }
 
-    this.api.get<OrganizationOption[]>(`/api/v1/expenses/transfer-targets?${params.toString()}`).subscribe({
+    this.transferTargetsSub = this.api.get<OrganizationOption[]>(`/api/v1/expenses/transfer-targets?${params.toString()}`).subscribe({
       next: (response) => {
         this.loadingTransferTargets.set(false);
         const organizations = response.data || [];
         this.transferTargetOrganizations.set(organizations);
         if (organizations.length === 1) {
           this.selectedTransferOrganizationId = organizations[0].id;
+          this.onTransferOrganizationChange();
         }
       },
       error: (err) => {
@@ -710,6 +739,10 @@ export class ExpensesPageComponent {
 
   closeTransferModal(): void {
     if (this.transferringId()) return;
+    this.transferTargetsSub?.unsubscribe();
+    this.transferPreviewSub?.unsubscribe();
+    this.transferPreview.set(null);
+    this.loadingTransferPreview.set(false);
     this.isTransferModalOpen.set(false);
     this.transferRow = null;
     this.selectedTransferOrganizationId = '';
@@ -717,36 +750,75 @@ export class ExpensesPageComponent {
     this.transferTargetOrganizations.set([]);
   }
 
+  onTransferOrganizationChange(): void {
+    this.selectedTransferWithholdingId = '__auto__';
+    this.transferReceiptVat = null;
+    this.transferPreview.set(null);
+    this.loadTransferPreview();
+  }
+
+  loadTransferPreview(): void {
+    this.transferPreviewSub?.unsubscribe();
+    const previous = this.transferPreview();
+    if (previous) this.transferPreview.set({ ...previous, ready: false, previewToken: null });
+    this.transferModalError.set('');
+    const row = this.transferRow;
+    if (!row || !this.selectedTransferOrganizationId) {
+      this.loadingTransferPreview.set(false);
+      return;
+    }
+    const params = new URLSearchParams({ targetOrganizationId: this.selectedTransferOrganizationId });
+    if (this.selectedTransferWithholdingId !== '__auto__') params.set('withholdingTaxTypeId', this.selectedTransferWithholdingId);
+    if (this.transferReceiptVat !== null && this.transferReceiptVat !== '') params.set('receiptVatAmount', String(this.transferReceiptVat));
+    this.loadingTransferPreview.set(true);
+    this.transferPreviewSub = this.api.get<ExpenseTransferPreview>(`/api/v1/expenses/${row.id}/transfer-preview?${params}`).subscribe({
+      next: (response) => {
+        this.loadingTransferPreview.set(false);
+        const preview = response.data || null;
+        this.transferPreview.set(preview);
+        if (preview && !preview.requiresWithholdingSelection) this.selectedTransferWithholdingId = preview.withholdingTaxTypeId || '';
+      },
+      error: (err) => {
+        this.loadingTransferPreview.set(false);
+        this.transferModalError.set(err?.error?.message || 'Unable to calculate transfer taxes. Retry the preview.');
+      },
+    });
+  }
+
+  get canTransferExpense(): boolean {
+    return !this.transferringId() && !this.loadingTransferTargets() && !this.loadingTransferPreview()
+      && Boolean(this.transferPreview()?.ready && this.transferPreview()?.previewToken) && !this.transferModalError();
+  }
+
   async transferExpense(): Promise<void> {
     const row = this.transferRow;
-    const targetOrganizationId = String(this.selectedTransferOrganizationId || '').trim();
-    if (!row?.id) {
-      this.transferModalError.set('Expense is required.');
-      return;
-    }
-    if (!targetOrganizationId) {
-      this.transferModalError.set('Select a target organization.');
-      return;
-    }
-
+    const preview = this.transferPreview();
+    if (!row || !preview?.amounts || !this.canTransferExpense) return;
+    const targetOrganizationId = this.selectedTransferOrganizationId;
     const target = this.transferTargetOrganizations().find((organization) => organization.id === targetOrganizationId);
-    const confirmed = await this.confirmDialog.confirm({
-      title: 'Transfer Expense',
-      message: `Transfer this expense to ${this.organizationOptionLabel(target)}?`,
-      confirmText: 'Transfer Expense',
-      confirmButtonClass: 'ui-btn-primary',
-      iconClass: 'bi-arrow-left-right',
-    });
-    if (!confirmed) return;
-
+    if (!target || preview.targetOrganizationId !== targetOrganizationId) return;
+    const payload = {
+      targetOrganizationId, withholdingTaxTypeId: preview.withholdingTaxTypeId,
+      receiptVatAmount: preview.receiptVatAmount, previewToken: preview.previewToken,
+    };
+    // Lock the reviewed selection while the confirmation is open; prevent double submits.
     this.transferringId.set(row.id);
+    let confirmed = false;
+    try {
+      confirmed = await this.confirmDialog.confirm({
+        title: 'Transfer Expense',
+        message: `Transfer to ${this.organizationOptionLabel(target)} with input VAT ${this.formatMoney(preview.amounts.taxAmount, preview.currency)}, withholding ${this.formatMoney(preview.amounts.withHoldingTaxAmount, preview.currency)}, and payable ${this.formatMoney(preview.amounts.totalAmount, preview.currency)}?`,
+        confirmText: 'Transfer Expense', confirmButtonClass: 'ui-btn-primary', iconClass: 'bi-arrow-left-right',
+      });
+    } catch { this.transferringId.set(''); return; }
+    if (!confirmed || this.transferRow !== row || this.transferPreview() !== preview) {
+      this.transferringId.set('');
+      return;
+    }
     this.transferModalError.set('');
     this.error.set('');
     this.message.set('');
-
-    this.api.create<ExpenseRow>(`/api/v1/expenses/${row.id}/transfer`, {
-      targetOrganizationId,
-    }).subscribe({
+    this.api.create<ExpenseRow>(`/api/v1/expenses/${row.id}/transfer`, payload).subscribe({
       next: (response) => {
         this.transferringId.set('');
         this.message.set(response.message || 'Expense transferred successfully.');
@@ -755,7 +827,8 @@ export class ExpensesPageComponent {
       },
       error: (err) => {
         this.transferringId.set('');
-        this.transferModalError.set(err?.error?.message || 'Unable to transfer expense.');
+        this.transferPreview.set({ ...preview, ready: false, previewToken: null });
+        this.transferModalError.set(err?.error?.message || 'Unable to transfer expense. Refresh the preview before retrying.');
       },
     });
   }

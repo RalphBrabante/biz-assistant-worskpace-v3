@@ -22,7 +22,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
   const writes = [];
   const errors = [];
   const organizations = new Map(['org', 'other-org'].map((id) => [id, {
-    id, taxTypeId: 'vat', taxType: { code: 'VAT', percentage: 12, isActive: true },
+    id, currency: 'PHP', taxTypeId: 'vat', taxType: { code: 'VAT', percentage: 12, isActive: true },
     getUsers: async () => [],
   }]));
   function model(name) {
@@ -53,6 +53,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
     'Item', 'Customer', 'SalesInvoice', 'License', 'WithholdingTaxType', 'User', 'Vendor',
     'Expense', 'QuarterlySalesReport', 'QuarterlyExpenseReport', 'VendorOrganization',
   ].map((name) => [name, model(name)]));
+  models.Expense.sequelize = { transaction: async (_options, callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }) };
   models.Organization = {
     async findByPk(id) { return organizations.get(id) || null; },
     async findAll({ where }) { return where.id.map((id) => organizations.get(id)).filter(Boolean); },
