@@ -15,7 +15,9 @@ function isPublicApiPath(req) {
   const path = String(req.path || '').trim();
   if (
     method === 'GET' &&
-    (path === '/settings/storage/google-drive/callback'
+    (path === '/tickets/gmail/callback'
+      || path === '/api/v1/tickets/gmail/callback'
+      || path === '/settings/storage/google-drive/callback'
       || path === '/api/v1/settings/storage/google-drive/callback')
   ) {
     return true;

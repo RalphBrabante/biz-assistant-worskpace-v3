@@ -23,7 +23,7 @@ function requestLogger(req, res, next) {
     const userId = req.auth?.userId || '-';
 
     console.log(
-      `[REQUEST] id=${requestId} ip=${ip} user=${userId} method=${req.method} path=${req.originalUrl} status=${res.statusCode} durationMs=${elapsedMs.toFixed(
+      `[REQUEST] id=${requestId} ip=${ip} user=${userId} method=${req.method} path=${String(req.originalUrl || '').includes('/tickets/gmail/callback') ? String(req.originalUrl).split('?')[0] : req.originalUrl} status=${res.statusCode} durationMs=${elapsedMs.toFixed(
         2
       )} bytes=${contentLength}`
     );

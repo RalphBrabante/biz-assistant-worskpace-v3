@@ -1,0 +1,16 @@
+const {jsonObjectAttribute} = require('./json-object-attribute');
+const { DataTypes: D, Model } = require('sequelize');
+class EmailTicket extends Model {}
+class TicketMessage extends Model {}
+class GmailMailbox extends Model {}
+class GmailOAuthState extends Model {}
+function initEmailTicketModels(sequelize) {
+  const id = () => ({type: D.UUID, primaryKey: true, defaultValue: D.UUIDV4});
+  const org = () => ({type: D.UUID, allowNull: false});
+  const options = (modelName, tableName, indexes = []) => ({sequelize, modelName, tableName, timestamps: true, underscored: true, indexes});
+  EmailTicket.init({id: id(), organizationId: org(), mailboxId: D.UUID, gmailThreadId: D.STRING(100), externalThreadKey: D.STRING(100), subject: {type: D.STRING(500), allowNull: false}, requesterEmail: {type: D.STRING(255), allowNull: false}, customerId: D.UUID, assigneeId: D.UUID, status: {type: D.STRING(20), defaultValue: 'open', allowNull: false}, priority: {type: D.INTEGER, defaultValue: 2, allowNull: false}, dueAt: D.DATE, lastMessageAt: D.DATE, version: {type: D.INTEGER, defaultValue: 0, allowNull: false}}, options('EmailTicket', 'email_tickets', [{unique: true, fields: ['mailbox_id', 'external_thread_key'], name: 'tickets_external_thread'}, {unique: true, fields: ['mailbox_id', 'gmail_thread_id']}, {fields: ['organization_id', 'status', 'last_message_at']}, {fields: ['organization_id', 'customer_id']}, {fields: ['organization_id', 'assignee_id']} ]));
+  TicketMessage.init({id: id(), organizationId: org(), ticketId: {type: D.UUID, allowNull: false}, mailboxId: D.UUID, externalMessageKey: D.STRING(100), kind: {type: D.STRING(20), allowNull: false}, body: {type: D.TEXT('medium'), allowNull: false}, sender: D.STRING(255), createdBy: D.UUID, gmailMessageId: D.STRING(100), internetMessageId: D.STRING(998), requestKey: D.UUID, deliveryStatus: D.STRING(20), sentAt: D.DATE}, options('TicketMessage', 'ticket_messages', [{unique: true, fields: ['mailbox_id', 'external_message_key'], name: 'messages_external_identity'}, {unique: true, fields: ['ticket_id', 'gmail_message_id']}, {unique: true, fields: ['ticket_id', 'request_key']}, {fields: ['ticket_id', 'created_at']} ]));
+  GmailMailbox.init({id: id(), organizationId: org(), email: {type: D.STRING(255), allowNull: false}, provider: {type: D.STRING(20), allowNull: false, defaultValue: 'gmail'}, encryptedPassword: D.TEXT, imapState: jsonObjectAttribute('imapState'), encryptedRefreshToken: D.TEXT, lastSyncedAt: D.DATE, syncStartedAt: D.DATE, pageToken: D.TEXT, lastError: D.STRING(500)}, options('GmailMailbox', 'gmail_mailboxes', [{unique: true, fields: ['organization_id']}, {unique: true, fields: ['email']} ]));
+  GmailOAuthState.init({id: {type: D.STRING(64), primaryKey: true}, organizationId: org(), userId: {type: D.UUID, allowNull: false}, expiresAt: {type: D.DATE, allowNull: false}}, options('GmailOAuthState', 'gmail_oauth_states'));
+}
+module.exports = {EmailTicket, TicketMessage, GmailMailbox, GmailOAuthState, initEmailTicketModels};

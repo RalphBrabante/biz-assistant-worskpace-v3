@@ -103,3 +103,9 @@ New orders and editable drafts show **Proof of order (optional)** above the orde
 Run migration `20260923040000-order-document-uploads.js` before deploying this UI. Temporary files remain private to the uploader, organization, and target order, expire after 24 hours, and are cleaned at startup, hourly, and before subsequent uploads. Each user may hold up to 20 pending uploads across their drafts. Leaving/resetting the form attempts to discard unused uploads; expiry handles interrupted connections. Files continue to use SQL-backed private order-document storage, with no additional storage service required.
 
 `POST /api/v1/orders/document-uploads` accepts `document`, `organizationId`, `uploadId` (a client-generated UUID for idempotent retry), and optional `orderId`. Order create/update requests supply up to 10 returned IDs in `uploadIds`; attachment consumption is atomic and checks ownership, expiry, and the target order. `DELETE /api/v1/orders/document-uploads/:uploadId` discards the uploader's temporary file. Existing JSON and single-file multipart create/update requests and dedicated document upload/download endpoints remain supported.
+
+## Email tickets
+
+The Email tickets workspace turns Gmail or Hostinger email conversations into organization-scoped tickets with teammate/customer assignment, filtering, priorities, due dates, private notes, and replies. See the [email tickets and Gmail setup guide](docs/email-tickets-setup.md) for deployment, Google OAuth configuration, role permissions, and daily use.
+
+Hostinger and Titan mailboxes are configured per organization in the frontend. See the [Hostinger mailbox setup guide](docs/hostinger-email-setup.md).

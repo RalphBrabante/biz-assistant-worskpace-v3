@@ -1,3 +1,5 @@
+const ticketsRoutes = require('./routes/tickets-routes');
+const {startGmailTicketJob, stopGmailTicketJob} = require('./services/gmail-tickets');
 const express = require('express');
 const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('./jobs/order-upload-cleanup-job');
 const http = require('http');
@@ -305,6 +307,7 @@ app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/messages', messagesRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/bug-reports', bugReportsRoutes);
+app.use('/api/v1/tickets', ticketsRoutes);
 app.use('/api/v1', systemRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -336,6 +339,7 @@ async function bootstrap() {
 
   startLicenseExpiryJob();
   startOrderUploadCleanupJob();
+  startGmailTicketJob();
 
   // Conservative HTTP timeout tuning for low-resource hosts (1 vCPU).
   const server = httpServer.listen(port, () => {
@@ -350,6 +354,7 @@ process.on('SIGINT', async () => {
   try {
     stopLicenseExpiryJob();
     stopOrderUploadCleanupJob();
+    await stopGmailTicketJob();
     if (sequelize) {
       await sequelize.close();
     }

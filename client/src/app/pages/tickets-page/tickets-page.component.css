@@ -1,0 +1,12 @@
+:host { display: block; }
+.mail-icon { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .75rem; background: rgb(99 102 241 / .1); color: #6366f1; font-size: 1.25rem; }
+.ticket-title { text-align: left; font-weight: 600; color: var(--color-ink, inherit); overflow-wrap: anywhere; }
+.ticket-title:hover { text-decoration: underline; }
+.ticket-dialog { max-width: 1100px; }
+.ticket-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 1.5rem; }
+.ticket-properties { padding: 1rem; border: 1px solid rgb(128 128 128 / .2); border-radius: .75rem; align-self: start; }
+.conversation-entry { border: 1px solid rgb(128 128 128 / .2); padding: 1rem; border-radius: .75rem; margin-bottom: .75rem; }
+.private-note { background: rgb(245 158 11 / .08); border-color: rgb(245 158 11 / .25); }
+.activity-entry { border-style: dashed; font-size: .8rem; }
+.message-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; line-height: 1.6; }
+@media (max-width: 760px) { .ticket-workspace { grid-template-columns: minmax(0, 1fr); } .ticket-properties { grid-row: 1; } }

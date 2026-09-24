@@ -1,3 +1,4 @@
+const {startGmailTicketJob, stopGmailTicketJob} = require('../../../services/gmail-tickets');
 import { Injectable } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import type { Server as HttpServer } from 'http';
@@ -63,11 +64,13 @@ export class LegacyApiService {
     await this.connectAmqp();
     if (process.env.LICENSE_EXPIRY_JOB_ENABLED !== 'false') startLicenseExpiryJob();
     startOrderUploadCleanupJob();
+    startGmailTicketJob();
   }
 
   async shutdown(): Promise<void> {
     stopLicenseExpiryJob();
     stopOrderUploadCleanupJob();
+    await stopGmailTicketJob();
     if (this.io) {
       await this.io.close();
       this.io = null;

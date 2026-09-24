@@ -1,3 +1,4 @@
+const {EmailTicket, TicketMessage, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
 const { StorageMigration, StorageMigrationItem, initStorageMigrationModels } = require('./storage-migration');
 const { initOrganizationModel, Organization } = require('./organization');
 const { initUserModel, User } = require('./user');
@@ -58,6 +59,7 @@ const { initBugReportModel, BugReport } = require('./bug-report');
 const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-column');
 
 function initModels(sequelize) {
+  initEmailTicketModels(sequelize);
   initOrganizationModel(sequelize);
   initUserModel(sequelize);
   initLicenseModel(sequelize);
@@ -1379,7 +1381,11 @@ function initModels(sequelize) {
     as: 'creator',
   });
 
+  EmailTicket.belongsTo(Customer, {foreignKey: "customerId", as: "customer"});
+  EmailTicket.belongsTo(User, {foreignKey: "assigneeId", as: "assignee"});
+  TicketMessage.belongsTo(User, {foreignKey: "createdBy", as: "author"});
   return {
+    EmailTicket, TicketMessage, GmailMailbox, GmailOAuthState,
     Organization,
     User,
     License,

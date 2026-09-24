@@ -1,0 +1,17 @@
+const router = require('express').Router();
+const c = require('../controllers/tickets-controller');
+router.post('/mailbox/hostinger', c.admin, c.connectHostinger);
+router.post('/mailbox/disconnect', c.admin, c.disconnect);
+router.post('/mailbox/sync', c.permit('tickets.manage'), c.sync);
+router.get('/gmail/callback', c.callback);
+router.post('/gmail/connect', c.admin, c.connect);
+router.post('/gmail/disconnect', c.admin, c.disconnect);
+router.post('/gmail/sync', c.permit('tickets.manage'), c.sync);
+router.get('/options', c.permit('tickets.read'), c.options);
+router.get('/', c.permit('tickets.read'), c.list);
+router.post('/', c.permit('tickets.manage'), c.create);
+router.get('/:id', c.permit('tickets.read'), c.detail);
+router.put('/:id', c.permit('tickets.manage'), c.update);
+router.post('/:id/notes', c.permit('tickets.manage'), c.note);
+router.post('/:id/replies', c.permit('tickets.reply'), c.reply);
+module.exports = router;

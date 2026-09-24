@@ -49,6 +49,7 @@ export const routes: Routes = [
     component: AppShellComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'tickets', loadComponent: () => import('./pages/tickets-page/tickets-page.component').then(m => m.TicketsPageComponent), canActivate: [permissionGuard], data: { permissions: ['tickets.read'] } },
       { path: 'bug-reports', component: BugReportsPageComponent, canActivate: [administratorGuard] },
       { path: 'dashboard', component: DashboardPageComponent, canActivate: [permissionGuard], data: { permissions: ['dashboard.read'] } },
       { path: 'organizations', component: OrganizationsPageComponent, canActivate: [permissionGuard], data: { permissions: ['organizations.read'] } },
