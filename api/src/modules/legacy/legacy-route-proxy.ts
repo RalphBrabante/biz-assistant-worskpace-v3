@@ -1,3 +1,4 @@
+const debtsRoutes = require('../../routes/debts-routes');
 const ticketsRoutes = require('../../routes/tickets-routes');
 import type { NextFunction, Request, Response } from 'express';
 
@@ -29,6 +30,7 @@ const { invalidateCacheOnWriteMiddleware } = require('../../middleware/cache');
 const { errorHandler, notFoundHandler } = require('../../middleware/error-handler');
 
 type RouteKey =
+  | 'debts'
   | 'tickets'
   | 'bug-reports'
   | 'auth'
@@ -60,6 +62,7 @@ type RouteConfig = {
 };
 
 const ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+  debts: {prefix: '/api/v1/debts', router: debtsRoutes, protected: true},
   'tickets': { prefix: '/api/v1/tickets', router: ticketsRoutes, protected: true },
   'bug-reports': { prefix: '/api/v1/bug-reports', router: bugReportsRoutes, protected: true },
   auth: { prefix: '/api/v1/auth', router: authRoutes, protected: false },

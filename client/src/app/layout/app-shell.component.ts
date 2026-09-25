@@ -76,6 +76,7 @@ export class AppShellComponent {
     {
       title: 'Operations',
       items: [
+        { label: 'Debt management', path: '/debts', icon: 'bi-journal-text', permissions: ['debts.read'] },
         { label: 'Expenses', path: '/expenses', icon: 'bi-cash-stack', permissions: ['expenses.read'] },
         { label: 'Vendors', path: '/vendors', icon: 'bi-truck', permissions: ['vendors.read'] },
         { label: 'Taxes', path: '/taxes', icon: 'bi-percent', permissions: ['expenses.read'] },

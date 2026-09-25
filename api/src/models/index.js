@@ -1,3 +1,4 @@
+const {Debt, DebtPayment, initDebtModels} = require('./debt');
 const {EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
 const { StorageMigration, StorageMigrationItem, initStorageMigrationModels } = require('./storage-migration');
 const { initOrganizationModel, Organization } = require('./organization');
@@ -60,6 +61,7 @@ const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-colu
 
 function initModels(sequelize) {
   initEmailTicketModels(sequelize);
+  initDebtModels(sequelize);
   initOrganizationModel(sequelize);
   initUserModel(sequelize);
   initLicenseModel(sequelize);
@@ -1383,9 +1385,11 @@ function initModels(sequelize) {
 
   EmailTicket.belongsTo(Customer, {foreignKey: "customerId", as: "customer"});
   EmailTicket.belongsTo(User, {foreignKey: "assigneeId", as: "assignee"});
+  DebtPayment.belongsTo(User, {foreignKey: "createdBy", as: "author"});
   TicketMessage.hasMany(TicketAttachment, {foreignKey: "messageId", as: "attachments"});
   TicketMessage.belongsTo(User, {foreignKey: "createdBy", as: "author"});
   return {
+    Debt, DebtPayment,
     EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState,
     Organization,
     User,

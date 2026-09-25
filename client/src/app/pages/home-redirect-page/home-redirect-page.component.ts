@@ -29,6 +29,7 @@ export class HomeRedirectPageComponent {
             { path: '/items', permissions: ['items.read'] },
             { path: '/orders', permissions: ['orders.read'] },
             { path: '/expenses', permissions: ['expenses.read'] },
+            { path: '/debts', permissions: ['debts.read'] },
             { path: '/sales-invoices', permissions: ['sales_invoices.read'] },
             { path: '/users', permissions: ['users.read'] },
           ];

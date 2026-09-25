@@ -1,3 +1,4 @@
+import { DebtsModule } from './modules/debts/debts.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { Module } from '@nestjs/common';
 import { BugReportsModule } from './modules/bug-reports/bug-reports.module';
@@ -26,6 +27,7 @@ import { DevModule } from './modules/dev/dev.module';
 
 @Module({
   imports: [
+    DebtsModule,
     TicketsModule,
     BugReportsModule,
     LegacyApiModule,

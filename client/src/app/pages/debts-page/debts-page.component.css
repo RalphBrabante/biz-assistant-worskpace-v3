@@ -1,0 +1,5 @@
+:host {display: block;}
+.debt-totals {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; overflow-wrap: anywhere;}
+.debt-dialog {max-width: 900px;}
+.payment-form {padding: 1rem; border-radius: .75rem; background: rgb(99 102 241 / .05); border: 1px solid rgb(99 102 241 / .18);}
+@media (max-width: 600px) {.debt-totals {grid-template-columns: 1fr; gap: .75rem;}}

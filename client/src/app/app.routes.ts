@@ -49,6 +49,7 @@ export const routes: Routes = [
     component: AppShellComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'debts', loadComponent: () => import('./pages/debts-page/debts-page.component').then(m => m.DebtsPageComponent), canActivate: [permissionGuard], data: { permissions: ['debts.read'] } },
       { path: 'tickets', loadComponent: () => import('./pages/tickets-page/tickets-page.component').then(m => m.TicketsPageComponent), canActivate: [permissionGuard], data: { permissions: ['tickets.read'] } },
       { path: 'bug-reports', component: BugReportsPageComponent, canActivate: [administratorGuard] },
       { path: 'dashboard', component: DashboardPageComponent, canActivate: [permissionGuard], data: { permissions: ['dashboard.read'] } },
