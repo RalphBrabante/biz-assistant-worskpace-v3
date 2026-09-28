@@ -1,3 +1,4 @@
+const { ensureIndex } = require('../database/resumable-index');
 module.exports={
  async up(q,D){
   const required=type=>({type,allowNull:false});
@@ -8,9 +9,9 @@ module.exports={
    status:{...required(D.STRING(20)),defaultValue:'issued'},cleared_on:D.DATEONLY,returned_on:D.DATEONLY,clear_operation_id:fk('bank_operations',true),return_operation_id:fk('bank_operations',true),
    created_by:fk('users',true),updated_by:fk('users',true),history:required(D.JSON),created_at:required(D.DATE),updated_at:required(D.DATE),
   });
-  await q.addIndex('cheques',['organization_id','account_id','number'],{unique:true,name:'cheques_account_number_uq'});
-  await q.addIndex('cheques',['organization_id','request_key'],{unique:true,name:'cheques_request_uq'});
-  await q.addIndex('cheques',['organization_id','status','dated_on'],{name:'cheques_due_idx'});
+  await ensureIndex(q, 'cheques',['organization_id','account_id','number'],{unique:true,name:'cheques_account_number_uq'});
+  await ensureIndex(q, 'cheques',['organization_id','request_key'],{unique:true,name:'cheques_request_uq'});
+  await ensureIndex(q, 'cheques',['organization_id','status','dated_on'],{name:'cheques_due_idx'});
  },
  async down(q){await q.dropTable('cheques');}
 };
