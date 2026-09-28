@@ -1,3 +1,5 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, ViewChild, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -20,7 +22,7 @@ interface Document { id: string; name: string; size: number; createdAt: string; 
 interface Activity { id: string; title: string; description: string; createdAt: string; actor?: { firstName: string; lastName: string }; }
 interface Workflow { settings: Settings; approval: string; poRequired: boolean; po: { status?: string; date?: string; amount?: number | null; documentId?: string; verifiedAt?: string; verificationNote?: string }; paymentTermsDays: number; fulfilled: Record<string, number>; payments: Payment[]; }
 interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
-@Component({ selector: 'app-order-workspace-page', standalone: true, imports: [CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
+@Component({ selector: 'app-order-workspace-page', standalone: true, imports: [MoneyInputDirective, RowActionsComponent, CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
 export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
@@ -114,7 +116,7 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   can(permission: string): boolean { return this.auth.hasPermission(permission); }
   actionLabel(value: string): string { return ({ submit: 'Submit for approval', approve: 'Approve order', reject: 'Return to draft', confirm: 'Confirm order', cancel: 'Cancel order', complete: 'Complete order', verify_po: 'Verify customer PO', fulfill: 'Record fulfillment', invoice: 'Issue invoice', void_invoice: 'Void invoice', payment: 'Record payment', refund: 'Record refund', reconcile: 'Enable reviewed workflow' } as Record<string, string>)[value] || value; }
   label(value: string | undefined): string { return (value || '').replace(/_/g, ' '); }
-  money(value: unknown): string { return new Intl.NumberFormat('en', { style: 'currency', currency: this.currency }).format(Number(value || 0)); }
+  money(value: unknown): string { return new Intl.NumberFormat('en', { style: 'currency', currency: this.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0)); }
   changed(): void { this.dirty = true; this.success = ''; }
   reset(): void {
     this.proofUploads = []; this.taxes = []; this.lookupErrors = []; this.organizationTaxType = null; this.loadGeneration++;

@@ -224,7 +224,7 @@
 .table-view-wrapper.table-card-view tr { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; padding: 12px; }
 .table-view-wrapper.table-card-view td { display: flex; flex-direction: column; align-items: start; padding: 8px; border: 0; min-width: 0; font-size: 12px; }
 .table-view-wrapper.table-card-view td::before { content: attr(data-label); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; color: var(--text-soft); font-weight: 500; }
-.table-view-wrapper.table-card-view .card-actions-cell { grid-column: 1 / -1; align-items: end; order: -1; }
+.table-view-wrapper.table-card-view .card-actions-cell { grid-column: 1 / -1; align-items: start; order: -1; width: auto; }
 .table-view-wrapper.table-card-view .card-actions-cell::before { display: none; }
 .modal-loading-overlay { position: absolute; inset: 0; z-index: 20; background: var(--bg-panel); opacity: .85; display: flex; align-items: center; justify-content: center; border-radius: inherit; }
 fieldset[disabled] { opacity: .6; pointer-events: none; }
@@ -289,3 +289,10 @@ body:has(.app-sidebar.open) { overflow: hidden; }
   .dashboard-total { @apply block p-4 transition-colors hover:border-brand; }
   .dashboard-status-bar { @apply flex flex-wrap items-center gap-x-5 gap-y-3 border-t pt-4 text-muted; }
 }
+
+/* Row action columns stay compact and consistently lead their tables. */
+.row-actions-cell { width: 1%; white-space: nowrap; text-align: left !important; }
+.row-actions-menu { display: inline-block; }
+.row-actions-menu .row-action-items { display: block; }
+.row-actions-menu .ui-dropdown-item { white-space: nowrap; }
+.row-actions-menu .ui-dropdown-item.text-danger { color: var(--danger, #dc2626); }

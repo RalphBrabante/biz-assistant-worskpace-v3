@@ -214,7 +214,7 @@ export class OrderBoardComponent implements OnChanges, OnDestroy {
       },
     });
   }
-  money(order: BoardOrder): string { try { return new Intl.NumberFormat('en', { style: 'currency', currency: order.currency }).format(Number(order.totalAmount)); } catch { return `${order.currency} ${Number(order.totalAmount).toFixed(2)}`; } }
+  money(order: BoardOrder): string { try { return new Intl.NumberFormat('en', { style: 'currency', currency: order.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(order.totalAmount)); } catch { return `${order.currency} ${Number(order.totalAmount).toFixed(2)}`; } }
   label(value: string): string { return (value || '').replace(/_/g, ' '); }
   overdue(order: BoardOrder): boolean { return !!order.promisedDate && order.promisedDate < new Date().toLocaleDateString('en-CA') && ['confirmed', 'processing'].includes(order.status) && order.fulfillmentStatus !== 'fulfilled'; }
   trackColumn(_index: number, column: Column): string { return column.id; }

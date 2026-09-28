@@ -1,3 +1,7 @@
+import {VouchersModule} from './modules/vouchers/vouchers.module';
+import {ChequesModule} from './modules/cheques/cheques.module';
+import {OrganizationRolesModule} from './modules/organization-roles/organization-roles.module';
+import {BanksModule} from './modules/banks/banks.module';
 import { DebtsModule } from './modules/debts/debts.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { Module } from '@nestjs/common';
@@ -27,6 +31,10 @@ import { DevModule } from './modules/dev/dev.module';
 
 @Module({
   imports: [
+    OrganizationRolesModule,
+    BanksModule,
+    ChequesModule,
+    VouchersModule,
     DebtsModule,
     TicketsModule,
     BugReportsModule,

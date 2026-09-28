@@ -476,6 +476,7 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th *ngIf="isSuperuser">Organization</th>
           <th>Year</th>
           <th>Quarter</th>
@@ -486,7 +487,7 @@
           <th class="report-number">Discount</th>
           <th class="report-number">Total</th>
           <th>Generated</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -494,7 +495,37 @@
           <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No sales reports found.</td>
         </tr>
         <tr *ngFor="let row of salesRows(); trackBy: trackById">
-          <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
+          <td class="row-actions-cell"><app-row-actions label="Reports actions">
+            <div class="row-action-items">
+              <a
+
+                [routerLink]="['/reports/sales', row.id]" title="Open Preview"
+               class="ui-dropdown-item">
+                <i class="bi bi-eye"></i>
+               Open Preview</a>
+              <button
+                *ngIf="canGenerateReports"
+
+                type="button"
+                [disabled]="regeneratingSalesReportId() === row.id || generatingSales()"
+                (click)="generateQuarterlySalesReport(row)"
+
+                title="Regenerate this quarter"
+               class="ui-dropdown-item">
+                <i class="bi" [ngClass]="regeneratingSalesReportId() === row.id ? 'bi-hourglass-split' : 'bi-arrow-clockwise'"></i>
+               Regenerate this quarter</button>
+              <button
+                *ngIf="canDeleteReports"
+
+                type="button"
+                [disabled]="deletingSalesReportId() === row.id"
+                (click)="deleteSalesReport(row.id)"
+               class="ui-dropdown-item text-danger">
+                <i class="bi bi-trash3"></i>
+               Delete</button>
+            </div>
+          </app-row-actions></td>
+        <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
           <td>{{ row.year }}</td>
           <td><span class="ui-badge rounded-full ui-badge-primary">{{ quarterLabel(row.quarter) }}</span></td>
           <td><span class="report-date">{{ row.periodStart | date: 'MMM d, y' }}</span><span class="report-date-secondary">to {{ row.periodEnd | date: 'MMM d, y' }}</span></td>
@@ -504,36 +535,7 @@
           <td class="report-number">{{ toCurrency(row.discountAmount, row.currency) }}</td>
           <td class="font-semibold report-number">{{ toCurrency(row.totalAmount, row.currency) }}</td>
           <td><span class="report-date">{{ row.generatedAt | date: 'mediumDate' }}</span><span class="report-date-secondary">{{ row.generatedAt | date: 'shortTime' }}</span></td>
-          <td class="text-right">
-            <div class="table-actions-inline">
-              <a
-                class="ui-btn ui-btn-sm ui-btn-outline-primary"
-                [routerLink]="['/reports/sales', row.id]" appTooltip title="Open Preview"
-              >
-                <i class="bi bi-eye"></i>
-              </a>
-              <button
-                *ngIf="canGenerateReports"
-                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
-                type="button"
-                [disabled]="regeneratingSalesReportId() === row.id || generatingSales()"
-                (click)="generateQuarterlySalesReport(row)"
-                appTooltip
-                title="Regenerate this quarter"
-              >
-                <i class="bi" [ngClass]="regeneratingSalesReportId() === row.id ? 'bi-hourglass-split' : 'bi-arrow-clockwise'"></i>
-              </button>
-              <button
-                *ngIf="canDeleteReports"
-                class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                type="button"
-                [disabled]="deletingSalesReportId() === row.id"
-                (click)="deleteSalesReport(row.id)"
-              >
-                <i class="bi bi-trash3"></i>
-              </button>
-            </div>
-          </td>
+
         </tr>
       </tbody>
     </table>
@@ -581,6 +583,7 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th *ngIf="isSuperuser">Organization</th>
           <th>Year</th>
           <th>Quarter</th>
@@ -591,7 +594,7 @@
           <th class="report-number">Discount</th>
           <th class="report-number">Total</th>
           <th>Generated</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -599,7 +602,37 @@
           <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No expense reports found.</td>
         </tr>
         <tr *ngFor="let row of expenseRows(); trackBy: trackById">
-          <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
+          <td class="row-actions-cell"><app-row-actions label="Reports actions">
+            <div class="row-action-items">
+              <a
+
+                [routerLink]="['/reports', row.id]" title="Open Preview"
+               class="ui-dropdown-item">
+                <i class="bi bi-eye"></i>
+               Open Preview</a>
+              <button
+                *ngIf="canGenerateReports"
+
+                type="button"
+                [disabled]="regeneratingExpenseReportId() === row.id || generatingExpenses()"
+                (click)="generateQuarterlyExpenseReport(row)"
+
+                title="Regenerate this quarter"
+               class="ui-dropdown-item">
+                <i class="bi" [ngClass]="regeneratingExpenseReportId() === row.id ? 'bi-hourglass-split' : 'bi-arrow-clockwise'"></i>
+               Regenerate this quarter</button>
+              <button
+                *ngIf="canDeleteReports"
+
+                type="button"
+                [disabled]="deletingExpenseReportId() === row.id"
+                (click)="deleteExpenseReport(row.id)"
+               class="ui-dropdown-item text-danger">
+                <i class="bi bi-trash3"></i>
+               Delete</button>
+            </div>
+          </app-row-actions></td>
+        <td *ngIf="isSuperuser" class="text-xs report-organization">{{ row.organization?.name || row.organization?.legalName || organizationLabelById(row.organizationId) }}</td>
           <td>{{ row.year }}</td>
           <td><span class="ui-badge rounded-full ui-badge-warning">{{ quarterLabel(row.quarter) }}</span></td>
           <td><span class="report-date">{{ row.periodStart | date: 'MMM d, y' }}</span><span class="report-date-secondary">to {{ row.periodEnd | date: 'MMM d, y' }}</span></td>
@@ -619,36 +652,7 @@
             </span>
           </td>
           <td><span class="report-date">{{ row.generatedAt | date: 'mediumDate' }}</span><span class="report-date-secondary">{{ row.generatedAt | date: 'shortTime' }}</span></td>
-          <td class="text-right">
-            <div class="table-actions-inline">
-              <a
-                class="ui-btn ui-btn-sm ui-btn-outline-primary"
-                [routerLink]="['/reports', row.id]" appTooltip title="Open Preview"
-              >
-                <i class="bi bi-eye"></i>
-              </a>
-              <button
-                *ngIf="canGenerateReports"
-                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
-                type="button"
-                [disabled]="regeneratingExpenseReportId() === row.id || generatingExpenses()"
-                (click)="generateQuarterlyExpenseReport(row)"
-                appTooltip
-                title="Regenerate this quarter"
-              >
-                <i class="bi" [ngClass]="regeneratingExpenseReportId() === row.id ? 'bi-hourglass-split' : 'bi-arrow-clockwise'"></i>
-              </button>
-              <button
-                *ngIf="canDeleteReports"
-                class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                type="button"
-                [disabled]="deletingExpenseReportId() === row.id"
-                (click)="deleteExpenseReport(row.id)"
-              >
-                <i class="bi bi-trash3"></i>
-              </button>
-            </div>
-          </td>
+
         </tr>
       </tbody>
     </table>

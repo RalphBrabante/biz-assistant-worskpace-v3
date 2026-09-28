@@ -1,3 +1,7 @@
+const {Voucher,initVoucherModel}=require('./voucher');
+const {Cheque,initChequeModel}=require('./cheque');
+const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,initOrganizationRoleModels}=require('./organization-role');
+const {BankAccount,BankOperation,BankEntry,initBankModels} = require('./bank');
 const {Debt, DebtPayment, initDebtModels} = require('./debt');
 const {EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
 const { StorageMigration, StorageMigrationItem, initStorageMigrationModels } = require('./storage-migration');
@@ -62,6 +66,10 @@ const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-colu
 function initModels(sequelize) {
   initEmailTicketModels(sequelize);
   initDebtModels(sequelize);
+  initOrganizationRoleModels(sequelize);
+  initBankModels(sequelize);
+  initChequeModel(sequelize);
+  initVoucherModel(sequelize);
   initOrganizationModel(sequelize);
   initUserModel(sequelize);
   initLicenseModel(sequelize);
@@ -1385,10 +1393,20 @@ function initModels(sequelize) {
 
   EmailTicket.belongsTo(Customer, {foreignKey: "customerId", as: "customer"});
   EmailTicket.belongsTo(User, {foreignKey: "assigneeId", as: "assignee"});
+  Voucher.belongsTo(BankAccount,{foreignKey:'accountId',as:'account'});
+  Cheque.belongsTo(BankAccount,{foreignKey:'accountId',as:'account'});
+  BankEntry.belongsTo(BankOperation, {foreignKey: 'operationId', as: 'operation'});
+  BankOperation.belongsTo(User, {foreignKey: 'createdBy', as: 'author'});
+  BankOperation.hasOne(BankOperation, {foreignKey: 'reversalOf', as: 'reversal'});
   DebtPayment.belongsTo(User, {foreignKey: "createdBy", as: "author"});
   TicketMessage.hasMany(TicketAttachment, {foreignKey: "messageId", as: "attachments"});
   TicketMessage.belongsTo(User, {foreignKey: "createdBy", as: "author"});
+  OrganizationRole.belongsToMany(Permission,{through:OrganizationRolePermission,foreignKey:'roleId',otherKey:'permissionId',as:'permissions'});
+  OrganizationRole.belongsToMany(User,{through:OrganizationUserRole,foreignKey:'roleId',otherKey:'userId',as:'members'});
+  OrganizationUserRole.belongsTo(OrganizationRole,{foreignKey:'roleId',as:'role'});
   return {
+    OrganizationRole,OrganizationRolePermission,OrganizationUserRole,
+    BankAccount, BankOperation, BankEntry, Cheque, Voucher,
     Debt, DebtPayment,
     EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState,
     Organization,

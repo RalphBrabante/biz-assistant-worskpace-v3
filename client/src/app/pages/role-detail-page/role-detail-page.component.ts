@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -35,7 +36,7 @@ interface RoleDetail {
 @Component({
   selector: 'app-role-detail-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [RowActionsComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './role-detail-page.component.html',
 })
 export class RoleDetailPageComponent {

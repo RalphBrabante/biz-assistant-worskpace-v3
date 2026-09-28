@@ -114,13 +114,15 @@
     </div>
     <div *ngIf="!loading() && viewMode === 'table' && rows().length" class="ui-table-responsive">
       <table class="ui-table ui-table-hover align-middle mb-0">
-        <thead><tr><th>Message</th><th>Type</th><th>From</th><th>Received</th><th>Status</th><th>Action</th></tr></thead>
+        <thead><tr><th class="row-actions-cell" scope="col">Actions</th>
+        <th>Message</th><th>Type</th><th>From</th><th>Received</th><th>Status</th></tr></thead>
         <tbody>
           <tr *ngFor="let row of rows(); trackBy: trackById" [class.message-unread]="!row.isRead">
+            <td class="row-actions-cell"><app-row-actions [label]="'Actions for ' + row.title"><button type="button" class="ui-dropdown-item" (click)="openMessage(row)"><i class="bi bi-envelope-open" aria-hidden="true"></i>View message</button><button type="button" (click)="markAsRead(row)" [disabled]="row.isRead || pendingReadIds().has(row.id) || markingAllRead()" class="ui-dropdown-item">{{ row.isRead ? 'Read' : pendingReadIds().has(row.id) ? 'Marking…' : 'Mark read' }}</button></app-row-actions></td>
             <td class="message-table-summary"><button type="button" class="ui-btn ui-btn-link text-ink text-left font-semibold p-0 break-words" (click)="openMessage(row)">{{ row.title }}</button><div class="text-xs text-muted message-preview">{{ row.message }}</div></td>
             <td class="capitalize">{{ entityTypeLabel(row.entityType) }}</td><td>{{ creatorLabel(row) }}</td><td class="text-xs">{{ formatTimestamp(row.createdAt) }}</td>
             <td><span class="ui-badge rounded-full" [ngClass]="row.isRead ? 'ui-badge-secondary' : 'ui-badge-primary'">{{ row.isRead ? 'Read' : 'Unread' }}</span></td>
-            <td><button type="button" class="ui-btn ui-btn-sm ui-btn-outline-primary whitespace-nowrap" (click)="markAsRead(row)" [disabled]="row.isRead || pendingReadIds().has(row.id) || markingAllRead()">{{ row.isRead ? 'Read' : pendingReadIds().has(row.id) ? 'Marking…' : 'Mark read' }}</button></td>
+
           </tr>
         </tbody>
       </table>

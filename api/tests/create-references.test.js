@@ -53,6 +53,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
     'Item', 'Customer', 'SalesInvoice', 'License', 'WithholdingTaxType', 'User', 'Vendor',
     'Expense', 'QuarterlySalesReport', 'QuarterlyExpenseReport', 'VendorOrganization',
   ].map((name) => [name, model(name)]));
+  models.Item.sequelize = { transaction: async callback => callback({ LOCK: { UPDATE: 'UPDATE' } }) };
   models.Expense.sequelize = { transaction: async (_options, callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }) };
   models.Organization = {
     async findByPk(id) { return organizations.get(id) || null; },

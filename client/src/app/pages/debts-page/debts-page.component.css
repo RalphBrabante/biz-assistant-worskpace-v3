@@ -3,3 +3,18 @@
 .debt-dialog {max-width: 900px;}
 .payment-form {padding: 1rem; border-radius: .75rem; background: rgb(99 102 241 / .05); border: 1px solid rgb(99 102 241 / .18);}
 @media (max-width: 600px) {.debt-totals {grid-template-columns: 1fr; gap: .75rem;}}
+
+.debt-toggle {display: inline-flex; align-items: center; gap: .65rem; padding: .3rem 0;}
+.debt-toggle .bi {transition: transform .18s ease; font-size: .75rem;}
+.debt-toggle .turned {transform: rotate(90deg);}
+.debt-toggle:focus-visible {outline: 2px solid currentColor; outline-offset: 4px; border-radius: .25rem;}
+.debt-expanded {background: rgb(99 102 241 / .04);}
+.debt-detail-row > td {padding: 0 !important;}
+.debt-history {padding: 1.25rem 1.5rem; background: rgb(99 102 241 / .035); border-left: 3px solid rgb(99 102 241 / .5); white-space: normal;}
+.history-icon, .payment-dot {display: grid; place-items: center; flex-shrink: 0; border-radius: 50%; width: 2.25rem; height: 2.25rem; background: rgb(99 102 241 / .1); color: #6366f1;}
+.payment-entry {display: flex; gap: .85rem; padding: 1rem 0; border-top: 1px solid rgb(148 163 184 / .2);}
+.payment-dot {width: 1.6rem; height: 1.6rem; background: rgb(16 185 129 / .12); color: #059669;}
+.history-empty {padding: 1.5rem; text-align: center; border: 1px dashed rgb(148 163 184 / .4); border-radius: .75rem;}
+@media (prefers-reduced-motion: reduce) {.debt-toggle .bi {transition: none;}}
+
+.debt-actions {width: 4.5rem; white-space: nowrap;}

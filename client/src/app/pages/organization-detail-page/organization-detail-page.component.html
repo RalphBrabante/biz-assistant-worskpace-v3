@@ -85,11 +85,12 @@
       <table class="ui-table ui-table-hover align-middle mb-0">
         <thead class="ui-table-light">
           <tr>
+            <th class="row-actions-cell" scope="col">Actions</th>
             <th>Name</th>
             <th>Email</th>
             <th>Role</th>
             <th>Membership Active</th>
-            <th class="text-right">Actions</th>
+
           </tr>
         </thead>
         <tbody>
@@ -97,20 +98,21 @@
             <td colspan="5" class="text-center text-muted py-6">No users in this organization yet.</td>
           </tr>
           <tr *ngFor="let member of members; trackBy: trackByMemberId">
-            <td>{{ member.firstName || '' }} {{ member.lastName || '' }}</td>
-            <td>{{ member.email || '-' }}</td>
-            <td>{{ memberRole(member) }}</td>
-            <td>{{ memberActive(member) ? 'Yes' : 'No' }}</td>
-            <td class="text-right">
+            <td class="row-actions-cell"><app-row-actions label="Organization detail actions">
               <button
-                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+
                 type="button"
                 [disabled]="removingUserId === member.id"
                 (click)="removeMember(member.id)"
-              >
+               class="ui-dropdown-item text-danger">
                 <i class="bi bi-person-dash mr-1"></i>{{ removingUserId === member.id ? 'Removing...' : 'Remove' }}
               </button>
-            </td>
+            </app-row-actions></td>
+          <td>{{ member.firstName || '' }} {{ member.lastName || '' }}</td>
+            <td>{{ member.email || '-' }}</td>
+            <td>{{ memberRole(member) }}</td>
+            <td>{{ memberActive(member) ? 'Yes' : 'No' }}</td>
+
           </tr>
         </tbody>
       </table>

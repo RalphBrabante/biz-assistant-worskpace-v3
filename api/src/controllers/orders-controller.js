@@ -342,7 +342,7 @@ async function applyStockDeduction(itemById = new Map(), demandByItemId = new Ma
       throw new Error(`Requested quantity for item ${item.name} exceeds available stock (${availableStock}).`);
     }
 
-    await item.update({ stock: Math.floor(nextStock) }, { transaction });
+    await item.update({ stock: toFixed3(nextStock) }, { transaction });
   }
 }
 

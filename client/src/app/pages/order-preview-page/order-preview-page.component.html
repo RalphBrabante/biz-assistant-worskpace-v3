@@ -44,7 +44,7 @@
       </div>
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label">Shipping Amount</label>
-        <input type="number" step="0.01" class="ui-form-control" [(ngModel)]="shippingAmount" [disabled]="isLocked" />
+        <input appMoney [moneyAsNumber]="true" type="text" step="0.01" class="ui-form-control" [(ngModel)]="shippingAmount" [disabled]="isLocked" />
       </div>
       <div class="col-span-12 md:col-span-4">
         <div class="ui-form-check mt-6">

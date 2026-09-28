@@ -76,6 +76,9 @@ export class AppShellComponent {
     {
       title: 'Operations',
       items: [
+        { label: 'Payment vouchers', path: '/vouchers', icon: 'bi-receipt', adminOnly: true },
+        { label: 'Cheque management', path: '/cheques', icon: 'bi-journal-check', adminOnly: true },
+        { label: 'Bank management', path: '/banks', icon: 'bi-bank', adminOnly: true },
         { label: 'Debt management', path: '/debts', icon: 'bi-journal-text', permissions: ['debts.read'] },
         { label: 'Expenses', path: '/expenses', icon: 'bi-cash-stack', permissions: ['expenses.read'] },
         { label: 'Vendors', path: '/vendors', icon: 'bi-truck', permissions: ['vendors.read'] },

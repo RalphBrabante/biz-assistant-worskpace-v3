@@ -1,3 +1,4 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
 import { CountrySelectComponent } from '../../shared/country-select.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
@@ -152,7 +153,7 @@ interface ExpenseImportSummary {
 @Component({
   selector: 'app-expenses-page',
   standalone: true,
-  imports: [CountrySelectComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [MoneyInputDirective, CountrySelectComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
   templateUrl: './expenses-page.component.html',
 })
 export class ExpensesPageComponent {

@@ -1,3 +1,5 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CountrySelectComponent } from '../../shared/country-select.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { CommonModule } from '@angular/common';
@@ -14,7 +16,7 @@ import { RESOURCE_CONFIGS } from '../../shared/resource-configs';
 @Component({
   selector: 'app-resource-page',
   standalone: true,
-  imports: [CountrySelectComponent, CommonModule, FormsModule, TooltipDirective],
+  imports: [MoneyInputDirective, RowActionsComponent, CountrySelectComponent, CommonModule, FormsModule, TooltipDirective],
   templateUrl: './resource-page.component.html',
 })
 export class ResourcePageComponent {
@@ -193,6 +195,7 @@ export class ResourcePageComponent {
     if (value === null || value === undefined || value === '') {
       return '-';
     }
+    if (this.config.fields.some(field => field.key === key && field.type === 'money') && Number.isFinite(Number(value))) return Number(value).toFixed(2);
     return String(value);
   }
 
@@ -266,7 +269,7 @@ export class ResourcePageComponent {
         continue;
       }
 
-      if (field.type === 'number') {
+      if (field.type === 'number' || field.type === 'money') {
         payload[field.key] = Number(raw);
         continue;
       }

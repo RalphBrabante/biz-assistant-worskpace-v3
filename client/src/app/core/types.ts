@@ -14,7 +14,7 @@ export interface ApiResponse<T> {
 export interface FieldConfig {
   key: string;
   label: string;
-  type?: 'text' | 'email' | 'number' | 'date' | 'datetime-local' | 'textarea' | 'checkbox' | 'json';
+  type?: 'text' | 'email' | 'money' | 'number' | 'date' | 'datetime-local' | 'textarea' | 'checkbox' | 'json';
   required?: boolean;
   readonlyOnEdit?: boolean;
   placeholder?: string;

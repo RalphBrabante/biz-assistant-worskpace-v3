@@ -1,3 +1,7 @@
+const vouchersRoutes = require('../../routes/vouchers-routes');
+const chequesRoutes = require('../../routes/cheques-routes');
+const organizationRolesRoutes=require('../../routes/organization-roles-routes');
+const banksRoutes = require('../../routes/banks-routes');
 const debtsRoutes = require('../../routes/debts-routes');
 const ticketsRoutes = require('../../routes/tickets-routes');
 import type { NextFunction, Request, Response } from 'express';
@@ -30,6 +34,10 @@ const { invalidateCacheOnWriteMiddleware } = require('../../middleware/cache');
 const { errorHandler, notFoundHandler } = require('../../middleware/error-handler');
 
 type RouteKey =
+  | 'organization-roles'
+  | 'vouchers'
+  | 'cheques'
+  | 'banks'
   | 'debts'
   | 'tickets'
   | 'bug-reports'
@@ -62,6 +70,10 @@ type RouteConfig = {
 };
 
 const ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+  'organization-roles': {prefix:'/api/v1/organization-roles',router:organizationRolesRoutes,protected:true},
+  vouchers: {prefix: '/api/v1/vouchers', router: vouchersRoutes, protected: true},
+  cheques: {prefix: '/api/v1/cheques', router: chequesRoutes, protected: true},
+  banks: {prefix: '/api/v1/banks', router: banksRoutes, protected: true},
   debts: {prefix: '/api/v1/debts', router: debtsRoutes, protected: true},
   'tickets': { prefix: '/api/v1/tickets', router: ticketsRoutes, protected: true },
   'bug-reports': { prefix: '/api/v1/bug-reports', router: bugReportsRoutes, protected: true },

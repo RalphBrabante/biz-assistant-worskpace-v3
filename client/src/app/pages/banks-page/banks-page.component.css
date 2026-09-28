@@ -1,0 +1,11 @@
+:host {display:block;}
+.bank-summaries {display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;}
+.balance-card {display:flex;align-items:center;gap:1rem;padding:1.5rem;border-top:3px solid #6366f1;}
+.bank-symbol {display:grid;place-items:center;width:3rem;height:3rem;border-radius:1rem;color:#6366f1;background:rgb(99 102 241 / .1);font-size:1.4rem;flex-shrink:0;}
+.ledger-note {padding:1rem;border:1px solid rgb(148 163 184 / .2);border-radius:.75rem;font-size:.875rem;background:rgb(148 163 184 / .04);}
+.ledger-note > .bi {margin-right:.5rem;}
+.actions-column {width:4.5rem;white-space:nowrap;}
+.account-selected {background:rgb(99 102 241 / .05);}
+.activity-kind {display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;border-radius:2rem;padding:.3rem .65rem;background:rgb(148 163 184 / .12);white-space:nowrap;}
+.activity-kind.credit {background:rgb(16 185 129 / .1);color:#059669;}
+.entry-description {min-width:180px;max-width:350px;overflow-wrap:anywhere;}

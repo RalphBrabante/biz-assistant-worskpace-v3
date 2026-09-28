@@ -63,12 +63,13 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th>Name</th>
           <th>Code</th>
           <th>System</th>
           <th>Active</th>
           <th>Description</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -78,37 +79,48 @@
 
         <tr *ngFor="let row of filteredRows(); trackBy: trackById">
           <ng-container *ngIf="editingId !== row.id; else editRow">
-            <td class="font-semibold">{{ row.name }}</td>
+            <td class="row-actions-cell"><app-row-actions label="Roles actions">
+              <div class="row-action-items">
+                <a
+
+                  [routerLink]="['/roles', row.id]"
+
+                  title="Edit"
+                 class="ui-dropdown-item">
+                  <i class="bi bi-pencil-square"></i>
+                 Edit</a>
+                <button
+
+                  type="button"
+                  [disabled]="deletingId() === row.id"
+                  (click)="removeRole(row.id)"
+
+                  title="Delete"
+                 class="ui-dropdown-item text-danger">
+                  <i class="bi bi-trash3"></i>
+                 Delete</button>
+              </div>
+            </app-row-actions></td>
+          <td class="font-semibold">{{ row.name }}</td>
             <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
             <td>{{ row.isSystem ? 'Yes' : 'No' }}</td>
             <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
             <td class="text-muted">{{ row.description || '-' }}</td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <a
-                  class="ui-btn ui-btn-sm ui-btn-outline-secondary"
-                  [routerLink]="['/roles', row.id]"
-                  appTooltip
-                  title="Edit"
-                >
-                  <i class="bi bi-pencil-square"></i>
-                </a>
-                <button
-                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                  type="button"
-                  [disabled]="deletingId() === row.id"
-                  (click)="removeRole(row.id)"
-                  appTooltip
-                  title="Delete"
-                >
-                  <i class="bi bi-trash3"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-container>
 
           <ng-template #editRow>
-            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['name']" /></td>
+            <td class="row-actions-cell"><app-row-actions label="Roles actions">
+              <div class="row-action-items">
+                <button type="button" [disabled]="submitting()" (click)="saveEdit()" title="Save" class="ui-dropdown-item">
+                  <i class="bi bi-floppy2"></i>
+                 Save</button>
+                <button type="button" (click)="cancelEdit()" title="Cancel" class="ui-dropdown-item">
+                  <i class="bi bi-x-lg"></i>
+                 Cancel</button>
+              </div>
+            </app-row-actions></td>
+          <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['name']" /></td>
             <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['code']" /></td>
             <td>
               <div class="ui-form-check">
@@ -121,16 +133,7 @@
               </div>
             </td>
             <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="editForm['description']" /></td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveEdit()" appTooltip title="Save">
-                  <i class="bi bi-floppy2"></i>
-                </button>
-                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelEdit()" appTooltip title="Cancel">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-template>
         </tr>
       </tbody>

@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
@@ -54,7 +55,7 @@ interface OrganizationOption {
 @Component({
   selector: 'app-vendors-page',
   standalone: true,
-  imports: [ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective, VendorFormFieldsComponent],
+  imports: [RowActionsComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective, VendorFormFieldsComponent],
   templateUrl: './vendors-page.component.html',
 })
 export class VendorsPageComponent {

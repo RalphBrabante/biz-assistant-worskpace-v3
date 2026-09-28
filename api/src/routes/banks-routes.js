@@ -1,0 +1,12 @@
+const router=require('express').Router();
+const {authorize}=require('../middleware/authz');
+const c=require('../controllers/banks-controller');
+const {requireBankAdministrator}=require('../middleware/bank-administrator');
+router.use(requireBankAdministrator);
+router.get('/',authorize('banks.read'),c.list);
+router.post('/',authorize('banks.manage'),c.create);
+router.post('/transactions',authorize('banks.transact'),c.transact);
+router.post('/transactions/:id/reverse',authorize('banks.transact'),c.reverse);
+router.get('/:id/transactions',authorize('banks.read'),c.history);
+router.put('/:id',authorize('banks.manage'),c.update);
+module.exports=router;

@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CountrySelectComponent } from '../../shared/country-select.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
@@ -64,7 +65,7 @@ interface OrganizationOption {
 @Component({
   selector: 'app-users-page',
   standalone: true,
-  imports: [CountrySelectComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [RowActionsComponent, CountrySelectComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
   templateUrl: './users-page.component.html',
 })
 export class UsersPageComponent {

@@ -34,6 +34,8 @@ function setup() {
     };
     const requireMock = (name) => {
       if (name === 'rxjs') return rx;
+      if (name.endsWith('/money-input.directive')) return { MoneyInputDirective: class {} };
+      if (name.endsWith('/row-actions.component')) return { RowActionsComponent: class {} };
       if (name in mocks) return mocks[name];
       if (name.endsWith('organization-message')) return load('core/organization-message.ts');
       if (name.endsWith('organization-messages.service')) return { OrganizationMessagesService: 'messages' };

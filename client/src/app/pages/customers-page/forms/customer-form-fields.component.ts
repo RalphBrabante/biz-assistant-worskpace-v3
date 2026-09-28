@@ -1,3 +1,4 @@
+import {MoneyInputDirective} from '../../../shared/money-input.directive';
 import { CountrySelectComponent } from '../../../shared/country-select.component';
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
@@ -7,7 +8,7 @@ import { TooltipDirective } from '../../../shared/tooltip.directive';
 @Component({
   selector: 'app-customer-form-fields',
   standalone: true,
-  imports: [CountrySelectComponent, CommonModule, ReactiveFormsModule, TooltipDirective],
+  imports: [MoneyInputDirective, CountrySelectComponent, CommonModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './customer-form-fields.component.html',
 })
 export class CustomerFormFieldsComponent {

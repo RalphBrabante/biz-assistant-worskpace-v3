@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
@@ -62,7 +63,7 @@ interface CurrencyOption {
 @Component({
   selector: 'app-organizations-page',
   standalone: true,
-  imports: [ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective, OrganizationFormFieldsComponent],
+  imports: [RowActionsComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective, OrganizationFormFieldsComponent],
   templateUrl: './organizations-page.component.html',
 })
 export class OrganizationsPageComponent {

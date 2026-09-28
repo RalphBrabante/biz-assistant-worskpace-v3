@@ -1,0 +1,50 @@
+// This integration test only accepts an empty, disposable bank_test_* database.
+const assert=require('node:assert/strict'),{randomUUID}=require('crypto'),fs=require('fs'),path=require('path'),vm=require('vm'),{createRequire}=require('module');
+const {Sequelize,DataTypes:D}=require('sequelize');
+const {BankAccount,BankOperation,BankEntry,initBankModels}=require('../src/models/bank');
+const database=process.env.BANK_TEST_DATABASE,host=process.env.BANK_TEST_HOST;
+if(!/^bank_test_[a-z0-9_]+$/.test(database||'')||!/^bank-test-[a-z0-9-]+$/.test(host||'')||!process.env.BANK_TEST_PASSWORD)throw Error('Requires a disposable bank-test-* host, bank_test_* database and BANK_TEST_PASSWORD.');
+const s=new Sequelize(database,'root',process.env.BANK_TEST_PASSWORD,{host,dialect:'mysql',logging:false,pool:{max:8}});
+(async()=>{try{
+await s.authenticate();const q=s.getQueryInterface();if((await q.showAllTables()).length)throw Error('Refusing nonempty database.');
+const Organization=s.define('Organization',{id:{type:D.UUID,primaryKey:true},currency:D.STRING(3)},{tableName:'organizations',timestamps:false});
+const User=s.define('User',{id:{type:D.UUID,primaryKey:true},firstName:D.STRING,lastName:D.STRING},{tableName:'users',timestamps:false,underscored:true});
+await Organization.sync();await User.sync();await q.createTable('permissions',{id:{type:D.UUID,primaryKey:true},name:D.STRING,code:D.STRING,resource:D.STRING,action:D.STRING,description:D.TEXT,is_system:D.BOOLEAN,is_active:D.BOOLEAN,created_at:D.DATE,updated_at:D.DATE});
+await require('../src/migrations/20260928020000-create-bank-ledger').up(q,D);initBankModels(s);
+BankEntry.belongsTo(BankOperation,{foreignKey:'operationId',as:'operation'});BankOperation.belongsTo(User,{foreignKey:'createdBy',as:'author'});BankOperation.hasOne(BankOperation,{foreignKey:'reversalOf',as:'reversal'});
+const models={Organization,BankAccount,BankOperation,BankEntry};
+const filename=path.resolve(__dirname,'../src/controllers/banks-controller.js'),real=createRequire(filename),mod={exports:{}};
+vm.runInNewContext(fs.readFileSync(filename,'utf8'),{module:mod,exports:mod.exports,Date,console,require:name=>name==='../sequelize'?{getModels:()=>models}:real(name)});
+const c=mod.exports,org=randomUUID(),foreign=randomUUID(),userId=randomUUID();await Organization.bulkCreate([{id:org,currency:'PHP'},{id:foreign,currency:'PHP'}]);await User.create({id:userId,firstName:'Bank',lastName:'Tester'});
+async function call(method,body={},id,organizationId=org,query={}){const res={statusCode:200,set(){},status(n){this.statusCode=n;return this;},json(body){this.body=body;}};await c[method]({body,params:{id},query,auth:{userId,roleCodes:['staff'],user:{organizationId}}},res);return res;}
+async function create(name,openingBalance='100.00',organizationId=org){const r=await call('create',{name,bankName:'Test bank',lastFour:'1234',openingBalance,postedOn:'2026-01-01',requestKey:randomUUID()},undefined,organizationId);assert.equal(r.statusCode,201,JSON.stringify(r.body));return BankAccount.findOne({where:{name,organizationId}});}
+const a=await create('Operating'),b=await create('Savings','0.00'),other=await create('Foreign','0.00',foreign);
+const payload=(kind,amount,extra={})=>({kind,amount,accountId:a.id,postedOn:'2026-01-02',requestKey:randomUUID(),...extra});
+const transfer=payload('transfer','25.10',{toAccountId:b.id}),results=await Promise.all([call('transact',transfer),call('transact',transfer)]);
+assert.deepEqual(results.map(r=>r.statusCode).sort(),[200,201]);await a.reload();await b.reload();assert.equal(a.balance,'74.90');assert.equal(b.balance,'25.10');assert.equal(await BankEntry.count({where:{operationId:results[0].body.data.operationId}}),2);
+assert.equal((await call('transact',{...transfer,amount:'25.11'})).statusCode,409);
+assert.equal((await call('transact',payload('transfer','1.00',{toAccountId:other.id}))).statusCode,404);await a.reload();assert.equal(a.balance,'74.90');
+assert.equal((await call('history',{},a.id,foreign)).statusCode,404);
+assert.equal((await call('transact',payload('transfer','1.00',{toAccountId:a.id}))).statusCode,400);
+assert.equal((await call('transact',payload('withdrawal','75.00'))).statusCode,409);
+const reverse=await call('reverse',{reason:'Wrong bank',requestKey:randomUUID()},results[0].body.data.operationId);assert.equal(reverse.statusCode,200,JSON.stringify(reverse.body));await a.reload();await b.reload();assert.equal(a.balance,'100.00');assert.equal(b.balance,'0.00');
+assert.equal((await call('reverse',{reason:'Again',requestKey:randomUUID()},results[0].body.data.operationId)).statusCode,409);
+const competing=await Promise.all([call('transact',payload('withdrawal','70.00')),call('transact',payload('withdrawal','50.00'))]);assert.deepEqual(competing.map(r=>r.statusCode).sort(),[201,409]);
+await a.reload();assert(['30.00','50.00'].includes(a.balance));
+let r=await call('update',{name:b.name,bankName:b.bankName,lastFour:'1234',notes:'',isArchived:true},b.id);assert.equal(r.statusCode,200);
+assert.equal((await call('transact',payload('deposit','1.00',{accountId:b.id}))).statusCode,409);
+assert.equal((await call('transact',payload('transfer','1.00',{toAccountId:b.id}))).statusCode,409);
+const before=a.balance;await a.reload();assert.equal(a.balance,before);
+assert.equal((await call('update',{name:a.name,bankName:a.bankName,isArchived:true},a.id)).statusCode,409);
+await call('update',{name:b.name,bankName:b.bankName,isArchived:false},b.id);
+await b.update({currency:'USD'});assert.equal((await call('transact',payload('transfer','1.00',{toAccountId:b.id}))).statusCode,400);await b.update({currency:'PHP'});
+for(const amount of ['0','-1','1.001','NaN','1000000000000'])assert.equal((await call('transact',payload('deposit',amount))).statusCode,400);
+assert.equal((await call('transact',payload('deposit','1.00',{postedOn:'2026-02-30'}))).statusCode,400);
+assert.equal((await call('transact',payload('deposit','1.00',{postedOn:'2999-01-01'}))).statusCode,400);
+const originalCreate=BankEntry.create;BankEntry.create=async()=>{throw Error('injected ledger failure');};assert.equal((await call('transact',payload('deposit','1.00'))).statusCode,500);BankEntry.create=originalCreate;await a.reload();assert.equal(a.balance,before);
+r=await call('history',{},a.id);assert.equal(r.statusCode,200,JSON.stringify(r.body));assert(r.body.data.entries.some(e=>e.operation.reversal));assert.equal(r.body.data.entries[0].operation.author.firstName,'Bank');
+r=await call('history',{},a.id,org,{kind:'transfer',from:'2026-01-01',to:'2026-01-02'});assert.equal(r.body.data.entries.length,1);
+const large=await create('Large','999999999999.99');assert.equal((await call('transact',payload('deposit','0.01',{accountId:large.id}))).statusCode,400);
+r=await call('list');assert.equal(r.statusCode,200);assert.equal(r.body.data.accounts.length,3);assert.equal(r.body.data.totals.length,1);
+console.log('PASS: MySQL migration, account creation, decimal balances, concurrent transfers/retries/withdrawals, organization isolation, rollback, reversals, archive/restore, currency checks, validation, history joins/filters, overflow and totals.');
+}finally{await s.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

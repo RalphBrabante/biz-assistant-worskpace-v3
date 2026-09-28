@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CountrySelectComponent } from '../../shared/country-select.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { CommonModule } from '@angular/common';
@@ -68,7 +69,7 @@ interface UserOrganizationRow {
 @Component({
   selector: 'app-user-detail-page',
   standalone: true,
-  imports: [CountrySelectComponent, CommonModule, FormsModule, RouterLink],
+  imports: [RowActionsComponent, CountrySelectComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './user-detail-page.component.html',
 })
 export class UserDetailPageComponent {

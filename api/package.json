@@ -15,7 +15,9 @@
     "test:schema": "node --test tests/schema-indexes.test.js tests/invoice-relationship.test.js",
     "db:audit": "node scripts/audit-schema.js",
     "test:schema:mysql": "node scripts/verify-schema-indexes.js",
-    "test:expenses:mysql": "node scripts/verify-expense-transfers.js"
+    "test:expenses:mysql": "node scripts/verify-expense-transfers.js",
+    "test:banks": "node --test tests/banks-routes.test.js",
+    "test:banks:mysql": "node scripts/verify-banks.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",

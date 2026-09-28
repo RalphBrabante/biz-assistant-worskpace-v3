@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -14,7 +15,7 @@ interface Recipients {to: string[]; cc: string[];}
 interface Message { envelope?: {to: string[]; cc: string[]; replyTo: string[]; replyToMessageId?: string; deliveryWarning?: string}; attachments?: Attachment[]; replyRecipients?: Recipients; replyAllRecipients?: Recipients; id: string; kind: string; body: string; sender?: string; createdAt: string; sentAt?: string; deliveryStatus?: string; author?: Person; }
 interface Options { users: Person[]; customers: Customer[]; gmailConfigured: boolean; hostingerConfigured?: boolean; automaticSync?: boolean; mailbox: {provider?: string; email: string; connected: boolean; lastSyncedAt?: string; lastError?: string; importing: boolean} | null; }
 interface Detail {ticket: Ticket; messages: Message[]; hasMore: boolean;}
-@Component({selector: 'app-tickets-page', standalone: true, imports: [CommonModule, FormsModule, ModalDirective], templateUrl: './tickets-page.component.html', styleUrl: './tickets-page.component.css'})
+@Component({selector: 'app-tickets-page', standalone: true, imports: [RowActionsComponent, CommonModule, FormsModule, ModalDirective], templateUrl: './tickets-page.component.html', styleUrl: './tickets-page.component.css'})
 export class TicketsPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);

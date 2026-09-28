@@ -149,7 +149,7 @@
   <div class="col-span-12 md:col-span-4">
     <label class="ui-form-label font-semibold">Credit Limit <span *ngIf="isRequired('creditLimit')" class="text-danger">*</span></label>
     <div class="relative">
-      <input type="number" class="ui-form-control" formControlName="creditLimit" [class.is-invalid]="hasError('creditLimit')" />
+      <input appMoney [moneyAsNumber]="true" type="text" class="ui-form-control" formControlName="creditLimit" [class.is-invalid]="hasError('creditLimit')" />
       <div *ngIf="hasError('creditLimit')" class="field-validation-icon" appTooltip [attr.title]="error('creditLimit')">
         <i class="bi bi-exclamation-circle-fill text-danger"></i>
       </div>

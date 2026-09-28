@@ -1,3 +1,4 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
 import { CountrySelectComponent } from '../../shared/country-select.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
@@ -70,7 +71,7 @@ interface WithholdingTaxTypeOption {
 @Component({
   selector: 'app-create-order-page',
   standalone: true,
-  imports: [CountrySelectComponent, ModalDirective, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [MoneyInputDirective, CountrySelectComponent, ModalDirective, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './create-order-page.component.html',
 })
 export class CreateOrderPageComponent implements OnInit, OnDestroy {

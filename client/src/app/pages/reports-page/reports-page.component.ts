@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
 import { CommonModule } from '@angular/common';
 import { Component, computed, signal } from '@angular/core';
@@ -237,7 +238,7 @@ interface BirFilingSummary {
 @Component({
   selector: 'app-reports-page',
   standalone: true,
-  imports: [OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './reports-page.component.html',
   styleUrl: '../../shared/report-tables.css',
 })

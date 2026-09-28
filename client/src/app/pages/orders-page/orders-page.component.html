@@ -116,6 +116,7 @@
       <table class="ui-table ui-table-hover align-middle mb-0">
         <thead class="ui-table-light">
           <tr>
+            <th class="row-actions-cell" scope="col">Actions</th>
             <th>Order Date</th>
             <th *ngIf="isSuperuser">Organization</th>
             <th>Order Number</th>
@@ -127,7 +128,7 @@
             <th>Fulfillment</th>
             <th>Invoicing</th>
             <th>Total</th>
-            <th class="text-right">Actions</th>
+
           </tr>
         </thead>
         <tbody>
@@ -141,7 +142,29 @@
             <td [attr.colspan]="isSuperuser ? 12 : 11" class="text-center text-muted py-6">No orders found.</td>
           </tr>
           <tr *ngFor="let row of rows; trackBy: trackById">
-            <td>{{ row['orderDate'] ? ($any(row['orderDate']) | date: 'mediumDate') : '-' }}</td>
+            <td class="row-actions-cell"><app-row-actions label="Orders actions">
+              <div class="row-action-items">
+                <a
+
+                  [routerLink]="['/orders', row['id']]"
+
+                  title="Preview / Edit"
+                 class="ui-dropdown-item">
+                  <i class="bi bi-eye"></i>
+                 Preview / Edit</a>
+                <button *ngIf="row['status'] === 'draft' && auth.hasPermission('orders.update')"
+
+                  type="button"
+                  [disabled]="deletingId === row['id']"
+                  (click)="remove(row['id'])"
+
+                  title="Delete"
+                 class="ui-dropdown-item text-danger">
+                  <i class="bi bi-trash3"></i>
+                 Delete</button>
+              </div>
+            </app-row-actions></td>
+          <td>{{ row['orderDate'] ? ($any(row['orderDate']) | date: 'mediumDate') : '-' }}</td>
             <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
             <td><a [routerLink]="['/orders', row['id']]">{{ row['orderNumber'] }}</a></td>
             <td>{{ $any(row['customer'])?.name || 'Walk-in' }}<div class="text-xs text-muted">{{ row['customerPoNumber'] || 'No PO reference' }}</div></td>
@@ -160,28 +183,7 @@
             <td>{{ stateLabel(row['fulfillmentStatus']) | titlecase }}</td>
             <td>{{ stateLabel(row['invoicingStatus']) | titlecase }}</td>
             <td>{{ formatMoney(row['totalAmount'], row) }}</td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <a
-                  class="ui-btn ui-btn-sm ui-btn-outline-secondary"
-                  [routerLink]="['/orders', row['id']]"
-                  appTooltip
-                  title="Preview / Edit"
-                >
-                  <i class="bi bi-eye"></i>
-                </a>
-                <button *ngIf="row['status'] === 'draft' && auth.hasPermission('orders.update')"
-                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                  type="button"
-                  [disabled]="deletingId === row['id']"
-                  (click)="remove(row['id'])"
-                  appTooltip
-                  title="Delete"
-                >
-                  <i class="bi bi-trash3"></i>
-                </button>
-              </div>
-            </td>
+
           </tr>
         </tbody>
       </table>

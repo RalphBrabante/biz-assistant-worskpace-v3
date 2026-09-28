@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -23,7 +24,7 @@ interface PermissionRow {
 @Component({
   selector: 'app-permissions-page',
   standalone: true,
-  imports: [ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
+  imports: [RowActionsComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './permissions-page.component.html',
 })
 export class PermissionsPageComponent {

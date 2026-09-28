@@ -1,3 +1,5 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
@@ -68,7 +70,7 @@ interface ItemImportSummary {
 @Component({
   selector: 'app-items-page',
   standalone: true,
-  imports: [ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
+  imports: [MoneyInputDirective, RowActionsComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './items-page.component.html',
 })
 export class ItemsPageComponent {
@@ -114,7 +116,7 @@ export class ItemsPageComponent {
     discountedPrice: 'Discounted Price',
     currency: 'Currency',
     stock: 'Stock',
-    reorderLevel: 'Reorder Level',
+    reorderLevel: 'Low-stock threshold',
   };
   vendorFilter = '';
   vendorFilterSearch = '';
@@ -804,7 +806,7 @@ export class ItemsPageComponent {
       discountedPrice: [defaults['discountedPrice'], [Validators.min(0)]],
       currency: [defaults['currency']],
       stock: [defaults['stock'], [Validators.required, Validators.min(0)]],
-      reorderLevel: [defaults['reorderLevel'], [Validators.min(0)]],
+      reorderLevel: [defaults['reorderLevel'], [Validators.required, Validators.min(0), Validators.pattern(/^\d+$/)]],
       isActive: [defaults['isActive']],
     });
   }

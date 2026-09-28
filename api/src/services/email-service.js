@@ -32,6 +32,7 @@ async function sendViaSmtp2go({ toEmail, subject, html, text }) {
 
   const response = await fetch(endpoint, {
     method: 'POST',
+    signal: AbortSignal.timeout(30000),
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -317,6 +318,7 @@ async function sendUserCreatedAdminNotificationEmail({
 }
 
 module.exports = {
+  sendMail,
   sendPasswordResetEmail,
   sendEmailVerificationEmail,
   sendOrganizationUserInviteEmail,

@@ -11,7 +11,8 @@
     "test:expenses": "node --test tests/expense-calculation.test.cjs",
     "test:messages": "node --test tests/organization-messages.test.cjs",
     "test:ui": "node --test tests/ui-interactions.test.cjs",
-    "test:dashboard": "node --test tests/dashboard.test.cjs"
+    "test:dashboard": "node --test tests/dashboard.test.cjs",
+    "test:banks": "node --test tests/banks.test.cjs"
   },
   "dependencies": {
     "@angular/animations": "^18.2.0",

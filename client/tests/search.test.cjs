@@ -19,6 +19,8 @@ function loadSource(relativePath, dependencies = {}) {
   run((name) => {
     if (name in dependencies) return dependencies[name];
     if (name.startsWith('rxjs')) return require(name);
+      if (name.endsWith('/money-input.directive')) return { MoneyInputDirective: class {} };
+      if (name.endsWith('/row-actions.component')) return { RowActionsComponent: class {} };
     if (name === '@angular/core') return { Component: () => (target) => target };
     throw new Error(`Unexpected dependency: ${name}`);
   }, module, module.exports);

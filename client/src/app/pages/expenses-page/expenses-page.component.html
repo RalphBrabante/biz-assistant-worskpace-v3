@@ -181,13 +181,14 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th>Date</th>
           <th *ngIf="isSuperuser">Organization</th>
           <th>Category</th>
           <th>Vendor</th>
           <th>Status</th>
           <th>Total</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -202,28 +203,7 @@
         </tr>
 
         <tr *ngFor="let row of rows(); trackBy: trackById">
-          <td>{{ row.expenseDate ? (row.expenseDate | date: 'mediumDate') : '-' }}</td>
-          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
-          <td>{{ row.category }}</td>
-          <td>
-            <span class="inline-flex items-center gap-1">
-              {{ vendorLabel(row) }}
-              <i *ngIf="row.vendor" class="bi bi-info-circle text-muted text-xs opacity-50"
-                style="cursor:pointer;"
-                (mouseenter)="showVendorPopover($event, row)"
-                (mouseleave)="hideVendorPopover()"></i>
-            </span>
-          </td>
-          <td><span class="ui-badge capitalize" [ngClass]="row.status === 'paid' || row.status === 'approved' ? 'ui-badge-success' : row.status === 'cancelled' ? 'ui-badge-danger' : row.status === 'submitted' ? 'ui-badge-warning' : 'ui-badge-secondary'">{{ row.status || '-' }}</span></td>
-          <td class="expense-breakdown-cell"
-            (mouseenter)="showBreakdown($event, row)"
-            (mouseleave)="hideBreakdown()">
-            <span class="inline-flex items-center gap-1">
-              {{ formatMoney(row.totalAmount ?? 0, row.currency || currentOrganizationCurrency) }}
-              <i class="bi bi-info-circle text-muted text-xs opacity-50"></i>
-            </span>
-          </td>
-          <td class="text-right">
+          <td class="row-actions-cell">
             <div class="ui-btn-group table-actions-menu">
               <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Expense actions">
                 <i class="bi bi-three-dots-vertical"></i>
@@ -255,6 +235,28 @@
               </ul>
             </div>
           </td>
+<td>{{ row.expenseDate ? (row.expenseDate | date: 'mediumDate') : '-' }}</td>
+          <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
+          <td>{{ row.category }}</td>
+          <td>
+            <span class="inline-flex items-center gap-1">
+              {{ vendorLabel(row) }}
+              <i *ngIf="row.vendor" class="bi bi-info-circle text-muted text-xs opacity-50"
+                style="cursor:pointer;"
+                (mouseenter)="showVendorPopover($event, row)"
+                (mouseleave)="hideVendorPopover()"></i>
+            </span>
+          </td>
+          <td><span class="ui-badge capitalize" [ngClass]="row.status === 'paid' || row.status === 'approved' ? 'ui-badge-success' : row.status === 'cancelled' ? 'ui-badge-danger' : row.status === 'submitted' ? 'ui-badge-warning' : 'ui-badge-secondary'">{{ row.status || '-' }}</span></td>
+          <td class="expense-breakdown-cell"
+            (mouseenter)="showBreakdown($event, row)"
+            (mouseleave)="hideBreakdown()">
+            <span class="inline-flex items-center gap-1">
+              {{ formatMoney(row.totalAmount ?? 0, row.currency || currentOrganizationCurrency) }}
+              <i class="bi bi-info-circle text-muted text-xs opacity-50"></i>
+            </span>
+          </td>
+
         </tr>
       </tbody>
     </table>
@@ -506,7 +508,7 @@
             </label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="amount" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="amount" placeholder="0.00" />
             </div>
             <div class="text-danger text-xs mt-1" *ngIf="controlHasError('amount', 'required') || controlHasError('amount', 'min')">
               Amount must be greater than 0.
@@ -517,7 +519,7 @@
             <label class="ui-form-label font-semibold">Non-VAT / VAT-Exempt Portion</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="vatExemptAmount" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="vatExemptAmount" placeholder="0.00" />
             </div>
             <div class="text-danger text-xs mt-1" *ngIf="controlHasError('vatExemptAmount', 'min')">
               VAT exempt amount cannot be negative.
@@ -531,7 +533,7 @@
             <label class="ui-form-label font-semibold">Discount Already Included</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="discountAmount" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="discountAmount" placeholder="0.00" />
             </div>
             <div class="text-danger text-xs mt-1" *ngIf="controlHasError('discountAmount', 'min')">
               Discount amount cannot be negative.
@@ -542,7 +544,7 @@
             <label class="ui-form-label font-semibold">Service Charge Already Included</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="serviceCharge" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="serviceCharge" placeholder="0.00" />
             </div>
           </div>
 
@@ -560,7 +562,7 @@
             <label for="expense-supplier-vat" class="ui-form-label font-semibold">VAT Shown on Supplier Invoice</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input id="expense-supplier-vat" type="number" min="0" step="0.01" class="ui-form-control" formControlName="receiptVatAmount" [placeholder]="isVatOrganization ? 'Auto at ' + organizationTaxRate + '%' : '0.00'" />
+              <input appMoney [moneyAsNumber]="true" id="expense-supplier-vat" type="text" min="0" step="0.01" class="ui-form-control" formControlName="receiptVatAmount" [placeholder]="isVatOrganization ? 'Auto at ' + organizationTaxRate + '%' : '0.00'" />
             </div>
             <div class="ui-form-text">Enter the invoice VAT, or 0 for a non-VAT invoice. A blank field {{ isVatOrganization ? 'calculates VAT from the receipt less its exempt portion.' : 'defaults to zero.' }}</div>
           </div>
@@ -709,7 +711,7 @@
           <p *ngIf="preview.requiresWithholdingSelection" class="text-warning text-xs mt-2">The source withholding tax has no matching destination code. Select the applicable tax or explicitly choose None.</p>
           <div *ngIf="preview.receiptVatEditable" class="mt-4">
             <label for="transfer-receipt-vat" class="ui-form-label font-semibold">Supplier VAT shown on the receipt</label>
-            <input id="transfer-receipt-vat" class="ui-form-control" type="number" min="0" step="0.01" [(ngModel)]="transferReceiptVat" (ngModelChange)="loadTransferPreview()" [disabled]="!!transferringId()">
+            <input appMoney [moneyAsNumber]="true" id="transfer-receipt-vat" class="ui-form-control" type="text" min="0" step="0.01" [(ngModel)]="transferReceiptVat" (ngModelChange)="loadTransferPreview()" [disabled]="!!transferringId()">
             <p class="text-xs text-muted mt-2">This older expense has no recorded supplier VAT split. Enter the receipt's VAT amount, or 0 if it contains no VAT.</p>
           </div>
           <div *ngIf="preview.ready && preview.amounts as amounts" class="bg-subtle rounded-lg p-4 mt-4" aria-live="polite">

@@ -76,11 +76,12 @@
       <table class="ui-table ui-table-hover align-middle mb-0">
         <thead class="ui-table-light">
           <tr>
+            <th class="row-actions-cell" scope="col">Actions</th>
             <th>Permission</th>
             <th>Resource</th>
             <th>Action</th>
             <th>Allowed</th>
-            <th class="text-right">Actions</th>
+
           </tr>
         </thead>
         <tbody>
@@ -88,20 +89,21 @@
             <td colspan="5" class="text-center text-muted py-6">No permissions assigned.</td>
           </tr>
           <tr *ngFor="let permission of (row.permissions || []); trackBy: trackByPermissionId">
-            <td class="font-semibold">{{ permission.code || '-' }}</td>
-            <td>{{ permission.resource || '-' }}</td>
-            <td>{{ permission.action || '-' }}</td>
-            <td>{{ permission.RolePermission?.isAllowed ? 'Yes' : 'No' }}</td>
-            <td class="text-right">
+            <td class="row-actions-cell"><app-row-actions label="Role detail actions">
               <button
-                class="ui-btn ui-btn-sm ui-btn-outline-danger"
+
                 type="button"
                 [disabled]="removingPermissionId() === permission.id"
                 (click)="removePermission(permission.id)"
-              >
+               class="ui-dropdown-item text-danger">
                 {{ removingPermissionId() === permission.id ? 'Removing...' : 'Remove' }}
               </button>
-            </td>
+            </app-row-actions></td>
+          <td class="font-semibold">{{ permission.code || '-' }}</td>
+            <td>{{ permission.resource || '-' }}</td>
+            <td>{{ permission.action || '-' }}</td>
+            <td>{{ permission.RolePermission?.isAllowed ? 'Yes' : 'No' }}</td>
+
           </tr>
         </tbody>
       </table>

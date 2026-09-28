@@ -1,0 +1,102 @@
+[
+  {
+    "file": "api/src/controllers/auth-controller.js",
+    "beforeSha256": "df0cf2e81ef9c1fa33bdd76707d01dc26dfe87b4342e95f958a66280ceb2ad52",
+    "afterSha256": "b3c224be7b223882b3021d2a4441234135b19e012f41af4131d28bdd882e9167"
+  },
+  {
+    "file": "api/src/controllers/roles-controller.js",
+    "beforeSha256": "f3c2af999a391264ef5d23cee5c917606283a859cdddf65f52ccf231802da5b2",
+    "afterSha256": "350826404afa266634e79519cf41988fa158be2730c3aeced14842cc1a0dc7df"
+  },
+  {
+    "file": "api/src/controllers/users-controller.js",
+    "beforeSha256": "8472bee92ce3d198a53d6501f7394f38bb73436fbd9949c81e238ce5473cc946",
+    "afterSha256": "56d632ef73b376452285a5921394750df1323d6e7fda98da148be106d72545a1"
+  },
+  {
+    "file": "api/src/index.js",
+    "beforeSha256": "c75a912c2ac2d170b6faf0e43c7449ed61cf781c2b25d8c4cc04ebc0bbe660fa",
+    "afterSha256": "d088c3c423665bfc9677f41ec288e2021f250bb7fd674a0ed588b7952309f831"
+  },
+  {
+    "file": "api/src/middleware/authz.js",
+    "beforeSha256": "f599716f02cf2b56baaafc8fefa2c5fe3c2a33799ec4ae412bca7f2fdc008b57",
+    "afterSha256": "04223ef3794181eef8aae899b5b3b0de295032333562c3cdd8c6ee12bfeb71be"
+  },
+  {
+    "file": "api/src/modules/legacy/services/legacy-api.service.ts",
+    "beforeSha256": "bc1df6a3259cfe77e5299823aedbccfed56c925fa6468cc2b696d56555c1b686",
+    "afterSha256": "2241f80595bda37324a53b124eb8997079fb6105d3244adff667e872347fa204"
+  },
+  {
+    "file": "api/src/routes/organizations-routes.js",
+    "beforeSha256": "2dff8dd3d66cb2ba5b15288f9460317dfffc2d2cc238860522a01cab5e1508b8",
+    "afterSha256": "cc6e5c0ab405d56f08ddc2a0f978bf360145d3fe5263da59915642699901625b"
+  },
+  {
+    "file": "api/src/routes/permissions-routes.js",
+    "beforeSha256": "f4e146d9ad6ffdb3146739e8032eb08196951d33e0a297664226f6b9faa71b06",
+    "afterSha256": "a63c0e85b744398c4ca57f2aadd2c0caeb54606c2aca6f882a3034b6e4eee509"
+  },
+  {
+    "file": "api/src/routes/roles-routes.js",
+    "beforeSha256": "26ea44038841ef6b824d28aaf1bd0874149b5bf94bc2b739ea92c1345010295b",
+    "afterSha256": "0c9d5e71346a1424770d310f1c412862eba87310f52c0d17a07181ce3bb65855"
+  },
+  {
+    "file": "api/src/routes/users-routes.js",
+    "beforeSha256": "fe67db5a959cfca02e3d5b94db1d94b8cd968ae0415e7ed6c2651a1a7b7ca9a0",
+    "afterSha256": "8d31103c4f5215a957e6a7b4036054732481f70b34efd04fe6696e8fadf0262b"
+  },
+  {
+    "file": "api/scripts/verify-organization-roles.js",
+    "beforeSha256": null,
+    "afterSha256": "7ea23828f8d1d36ea32ef8e23c1b5afb74318ee12bf93250720f52bee78015be"
+  },
+  {
+    "file": "client/src/app/app.routes.ts",
+    "beforeSha256": "d506eb2cc208c074233386f04c94cdf8553aa9dd51a30b14d246cb1509fb2e8c",
+    "afterSha256": "4b921de6faed016c28de62b7c0b3459bcc36f06d65b4f4c33467a758191c4395"
+  },
+  {
+    "file": "client/src/app/core/role-administration.guard.ts",
+    "beforeSha256": null,
+    "afterSha256": "dcf8bc6909d9b48fc810b9cde05063156e64e397d7bccea9b775ec2a5bb25b52"
+  },
+  {
+    "file": "client/src/app/layout/app-shell.component.ts",
+    "beforeSha256": "3539cc99425fa69ada2b789f0ead5741bc7143b38c94ae9e1faaf28b06856b22",
+    "afterSha256": "4586b859f222b36199524c715573aa152ac44f0e514058fd3df3debc8e35ea19"
+  },
+  {
+    "file": "client/src/app/pages/organization-roles-page/organization-roles-page.component.html",
+    "beforeSha256": null,
+    "afterSha256": "f221706fcddf876e5ce65b16e65e1b81e0ed6b893806848fb864416ad86ec851"
+  },
+  {
+    "file": "client/src/app/pages/organization-roles-page/organization-roles-page.component.ts",
+    "beforeSha256": null,
+    "afterSha256": "9638c067b3d91f0c35e41f244d805a33948403994579d94d92100c619e455d6e"
+  },
+  {
+    "file": "client/src/app/pages/user-detail-page/user-detail-page.component.html",
+    "beforeSha256": "2545b2d2502ad110fac3e798f4afa480999c9f96047ba4ee7512f3ba48b7b66c",
+    "afterSha256": "c98b7108bad9228942ee776d6b719efbe5d4c94d9be8403a61675ed3c8e5e8e5"
+  },
+  {
+    "file": "client/tests/organization-messages.test.cjs",
+    "beforeSha256": "49f394acdcd85d70d9d5e7efea3ce7913f041b8017804fc5063a1ea749d9571b",
+    "afterSha256": "48378738a05995f1852c1815506c62c66397d92f8ae78368c0985931e993f3ba"
+  },
+  {
+    "file": "client/tests/organization-roles.test.cjs",
+    "beforeSha256": null,
+    "afterSha256": "8af1674b4f700a7811548d3d8ceb23d3ff8db2c8a55a75eddc37b6f2ae54a0e2"
+  },
+  {
+    "file": "client/tests/search.test.cjs",
+    "beforeSha256": "0f4155886d0e9856efff57763dc100be95f946a571cb0998909ac65bc564aee0",
+    "afterSha256": "9db96043fb35d8e32f275c1f737a4cfe3e3b6796ebc6de1f973e62e41980fd88"
+  }
+]

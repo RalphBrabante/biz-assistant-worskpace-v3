@@ -7,7 +7,7 @@ const rx = require('rxjs');
 const {randomUUID} = require('node:crypto');
 function setup() {
   const requests = [], effects = [], timers = new Map(); let nextTimer = 0;
-  const dependencies = {AuthService: {hasPermission: () => true, currentUser: () => ({})}, OrganizationContextService: {getActiveOrganizationId: () => 'org-a', selectedOrganizationId: () => 'org-a'}};
+  const dependencies = {ConfirmDialogService: {confirm: async () => true}, AuthService: {hasPermission: () => true, currentUser: () => ({})}, OrganizationContextService: {getActiveOrganizationId: () => 'org-a', selectedOrganizationId: () => 'org-a'}};
   dependencies.ApiService = new Proxy({}, {get: (_target, method) => (url, body) => {const stream = new rx.Subject(); requests.push({method, url, body, stream}); return stream;}});
   const source = ts.transpileModule(fs.readFileSync(require.resolve('../src/app/pages/debts-page/debts-page.component.ts'), 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, experimentalDecorators: true}}).outputText;
   const module = {exports: {}};
@@ -59,4 +59,40 @@ test('history pagination is independent; organization changes cancel requests an
 test('read-only users cannot create debts or record payments', () => {
   const {page, debt, requests, dependencies} = setup(); dependencies.AuthService.hasPermission = permission => permission === 'debts.read';
   page.openCreate(); assert.equal(page.createOpen, false); page.selected = debt; page.payment.amount = '25.00'; page.recordPayment(); assert.equal(requests.length, 0);
+});
+test('accordion lazy-loads independent paginated history and cancels collapsed requests', () => {
+  const {page, debt, requests, effects} = setup();
+  page.toggleHistory(debt); assert.equal(requests.length, 1); assert.equal(page.expanded.debt.loading, true);
+  requests[0].stream.next({data: {debt, payments: [{id: 'p1'}]}, meta: {total: 21, totalPages: 2}});
+  assert.equal(page.expanded.debt.payments[0].id, 'p1');
+  page.loadHistory('debt', 1); assert.match(requests[1].url, /page=2/);
+  page.toggleHistory(debt); assert.equal(page.expanded.debt, undefined); assert.equal(requests[1].stream.observers.length, 0);
+  page.toggleHistory(debt); effects[0](); assert.equal(Object.keys(page.expanded).length, 0); assert.equal(requests[2].stream.observers.length, 0);
+});
+test('accordion errors can be retried and list refresh updates expanded history', () => {
+  const {page, debt, requests} = setup(); page.toggleHistory(debt);
+  requests[0].stream.error({error: {message: 'Try again'}}); assert.equal(page.expanded.debt.error, 'Try again');
+  page.loadHistory(debt.id); assert.equal(page.expanded.debt.error, '');
+  page.load(); requests[2].stream.next({data: {debts: [debt]}});
+  assert.match(requests[3].url, /\/debt\?page=1/); assert.equal(requests[1].stream.observers.length, 0);
+  page.ngOnDestroy(); assert.equal(requests[3].stream.observers.length, 0);
+});
+test('delete requires confirmation and permission and refreshes the list', async () => {
+  const {page, debt, dependencies, requests} = setup();
+  dependencies.ConfirmDialogService.confirm = async () => false;
+  await page.deleteDebt(debt); assert.equal(requests.length, 0);
+  dependencies.ConfirmDialogService.confirm = async () => true;
+  dependencies.AuthService.hasPermission = () => false;
+  await page.deleteDebt(debt); assert.equal(requests.length, 0);
+  dependencies.AuthService.hasPermission = () => true;
+  await page.deleteDebt(debt); assert.equal(requests[0].method, 'remove'); assert.equal(requests[0].url, '/api/v1/debts'); assert.equal(requests[0].body, 'debt?organizationId=org-a');
+  assert.equal(page.saving, true); requests[0].stream.next({}); assert.equal(page.saving, false); assert.match(page.notice, /deleted/); assert.equal(requests[1].method, 'getFresh');
+});
+test('delete cancels if organization changes during confirmation and recovers after failure', async () => {
+  const {page, debt, dependencies, requests} = setup();
+  dependencies.ConfirmDialogService.confirm = async () => {dependencies.OrganizationContextService.getActiveOrganizationId = () => 'org-b'; return true;};
+  await page.deleteDebt(debt); assert.equal(requests.length, 0);
+  dependencies.ConfirmDialogService.confirm = async () => true;
+  await page.deleteDebt(debt); requests[0].stream.error({error: {message: 'Deletion failed'}});
+  assert.equal(page.saving, false); assert.equal(page.error, 'Deletion failed'); assert.equal(page.notice, '');
 });

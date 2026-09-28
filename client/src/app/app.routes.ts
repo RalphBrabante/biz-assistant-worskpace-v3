@@ -49,6 +49,9 @@ export const routes: Routes = [
     component: AppShellComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'vouchers', loadComponent: () => import('./pages/vouchers-page/vouchers-page.component').then(m => m.VouchersPageComponent), canActivate: [administratorGuard], data: { permissions: ['banks.read'] } },
+      { path: 'cheques', loadComponent: () => import('./pages/cheques-page/cheques-page.component').then(m => m.ChequesPageComponent), canActivate: [administratorGuard], data: { permissions: ['banks.read'] } },
+      { path: 'banks', loadComponent: () => import('./pages/banks-page/banks-page.component').then(m => m.BanksPageComponent), canActivate: [administratorGuard], data: { permissions: ['banks.read'] } },
       { path: 'debts', loadComponent: () => import('./pages/debts-page/debts-page.component').then(m => m.DebtsPageComponent), canActivate: [permissionGuard], data: { permissions: ['debts.read'] } },
       { path: 'tickets', loadComponent: () => import('./pages/tickets-page/tickets-page.component').then(m => m.TicketsPageComponent), canActivate: [permissionGuard], data: { permissions: ['tickets.read'] } },
       { path: 'bug-reports', component: BugReportsPageComponent, canActivate: [administratorGuard] },

@@ -1,3 +1,5 @@
+const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('../../../jobs/quarterly-tax-reminder-job');
+const {startDebtReminderJob, stopDebtReminderJob} = require('../../../jobs/debt-reminder-job');
 const {startGmailTicketJob, stopGmailTicketJob} = require('../../../services/gmail-tickets');
 import { Injectable } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
@@ -63,11 +65,15 @@ export class LegacyApiService {
     await this.connectRedis();
     await this.connectAmqp();
     if (process.env.LICENSE_EXPIRY_JOB_ENABLED !== 'false') startLicenseExpiryJob();
+    startDebtReminderJob();
+    startQuarterlyTaxReminderJob();
     startOrderUploadCleanupJob();
     startGmailTicketJob();
   }
 
   async shutdown(): Promise<void> {
+    await stopQuarterlyTaxReminderJob();
+    await stopDebtReminderJob();
     stopLicenseExpiryJob();
     stopOrderUploadCleanupJob();
     await stopGmailTicketJob();

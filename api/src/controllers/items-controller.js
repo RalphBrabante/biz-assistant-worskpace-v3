@@ -131,7 +131,7 @@ async function createItem(req, res) {
 
     payload.currency = await getOrganizationCurrency(payload.organizationId);
 
-    const item = await Item.create(payload);
+    const item = await Item.sequelize.transaction(transaction => Item.create(payload, { transaction }));
     const actorName = getActorDisplayName(req.auth?.user);
     await createOrganizationMessage({
       organizationId: item.organizationId,
@@ -162,7 +162,7 @@ async function createItem(req, res) {
     return res.status(201).json({ ok: true, data: created || item });
   } catch (err) {
     console.error('Create item error:', err);
-    return res.status(500).json({ ok: false, message: 'Unable to create item.' });
+    return res.status(err.status || 500).json({ ok: false, message: err.status === 400 ? err.message : 'Unable to create item.' });
   }
 }
 
@@ -304,8 +304,8 @@ async function importItems(req, res) {
         price: toNullableNumber(row.price),
         cost: toNullableNumber(row.cost),
         discountedPrice: toNullableNumber(row.discountedPrice),
-        stock: toNullableNumber(row.stock),
-        reorderLevel: toNullableNumber(row.reorderLevel),
+        stock: row.stock === undefined || String(row.stock).trim() === '' ? undefined : row.stock,
+        reorderLevel: row.reorderLevel === undefined || String(row.reorderLevel).trim() === '' ? undefined : row.reorderLevel,
         taxRate: toNullableNumber(row.taxRate),
         isActive: parseBoolean(row.isActive) ?? true,
         currency,
@@ -329,7 +329,7 @@ async function importItems(req, res) {
           }
         }
         // eslint-disable-next-line no-await-in-loop
-        await Item.create(payload);
+        await Item.sequelize.transaction(transaction => Item.create(payload, { transaction }));
         imported += 1;
       } catch (rowErr) {
         skipped += 1;
@@ -558,7 +558,10 @@ async function updateItem(req, res) {
       delete payload.organizationId;
     }
 
-    await item.update(payload);
+    await Item.sequelize.transaction(async transaction => {
+      await item.reload({ transaction, lock: transaction.LOCK.UPDATE });
+      await item.update(payload, { transaction });
+    });
     const updated = await Item.findByPk(item.id, {
       include: [
         {
@@ -576,7 +579,7 @@ async function updateItem(req, res) {
     return res.status(200).json({ ok: true, data: updated || item });
   } catch (err) {
     console.error('Update item error:', err);
-    return res.status(500).json({ ok: false, message: 'Unable to update item.' });
+    return res.status(err.status || 500).json({ ok: false, message: err.status === 400 ? err.message : 'Unable to update item.' });
   }
 }
 

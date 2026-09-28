@@ -96,4 +96,13 @@ const pay = endpoint(async (req, res) => {
   });
   return res.status(repeated ? 200 : 201).json({data: result, message: 'Payment recorded. Remaining balance updated.'});
 });
-module.exports = {scope, list, detail, create, pay};
+const remove = endpoint(async (req, res) => {
+  const models = getModels();
+  await models.Debt.sequelize.transaction(async transaction => {
+    const debt = await debtFor(models, req, transaction);
+    // Payment writes take the same lock; the foreign key cascades payment deletion.
+    await debt.destroy({transaction});
+  });
+  return res.json({message: 'Debt and its payment history deleted.'});
+});
+module.exports = {scope, list, detail, create, pay, remove};

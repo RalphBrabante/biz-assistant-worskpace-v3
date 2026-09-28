@@ -1,0 +1,536 @@
+--- a/api/src/controllers/auth-controller.js
++++ b/api/src/controllers/auth-controller.js
+@@ -1,3 +1,4 @@
++const {effectiveRoleAccess}=require('../services/role-access');
+ const crypto = require('crypto');
+ const { Op } = require('sequelize');
+ const { getModels } = require('../sequelize');
+@@ -106,7 +107,8 @@
+   }
+ 
+   if (user.organizationId) {
+-    organizationIds.add(user.organizationId);
++    const membership=await models.OrganizationUser.findOne({where:{userId,organizationId:user.organizationId}});
++    if (!membership || membership.isActive) organizationIds.add(user.organizationId);
+   }
+ 
+   const ids = Array.from(organizationIds);
+@@ -255,10 +257,8 @@
+       });
+     }
+ 
+-    const roleCodes = (user.roles || []).map((role) =>
+-      String(role.code || '').toLowerCase()
+-    );
+-    const isSuperuser = roleCodes.includes('superuser');
++    const globalAccess = await effectiveRoleAccess(models,user,null);
++    const isSuperuser = globalAccess.roleCodes.includes('superuser');
+ 
+     let effectiveOrganizationId = null;
+     let organizationName = '';
+@@ -382,15 +382,8 @@
+       lastLoginAt: new Date(),
+     });
+ 
+-    const permissionCodes = [];
+-    for (const role of user.roles || []) {
+-      for (const permission of role.permissions || []) {
+-        const code = String(permission.code || '').toLowerCase();
+-        if (code && !permissionCodes.includes(code)) {
+-          permissionCodes.push(code);
+-        }
+-      }
+-    }
++    const access = await effectiveRoleAccess(models,user,effectiveOrganizationId);
++    const roleCodes = access.roleCodes, permissionCodes = [...access.permissions];
+ 
+     return res.status(200).json({
+       ok: true,
+--- a/api/src/controllers/roles-controller.js
++++ b/api/src/controllers/roles-controller.js
+@@ -55,6 +55,8 @@
+     }
+ 
+     const payload = cleanUndefined(pickRolePayload(req.body));
++    if (payload.name !== undefined && (typeof payload.name !== 'string' || !payload.name.trim() || payload.name.length > 100)) return res.status(400).json({message:'Role name must contain 1–100 characters.'});
++    if (payload.code !== undefined && (typeof payload.code !== 'string' || !/^[a-z0-9_]{1,100}$/i.test(payload.code.trim()))) return res.status(400).json({message:'Enter a valid role code.'});
+     if (payload.code) {
+       payload.code = String(payload.code).toLowerCase().trim();
+     }
+@@ -69,6 +71,7 @@
+     const role = await Role.create(payload);
+     return res.status(201).json({ ok: true, data: role });
+   } catch (err) {
++    if (err.name === 'SequelizeUniqueConstraintError') return res.status(409).json({message:'Role name or code already exists.'});
+     console.error('Create role error:', err);
+     return res.status(500).json({ ok: false, message: 'Unable to create role.' });
+   }
+@@ -162,9 +165,12 @@
+     }
+ 
+     const payload = cleanUndefined(pickRolePayload(req.body));
++    if (payload.name !== undefined && (typeof payload.name !== 'string' || !payload.name.trim() || payload.name.length > 100)) return res.status(400).json({message:'Role name must contain 1–100 characters.'});
++    if (payload.code !== undefined && (typeof payload.code !== 'string' || !/^[a-z0-9_]{1,100}$/i.test(payload.code.trim()))) return res.status(400).json({message:'Enter a valid role code.'});
+     if (payload.code) {
+       payload.code = String(payload.code).toLowerCase().trim();
+     }
++    if (role.isSystem && ['name','code','isSystem','isActive'].some(key => payload[key] !== undefined && payload[key] !== role[key])) return res.status(403).json({message:'System role identity and active status are protected.'});
+     if (Object.keys(payload).length === 0) {
+       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
+     }
+@@ -172,6 +178,7 @@
+     await role.update(payload);
+     return res.status(200).json({ ok: true, data: role });
+   } catch (err) {
++    if (err.name === 'SequelizeUniqueConstraintError') return res.status(409).json({message:'Role name or code already exists.'});
+     console.error('Update role error:', err);
+     return res.status(500).json({ ok: false, message: 'Unable to update role.' });
+   }
+--- a/api/src/controllers/users-controller.js
++++ b/api/src/controllers/users-controller.js
+@@ -666,6 +666,8 @@
+     if (payload.organizationId && !isRequesterSuperuser(req)) {
+       delete payload.organizationId;
+     }
++    // Role changes use the dedicated assignment endpoints.
++    delete payload.role;
+     // isActive and status are admin-only; only superusers may set them
+     if (isRequesterSuperuser(req)) {
+       if (req.body.isActive !== undefined) payload.isActive = parseBoolean(req.body.isActive);
+@@ -834,6 +836,8 @@
+         assignedByUserId: req.auth?.user?.id || null,
+       },
+     });
++
++    if (!membership.isActive) await membership.update({isActive:true});
+ 
+     return res.status(201).json({
+       ok: true,
+--- a/api/src/index.js
++++ b/api/src/index.js
+@@ -1,3 +1,4 @@
++const {effectiveRoleAccess,activeMember}=require('./services/role-access');
+ const organizationRolesRoutes=require('./routes/organization-roles-routes');
+ const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('./jobs/quarterly-tax-reminder-job');
+ const banksRoutes = require('./routes/banks-routes');
+@@ -185,9 +186,12 @@
+       return next(new Error('User is inactive or unavailable.'));
+     }
+ 
+-    const roleCodes = (user.roles || []).map((role) => String(role.code || '').toLowerCase());
++    const globalAccess=await effectiveRoleAccess(models,user,null);
++        const roleCodes=globalAccess.roleCodes;
+     const isSuperuser = hasSuperuserRole(roleCodes);
+-    const effectiveOrganizationId = await resolveEffectiveOrganizationId(models, user);
++    const effectiveOrganizationId = tokenRecord.metadata?.organizationId || await resolveEffectiveOrganizationId(models, user);
++        if (!isSuperuser && !await activeMember(models,user.id,effectiveOrganizationId)) return next(new Error('Active organization membership required.'));
++        roleCodes.splice(0,roleCodes.length,...(await effectiveRoleAccess(models,user,effectiveOrganizationId)).roleCodes);
+ 
+     if (!isSuperuser) {
+       if (!effectiveOrganizationId) {
+--- a/api/src/middleware/authz.js
++++ b/api/src/middleware/authz.js
+@@ -1,3 +1,4 @@
++const {effectiveRoleAccess,activeMember}=require('../services/role-access');
+ const crypto = require('crypto');
+ const { Op } = require('sequelize');
+ const { getModels } = require('../sequelize');
+@@ -152,15 +153,15 @@
+     }
+ 
+     const user = tokenRecord.user;
+-    if (!user || !user.isActive) {
++    if (!user || !user.isActive || user.status !== 'active') {
+       return res.status(401).json({
+         code: 'UNAUTHORIZED',
+         message: 'User is inactive or unavailable.',
+       });
+     }
+ 
+-    const roles = (user.roles || []).map((role) => role.code);
+-    const isSuperuser = hasSuperuserRole(roles);
++    const globalAccess = await effectiveRoleAccess(models,user,null);
++    const isSuperuser = hasSuperuserRole(globalAccess.roleCodes);
+     const tokenOrganizationId = String(tokenRecord?.metadata?.organizationId || '').trim();
+     let effectiveOrganizationId = tokenOrganizationId || (await resolveEffectiveOrganizationId(models, user));
+ 
+@@ -209,12 +210,11 @@
+       }
+     }
+ 
+-    const permissions = new Set();
+-    for (const role of user.roles || []) {
+-      for (const permission of role.permissions || []) {
+-        permissions.add(String(permission.code || '').toLowerCase());
+-      }
+-    }
++    if (!isSuperuser && !await activeMember(models,user.id,effectiveOrganizationId)) {
++      return res.status(403).json({code:'ORGANIZATION_ACCESS_DENIED',message:'Active organization membership required.'});
++    }
++    const access = await effectiveRoleAccess(models,user,effectiveOrganizationId);
++    const roles = access.roleCodes, permissions = access.permissions;
+ 
+     req.auth = {
+       tokenId: tokenRecord.id,
+--- a/api/src/modules/legacy/services/legacy-api.service.ts
++++ b/api/src/modules/legacy/services/legacy-api.service.ts
+@@ -1,3 +1,4 @@
++const {effectiveRoleAccess,activeMember}=require('../../../services/role-access');
+ const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('../../../jobs/quarterly-tax-reminder-job');
+ const {startDebtReminderJob, stopDebtReminderJob} = require('../../../jobs/debt-reminder-job');
+ const {startGmailTicketJob, stopGmailTicketJob} = require('../../../services/gmail-tickets');
+@@ -203,9 +204,12 @@
+           return next(new Error('User is inactive or unavailable.'));
+         }
+ 
+-        const roleCodes = (user.roles || []).map((role: any) => String(role.code || '').toLowerCase());
++        const globalAccess=await effectiveRoleAccess(models,user,null);
++        const roleCodes=globalAccess.roleCodes;
+         const isSuperuser = this.hasSuperuserRole(roleCodes);
+-        const effectiveOrganizationId = await this.resolveEffectiveOrganizationId(models, user);
++        const effectiveOrganizationId = tokenRecord.metadata?.organizationId || await this.resolveEffectiveOrganizationId(models, user);
++        if (!isSuperuser && !await activeMember(models,user.id,effectiveOrganizationId)) return next(new Error('Active organization membership required.'));
++        roleCodes.splice(0,roleCodes.length,...(await effectiveRoleAccess(models,user,effectiveOrganizationId)).roleCodes);
+ 
+         if (!isSuperuser) {
+           if (!effectiveOrganizationId) {
+--- a/api/src/routes/organizations-routes.js
++++ b/api/src/routes/organizations-routes.js
+@@ -1,3 +1,4 @@
++const {requireGlobalRoleAdministrator}=require('../services/role-access');
+ const express = require('express');
+ const {
+   createOrganization,
+@@ -21,7 +22,7 @@
+ router.get('/:id/users', authorize('organizations.read'), listOrganizationUsers);
+ router.get('/:id/assignable-users', authorize('organizations.read'), searchAssignableUsers);
+ router.get('/:id/assignable-roles', authorize('organizations.read'), listOrganizationAssignableRoles);
+-router.post('/:id/users', authorize('organizations.update'), addUserToOrganization);
++router.post('/:id/users', requireGlobalRoleAdministrator, authorize('organizations.update'), addUserToOrganization);
+ router.delete('/:id/users/:userId', authorize('organizations.update'), removeUserFromOrganization);
+ router.put('/:id', authorize('organizations.update'), updateOrganization);
+ router.patch('/:id', authorize('organizations.update'), updateOrganization);
+--- a/api/src/routes/permissions-routes.js
++++ b/api/src/routes/permissions-routes.js
+@@ -1,3 +1,4 @@
++const {requireGlobalRoleAdministrator}=require('../services/role-access');
+ const express = require('express');
+ const {
+   createPermission,
+@@ -10,11 +11,11 @@
+ 
+ const router = express.Router();
+ 
+-router.post('/', authorize('permissions.manage'), createPermission);
++router.post('/', requireGlobalRoleAdministrator, authorize('permissions.manage'), createPermission);
+ router.get('/', authorize('permissions.manage'), listPermissions);
+ router.get('/:id', authorize('permissions.manage'), getPermissionById);
+-router.put('/:id', authorize('permissions.manage'), updatePermission);
+-router.patch('/:id', authorize('permissions.manage'), updatePermission);
+-router.delete('/:id', authorize('permissions.manage'), deletePermission);
++router.put('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), updatePermission);
++router.patch('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), updatePermission);
++router.delete('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), deletePermission);
+ 
+ module.exports = router;
+--- a/api/src/routes/roles-routes.js
++++ b/api/src/routes/roles-routes.js
+@@ -1,3 +1,4 @@
++const {requireRoleAdministrator,requireGlobalRoleAdministrator}=require('../services/role-access');
+ const express = require('express');
+ const {
+   createRole,
+@@ -12,15 +13,16 @@
+ const { authorize } = require('../middleware/authz');
+ 
+ const router = express.Router();
++router.use(requireRoleAdministrator);
+ 
+-router.post('/', authorize('roles.manage'), createRole);
++router.post('/', requireGlobalRoleAdministrator, authorize('roles.manage'), createRole);
+ router.get('/', authorize('roles.manage'), listRoles);
+ router.get('/:id', authorize('roles.manage'), getRoleById);
+ router.get('/:id/assignable-permissions', authorize('roles.manage'), listRoleAssignablePermissions);
+-router.post('/:id/permissions', authorize('roles.manage'), addPermissionToRole);
+-router.delete('/:id/permissions/:permissionId', authorize('roles.manage'), removePermissionFromRole);
+-router.put('/:id', authorize('roles.manage'), updateRole);
+-router.patch('/:id', authorize('roles.manage'), updateRole);
+-router.delete('/:id', authorize('roles.manage'), deleteRole);
++router.post('/:id/permissions', requireGlobalRoleAdministrator, authorize('roles.manage'), addPermissionToRole);
++router.delete('/:id/permissions/:permissionId', requireGlobalRoleAdministrator, authorize('roles.manage'), removePermissionFromRole);
++router.put('/:id', requireGlobalRoleAdministrator, authorize('roles.manage'), updateRole);
++router.patch('/:id', requireGlobalRoleAdministrator, authorize('roles.manage'), updateRole);
++router.delete('/:id', requireGlobalRoleAdministrator, authorize('roles.manage'), deleteRole);
+ 
+ module.exports = router;
+--- a/api/src/routes/users-routes.js
++++ b/api/src/routes/users-routes.js
+@@ -1,3 +1,4 @@
++const {requireRoleAdministrator,requireGlobalRoleAdministrator}=require('../services/role-access');
+ const express = require('express');
+ const {
+   createUser,
+@@ -16,13 +17,13 @@
+ 
+ const router = express.Router();
+ 
+-router.post('/', authorize('users.create'), createUser);
++router.post('/', requireRoleAdministrator, authorize('users.create'), createUser);
+ router.get('/', authorize('users.read'), listUsers);
+ router.get('/:id', authorize('users.read'), getUserById);
+ router.get('/:id/assignable-roles', authorize('users.read'), listUserAssignableRoles);
+ router.get('/:id/assignable-organizations', authorize('users.read'), listUserAssignableOrganizations);
+-router.post('/:id/roles', authorize('users.update'), addRoleToUser);
+-router.delete('/:id/roles/:roleId', authorize('users.update'), removeRoleFromUser);
++router.post('/:id/roles', requireGlobalRoleAdministrator, authorize('users.update'), addRoleToUser);
++router.delete('/:id/roles/:roleId', requireGlobalRoleAdministrator, authorize('users.update'), removeRoleFromUser);
+ router.post('/:id/organizations', authorize('users.update'), addOrganizationToUser);
+ router.delete('/:id/organizations/:organizationId', authorize('users.update'), removeOrganizationFromUser);
+ router.put('/:id', authorize('users.update'), updateUser);
+--- /dev/null
++++ b/api/scripts/verify-organization-roles.js
+@@ -0,0 +1,68 @@
++const assert=require('node:assert/strict'),{randomUUID,createHash}=require('crypto');
++const {Sequelize,DataTypes:D}=require('sequelize');
++if(process.env.ROLE_TEST_HOST!=='role-test-mysql'||process.env.ROLE_TEST_DATABASE!=='role_test_review')throw Error('Requires disposable role-test-mysql / role_test_review.');
++const s=new Sequelize('role_test_review','root',process.env.ROLE_TEST_PASSWORD,{host:'role-test-mysql',dialect:'mysql',logging:false});
++(async()=>{try{
++if((await s.getQueryInterface().showAllTables()).length)throw Error('Refusing nonempty test database.');
++const opt=(tableName)=>({tableName,underscored:true,timestamps:true}),id={type:D.UUID,primaryKey:true,defaultValue:D.UUIDV4};
++const Organization=s.define('Organization',{id,name:D.STRING,currency:D.STRING,isActive:{type:D.BOOLEAN,defaultValue:true}},opt('organizations'));
++const User=s.define('User',{id,organizationId:D.UUID,firstName:D.STRING,lastName:D.STRING,email:D.STRING,password:D.STRING,role:D.STRING,isActive:{type:D.BOOLEAN,defaultValue:true},status:{type:D.STRING,defaultValue:'active'},isEmailVerified:{type:D.BOOLEAN,defaultValue:true}},opt('users'));
++const {Role,initRoleModel}=require('../src/models/role');initRoleModel(s);
++const {Permission,initPermissionModel}=require('../src/models/permission');initPermissionModel(s);
++const {UserRole,initUserRoleModel}=require('../src/models/user-role');initUserRoleModel(s);
++const {RolePermission,initRolePermissionModel}=require('../src/models/role-permission');initRolePermissionModel(s);
++const {OrganizationUser,initOrganizationUserModel}=require('../src/models/organization-user');initOrganizationUserModel(s);
++const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,initOrganizationRoleModels}=require('../src/models/organization-role');initOrganizationRoleModels(s);
++const Token=s.define('Token',{id,userId:D.UUID,tokenHash:D.STRING,isActive:D.BOOLEAN,revokedAt:D.DATE,expiresAt:D.DATE,metadata:D.JSON},opt('tokens'));
++const License=s.define('License',{id,organizationId:D.UUID,isActive:D.BOOLEAN,status:D.STRING,revokedAt:D.DATE,expiresAt:D.DATE},opt('licenses'));
++User.belongsToMany(Role,{through:UserRole,foreignKey:'userId',otherKey:'roleId',as:'roles'});UserRole.belongsTo(Role,{as:'role',foreignKey:'roleId'});Role.belongsToMany(Permission,{through:RolePermission,foreignKey:'roleId',otherKey:'permissionId',as:'permissions'});Token.belongsTo(User,{as:'user',foreignKey:'userId'});
++OrganizationRole.belongsToMany(Permission,{through:OrganizationRolePermission,foreignKey:'roleId',otherKey:'permissionId',as:'permissions'});OrganizationRole.belongsToMany(User,{through:OrganizationUserRole,foreignKey:'roleId',otherKey:'userId',as:'members'});OrganizationUserRole.belongsTo(OrganizationRole,{as:'role',foreignKey:'roleId'});
++for(const model of [Organization,User,Role,Permission,UserRole,RolePermission,OrganizationUser,Token,License])await model.sync();
++await require('../src/migrations/20260928040000-create-organization-roles').up(s.getQueryInterface(),D);
++const m={Organization,User,Role,Permission,UserRole,RolePermission,OrganizationUser,Token,License,OrganizationRole,OrganizationRolePermission,OrganizationUserRole};require('../src/sequelize').getModels=()=>m;
++const c=require('../src/controllers/organization-roles-controller'),globalRoles=require('../src/controllers/roles-controller'),users=require('../src/controllers/users-controller');
++const {authenticateRequest}=require('../src/middleware/authz');const {effectiveRoleAccess}=require('../src/services/role-access');
++const orgA=await Organization.create({name:'A',currency:'PHP'}),orgB=await Organization.create({name:'B',currency:'PHP'});
++for(const org of [orgA,orgB])await License.create({organizationId:org.id,isActive:true,status:'active',expiresAt:new Date(Date.now()+86400000)});
++const adminRole=await Role.create({name:'Administrator',code:'administrator',isSystem:true}),superRole=await Role.create({name:'Superuser',code:'superuser',isSystem:true}),staffRole=await Role.create({name:'Staff',code:'staff',isSystem:false});
++async function makeUser(name,org,role){const u=await User.create({organizationId:org.id,firstName:name,lastName:'Test',email:name+'@example.com',role:role?.code||'member'});await OrganizationUser.create({userId:u.id,organizationId:org.id,isActive:true,isPrimary:true,role:role?.code||'member'});if(role)await UserRole.create({userId:u.id,roleId:role.id});return u;}
++const adminA=await makeUser('AdminA',orgA,adminRole),adminB=await makeUser('AdminB',orgB,adminRole),memberA=await makeUser('MemberA',orgA,staffRole),memberB=await makeUser('MemberB',orgB,staffRole),superuser=await makeUser('Super',orgA,superRole);
++function response(){return {statusCode:200,set(){return this;},status(n){this.statusCode=n;return this;},json(body){this.body=body;return this;}};}
++async function auth(u,org=u.organizationId){const raw=randomUUID();await Token.create({userId:u.id,tokenHash:createHash('sha256').update(raw).digest('hex'),isActive:true,expiresAt:new Date(Date.now()+86400000),metadata:{organizationId:org}});const req={path:'/api/v1/organization-roles',method:'GET',get:()=>`Bearer ${raw}`};const r=response();let passed=false;await authenticateRequest(req,r,e=>{if(e)throw e;passed=true;});return {req,res:r,passed};}
++async function call(action,u,body={},params={},query={}){const a=await auth(u);assert(a.passed,JSON.stringify(a.res));const r=response();await c[action]({...a.req,body,params,query},r);return r;}
++const data={name:'Accounts assistant',code:'accounts_assistant',description:'Organization test role',isActive:true};
++assert.equal((await call('create',memberA,data)).statusCode,403);assert.equal((await call('create',superuser,data)).statusCode,403);
++let r=await call('create',adminA,data);assert.equal(r.statusCode,201,JSON.stringify(r.body));const role=r.body.data;
++assert.equal((await call('create',adminA,data)).statusCode,409);assert.equal((await call('create',adminB,data)).statusCode,201);
++assert.equal((await call('create',adminA,{...data,code:'administrator'})).statusCode,400);
++assert.equal((await call('list',adminA,{}, {},{organizationId:orgB.id})).statusCode,403);
++assert.equal((await call('update',adminB,data,{id:role.id})).statusCode,404);
++await OrganizationUser.create({userId:adminA.id,organizationId:orgB.id,isActive:true,role:'member'});const otherAdminAuth=await auth(adminA,orgB.id);assert(otherAdminAuth.passed);assert(!otherAdminAuth.req.auth.roleCodes.includes('administrator'));const denied=response();await c.list({...otherAdminAuth.req,query:{}},denied);assert.equal(denied.statusCode,403);
++const options=await call('options',adminA);assert.equal(options.statusCode,200);assert(options.body.data.members.some(u=>u.id===memberA.id));assert(!options.body.data.members.some(u=>u.id===memberB.id));
++const permission=await Permission.create({name:'Read items',code:'items.read',resource:'items',action:'read',isActive:true}),restricted=await Permission.create({name:'Manage roles',code:'roles.manage',resource:'roles',action:'manage',isActive:true});
++assert.equal((await call('grant',adminA,{permissionId:restricted.id},{id:role.id})).statusCode,403);
++assert.equal((await call('grant',adminA,{permissionId:permission.id},{id:role.id})).statusCode,200);
++assert.equal((await call('assign',adminA,{userId:memberB.id},{id:role.id})).statusCode,404);
++assert.equal((await call('assign',adminA,{userId:memberA.id},{id:role.id})).statusCode,200);
++assert.equal((await call('assign',adminA,{userId:memberA.id},{id:role.id})).statusCode,200);assert.equal(await OrganizationUserRole.count(),1);
++let access=await effectiveRoleAccess(m,memberA,orgA.id);assert(access.permissions.has('items.read'));assert(!access.permissions.has('roles.manage'));
++let authenticated=await auth(memberA);assert(authenticated.req.auth.permissions.has('items.read'));assert(!authenticated.req.auth.isPrivileged);
++await OrganizationUser.create({userId:memberA.id,organizationId:orgB.id,isActive:true,role:'member'});
++assert(!(await effectiveRoleAccess(m,memberA,orgB.id)).permissions.has('items.read'));
++assert(!(await auth(memberA,orgB.id)).req.auth.permissions.has('items.read'));
++await call('update',adminA,{...data,isActive:false},{id:role.id});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));
++assert.equal((await call('assign',adminA,{userId:memberA.id},{id:role.id})).statusCode,409);
++await call('update',adminA,data,{id:role.id});assert((await auth(memberA)).req.auth.permissions.has('items.read'));
++await call('revoke',adminA,{}, {id:role.id,permissionId:permission.id});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));
++await call('grant',adminA,{permissionId:permission.id},{id:role.id});await call('unassign',adminA,{}, {id:role.id,userId:memberA.id});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));
++await call('assign',adminA,{userId:memberA.id},{id:role.id});await Permission.update({isActive:false},{where:{id:permission.id}});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));await Permission.update({isActive:true},{where:{id:permission.id}});
++await OrganizationUser.update({isActive:false},{where:{userId:memberA.id,organizationId:orgA.id}});assert.equal((await auth(memberA)).res.statusCode,403);await OrganizationUser.update({isActive:true},{where:{userId:memberA.id,organizationId:orgA.id}});
++await call('remove',adminA,{}, {id:role.id});assert.equal(await OrganizationUserRole.count(),0);assert.equal(await OrganizationRolePermission.count(),0);
++const grant=await RolePermission.create({roleId:staffRole.id,permissionId:permission.id,isAllowed:false,isActive:true});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));await grant.update({isAllowed:true,isActive:false});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));await grant.update({isActive:true});assert((await auth(memberA)).req.auth.permissions.has('items.read'));await staffRole.update({isActive:false});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));await staffRole.update({isActive:true});
++await UserRole.update({isActive:false},{where:{userId:memberA.id,roleId:staffRole.id}});assert(!(await auth(memberA)).req.auth.permissions.has('items.read'));
++const superAuth=(await auth(superuser)).req.auth;r=response();await users.addRoleToUser({auth:superAuth,params:{id:memberA.id},body:{roleId:staffRole.id}},r);assert.equal(r.statusCode,201,JSON.stringify(r.body));assert((await auth(memberA)).req.auth.permissions.has('items.read'));
++r=response();await globalRoles.updateRole({params:{id:adminRole.id},body:{code:'new_admin'}},r);assert.equal(r.statusCode,403);r=response();await globalRoles.deleteRole({params:{id:adminRole.id}},r);assert.equal(r.statusCode,403);
++const app=require('express')();app.use(require('express').json());app.use((req,_res,next)=>{req.auth={roleCodes:['staff'],permissions:new Set(['roles.manage','permissions.manage','users.update','organizations.update']),isPrivileged:false};next();});app.use('/roles',require('../src/routes/roles-routes'));app.use('/permissions',require('../src/routes/permissions-routes'));app.use('/users',require('../src/routes/users-routes'));app.use('/organizations',require('../src/routes/organizations-routes'));
++const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));try{for(const path of ['/roles','/permissions','/users/'+memberA.id+'/roles','/organizations/'+orgA.id+'/users'])assert.equal((await fetch('http://127.0.0.1:'+server.address().port+path,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,403);}finally{await new Promise(resolve=>server.close(resolve));}
++console.log('PASS: scoped role CRUD, same names across organizations, admin-only access, privilege-escalation guards, scoped members, assignment idempotency, token organization isolation, immediate permission revocation, inactive/denied global grants, inactive memberships, system-role protection, global write restrictions, and reactivated user assignments.');
++}finally{await s.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+--- a/client/src/app/app.routes.ts
++++ b/client/src/app/app.routes.ts
+@@ -1,3 +1,4 @@
++import {organizationRoleGuard,globalRoleGuard} from './core/role-administration.guard';
+ import { Routes } from '@angular/router';
+ import { administratorGuard } from './core/administrator.guard';
+ import { BugReportsPageComponent } from './pages/bug-reports-page/bug-reports-page.component';
+@@ -59,9 +60,10 @@
+       { path: 'users', component: UsersPageComponent, canActivate: [permissionGuard], data: { permissions: ['users.read'] } },
+       { path: 'users/:id', component: UserDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['users.read'] } },
+       { path: 'profile', component: ProfileSettingsPageComponent },
+-      { path: 'roles', component: RolesPageComponent, canActivate: [permissionGuard], data: { permissions: ['roles.manage'] } },
+-      { path: 'roles/:id', component: RoleDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['roles.manage'] } },
+-      { path: 'permissions', component: PermissionsPageComponent, canActivate: [permissionGuard], data: { permissions: ['permissions.manage'] } },
++      { path: 'organization-roles', loadComponent: () => import('./pages/organization-roles-page/organization-roles-page.component').then(m => m.OrganizationRolesPageComponent), canActivate: [organizationRoleGuard] },
++      { path: 'roles', component: RolesPageComponent, canActivate: [globalRoleGuard], data: { permissions: ['roles.manage'] } },
++      { path: 'roles/:id', component: RoleDetailPageComponent, canActivate: [globalRoleGuard], data: { permissions: ['roles.manage'] } },
++      { path: 'permissions', component: PermissionsPageComponent, canActivate: [globalRoleGuard], data: { permissions: ['permissions.manage'] } },
+       { path: 'reports', component: ReportsPageComponent, canActivate: [permissionGuard], data: { permissions: ['reports.*'] } },
+       { path: 'messages', component: MessagesPageComponent, canActivate: [permissionGuard], data: { permissions: ['profile.manage'] } },
+       { path: 'reports/:id', component: ReportPreviewPageComponent, canActivate: [permissionGuard], data: { permissions: ['reports.*'] } },
+--- /dev/null
++++ b/client/src/app/core/role-administration.guard.ts
+@@ -0,0 +1,5 @@
++import {inject} from '@angular/core';
++import {CanActivateFn,Router} from '@angular/router';
++import {AuthService} from './auth.service';
++export const organizationRoleGuard:CanActivateFn=()=> (inject(AuthService).currentUser()?.roleCodes||[]).includes('administrator') || inject(Router).parseUrl('/profile');
++export const globalRoleGuard:CanActivateFn=()=> (inject(AuthService).currentUser()?.roleCodes||[]).includes('superuser') || inject(Router).parseUrl('/organization-roles');
+--- a/client/src/app/layout/app-shell.component.ts
++++ b/client/src/app/layout/app-shell.component.ts
+@@ -21,6 +21,7 @@
+   permissions?: string[];
+   superuserOnly?: boolean;
+   adminOnly?: boolean;
++  organizationAdminOnly?: boolean;
+ }
+ 
+ interface NavSection {
+@@ -89,8 +90,9 @@
+         { label: 'Bug reports', path: '/bug-reports', icon: 'bi-bug', adminOnly: true },
+         { label: 'Organizations', path: '/organizations', icon: 'bi-buildings', permissions: ['organizations.read'] },
+         { label: 'Users', path: '/users', icon: 'bi-people', permissions: ['users.read'] },
+-        { label: 'Roles', path: '/roles', icon: 'bi-shield-check', permissions: ['roles.manage'] },
+-        { label: 'Permissions', path: '/permissions', icon: 'bi-key', permissions: ['permissions.manage'] },
++        { label: 'Organization roles', path: '/organization-roles', icon: 'bi-person-badge', organizationAdminOnly: true },
++        { label: 'Global roles', path: '/roles', icon: 'bi-shield-check', superuserOnly: true },
++        { label: 'Permissions', path: '/permissions', icon: 'bi-key', superuserOnly: true },
+         { label: 'Licenses', path: '/licenses', icon: 'bi-patch-check', permissions: ['licenses.read'] },
+         { label: 'Settings', path: '/settings', icon: 'bi-sliders', permissions: ['settings.update'], superuserOnly: true },
+       ],
+@@ -253,6 +255,7 @@
+ 
+   readonly visibleNavSections = computed<NavSection[]>(() => {
+     const canSee = (item: NavItem): boolean => {
++      if (item.organizationAdminOnly && !(this.auth.currentUser()?.roleCodes || []).includes('administrator')) return false;
+       if (item.adminOnly && !this.auth.isPrivileged()) return false;
+       if (item.superuserOnly && !this.organizationContext.isSuperuser()) {
+         return false;
+--- /dev/null
++++ b/client/src/app/pages/organization-roles-page/organization-roles-page.component.html
+@@ -0,0 +1,6 @@
++<div class="page-heading flex flex-wrap items-start justify-between gap-4"><div><h1 class="text-2xl font-semibold">Organization roles</h1><p class="text-sm text-muted mt-1">{{ organizationName }} · Manage your team’s roles, permissions, and assignments.</p></div><div class="flex gap-2" *ngIf="canManage"><button class="ui-btn ui-btn-outline-secondary" (click)="load()" [disabled]="loading || saving">Refresh</button><button class="ui-btn ui-btn-primary" (click)="open()" [disabled]="saving">Create role</button></div></div>
++<div *ngIf="!canManage" class="ui-alert ui-alert-danger">Only the organization’s administrator can manage these roles.</div>
++<ng-container *ngIf="canManage"><div *ngIf="error" class="ui-alert ui-alert-danger mb-4" role="alert">{{ error }}</div><div *ngIf="notice" class="ui-alert ui-alert-success mb-4" role="status">{{ notice }}</div><p class="text-sm text-muted mb-5">Roles created here apply only to this organization. Existing platform roles remain managed by the superuser.</p>
++<section class="ui-card overflow-hidden mb-5"><div class="p-4 border-b border-line"><input class="ui-form-control" aria-label="Search roles" placeholder="Search role name or code" [(ngModel)]="search"></div><p *ngIf="loading" class="p-8 text-center text-muted" role="status">Loading roles…</p><p *ngIf="!loading && !visibleRows.length && !error" class="p-8 text-center text-muted">No organization roles found. Create a role to start assigning access to your team.</p><div *ngIf="!loading && visibleRows.length" class="ui-table-responsive"><table class="ui-table w-full"><thead><tr><th class="row-actions-cell">Actions</th><th>Role</th><th>Status</th><th>Permissions</th><th>Members</th></tr></thead><tbody><tr *ngFor="let role of visibleRows"><td class="row-actions-cell"><app-row-actions [label]="'Actions for ' + role.name"><button class="ui-dropdown-item" (click)="select(role)" [disabled]="saving">Manage permissions &amp; members</button><button class="ui-dropdown-item" (click)="open(role)" [disabled]="saving">Edit role</button><button class="ui-dropdown-item text-danger" (click)="remove(role)" [disabled]="saving">Delete role</button></app-row-actions></td><td><button class="font-semibold text-brand text-left" (click)="select(role)">{{ role.name }}</button><p class="text-xs text-muted">{{ role.code }}</p><p class="text-sm text-muted">{{ role.description }}</p></td><td><span class="ui-badge" [class.text-success]="role.isActive">{{ role.isActive ? 'Active' : 'Inactive' }}</span></td><td>{{ role.permissions.length }}</td><td>{{ role.members.length }}</td></tr></tbody></table></div></section>
++<section *ngIf="selected" class="ui-card p-5"><h2 class="text-lg font-semibold mb-1">{{ selected.name }}</h2><p *ngIf="!selected.isActive" class="ui-alert ui-alert-warning my-3">This role is inactive. Its members receive no permissions from it.</p><div class="grid gap-6 lg:grid-cols-2 mt-5"><div><h3 class="font-semibold mb-3">Permissions</h3><div class="flex gap-2 mb-3"><select class="ui-form-select" aria-label="Permission to grant" [(ngModel)]="permissionId" [disabled]="saving"><option value="">Select permission</option><option *ngFor="let p of availablePermissions" [value]="p.id">{{ p.code }} — {{ p.name }}</option></select><button class="ui-btn ui-btn-outline-primary" (click)="grant()" [disabled]="saving || !permissionId">Grant</button></div><p class="text-xs text-muted mb-3">Platform administration and bank access remain restricted to administrators.</p><ul class="divide-y divide-line"><li *ngFor="let p of selected.permissions" class="flex items-center justify-between gap-3 py-3"><span class="text-sm break-all">{{ p.code }}<span *ngIf="!p.isActive" class="text-muted"> (inactive)</span></span><button class="ui-btn ui-btn-sm ui-btn-outline-danger" (click)="revoke(p.id)" [disabled]="saving">Remove</button></li></ul><p *ngIf="!selected.permissions.length" class="text-sm text-muted py-3">No permissions assigned.</p></div><div><h3 class="font-semibold mb-3">Organization members</h3><div class="flex gap-2 mb-3"><select class="ui-form-select" aria-label="Member to assign" [(ngModel)]="userId" [disabled]="saving || !selected.isActive"><option value="">Select member</option><option *ngFor="let member of availableMembers" [value]="member.id">{{ member.firstName }} {{ member.lastName }} — {{ member.email }}</option></select><button class="ui-btn ui-btn-outline-primary" (click)="assign()" [disabled]="saving || !userId || !selected.isActive">Assign</button></div><ul class="divide-y divide-line"><li *ngFor="let member of selected.members" class="flex items-center justify-between gap-3 py-3"><div><p class="text-sm">{{ member.firstName }} {{ member.lastName }}</p><p class="text-xs text-muted break-all">{{ member.email }}</p></div><button class="ui-btn ui-btn-sm ui-btn-outline-danger" (click)="unassign(member.id)" [disabled]="saving">Remove</button></li></ul><p *ngIf="!selected.members.length" class="text-sm text-muted py-3">No members assigned.</p></div></div></section></ng-container>
++<div *ngIf="modal" class="ui-modal-backdrop"></div><div *ngIf="modal" class="ui-modal" appModal (click)="close()"><div class="ui-modal-dialog" (click)="$event.stopPropagation()"><form class="ui-modal-content" (ngSubmit)="save()"><div class="ui-modal-header"><h2 class="font-semibold">{{ editing ? 'Edit role' : 'Create organization role' }}</h2><button type="button" class="ui-btn-close" (click)="close()" [disabled]="saving" aria-label="Close"></button></div><div class="ui-modal-body"><div *ngIf="formError" class="ui-alert ui-alert-danger mb-4" role="alert">{{ formError }}</div><fieldset [disabled]="saving" class="space-y-4"><label class="block text-sm">Role name<input class="ui-form-control mt-1" name="name" [(ngModel)]="draft.name" maxlength="100" required></label><label class="block text-sm">Role code<input class="ui-form-control mt-1" name="code" [(ngModel)]="draft.code" maxlength="100" pattern="[a-z][a-z0-9_]*" placeholder="e.g. accounts_assistant" required></label><label class="block text-sm">Description<textarea class="ui-form-control mt-1" name="description" [(ngModel)]="draft.description" maxlength="2000" rows="3"></textarea></label><label class="flex items-center gap-2 text-sm"><input type="checkbox" name="active" [(ngModel)]="draft.isActive"> Active</label></fieldset></div><div class="ui-modal-footer"><button type="button" class="ui-btn ui-btn-outline-secondary" (click)="close()" [disabled]="saving">Cancel</button><button class="ui-btn ui-btn-primary" [disabled]="saving || !valid">{{ saving ? 'Saving…' : 'Save role' }}</button></div></form></div></div>
+--- /dev/null
++++ b/client/src/app/pages/organization-roles-page/organization-roles-page.component.ts
+@@ -0,0 +1,41 @@
++import {CommonModule} from '@angular/common';
++import {Component,OnDestroy,effect,inject} from '@angular/core';
++import {FormsModule} from '@angular/forms';
++import {Subscription} from 'rxjs';
++import {ApiService} from '../../core/api.service';
++import {AuthService} from '../../core/auth.service';
++import {ConfirmDialogService} from '../../core/confirm-dialog.service';
++import {ModalDirective} from '../../shared/modal.directive';
++import {RowActionsComponent} from '../../shared/row-actions.component';
++interface Permission {id:string;code:string;name:string;isActive:boolean;}
++interface Member {id:string;firstName:string;lastName:string;email:string;isActive?:boolean;}
++interface Role {id:string;organizationId:string;name:string;code:string;description:string;isActive:boolean;permissions:Permission[];members:Member[];}
++@Component({selector:'app-organization-roles',standalone:true,imports:[CommonModule,FormsModule,ModalDirective,RowActionsComponent],templateUrl:'./organization-roles-page.component.html'})
++export class OrganizationRolesPageComponent implements OnDestroy {
++ readonly auth=inject(AuthService);private api=inject(ApiService);private confirm=inject(ConfirmDialogService);
++ rows:Role[]=[];permissions:Permission[]=[];members:Member[]=[];selected:Role|null=null;editing:Role|null=null;
++ loading=false;saving=false;error='';notice='';formError='';modal=false;search='';permissionId='';userId='';
++ draft={name:'',code:'',description:'',isActive:true};private subscriptions=new Subscription();private reads=new Subscription();private destroyed=false;
++ constructor(){effect(()=>{this.auth.currentUser();this.subscriptions.unsubscribe();this.reads.unsubscribe();this.subscriptions=new Subscription();this.reads=new Subscription();this.rows=[];this.permissions=[];this.members=[];this.selected=null;this.editing=null;this.modal=false;this.loading=false;this.saving=false;this.error='';this.notice='';if(this.canManage)this.load();});}
++ get canManage(){return (this.auth.currentUser()?.roleCodes||[]).includes('administrator')&&!!this.auth.currentUser()?.organizationId;}
++ get organizationName(){return this.auth.currentUser()?.organizationName||'Your organization';}
++ get visibleRows(){const q=this.search.toLowerCase().trim();return this.rows.filter(r=>`${r.name} ${r.code}`.toLowerCase().includes(q));}
++ get availablePermissions(){return this.permissions.filter(p=>!this.selected?.permissions.some(x=>x.id===p.id));}
++ get availableMembers(){return this.members.filter(m=>!this.selected?.members.some(x=>x.id===m.id));}
++ get valid(){return !!this.draft.name.trim()&&this.draft.name.length<=100&&/^[a-z][a-z0-9_]{0,99}$/.test(this.draft.code)&&!['administrator','superuser','admin','superadmin'].includes(this.draft.code);}
++ ngOnDestroy(){this.destroyed=true;this.subscriptions.unsubscribe();this.reads.unsubscribe();}
++ load(){if(!this.canManage)return;this.reads.unsubscribe();this.reads=new Subscription();this.loading=true;this.error='';
++  this.reads.add(this.api.getFresh<Role[]>('/api/v1/organization-roles').subscribe({next:r=>{this.rows=r.data||[];this.loading=false;if(this.selected)this.selected=this.rows.find(x=>x.id===this.selected?.id)||null;},error:e=>{this.loading=false;this.error=e?.error?.message||'Unable to load organization roles.';}}));
++  this.reads.add(this.api.getFresh<{permissions:Permission[];members:Member[]}>('/api/v1/organization-roles/options').subscribe({next:r=>{this.permissions=r.data?.permissions||[];this.members=r.data?.members||[];},error:e=>{this.error=e?.error?.message||'Unable to load available permissions and members.';}}));
++ }
++ open(role:Role|null=null){if(!this.canManage||this.saving)return;this.editing=role;this.draft=role?{name:role.name,code:role.code,description:role.description||'',isActive:role.isActive}:{name:'',code:'',description:'',isActive:true};this.formError='';this.modal=true;}
++ close(){if(!this.saving)this.modal=false;}
++ select(role:Role){this.selected=role;this.permissionId='';this.userId='';}
++ save(){if(!this.canManage||this.saving||!this.valid)return;this.saving=true;this.formError='';const stream=this.editing?this.api.put(`/api/v1/organization-roles/${this.editing.id}`,this.draft):this.api.create('/api/v1/organization-roles',this.draft);this.subscriptions.add(stream.subscribe({next:()=>{this.saving=false;this.modal=false;this.notice='Organization role saved.';this.load();},error:e=>{this.saving=false;this.formError=e?.error?.message||'Unable to save role.';}}));}
++ async remove(role:Role){if(!this.canManage||this.saving)return;const org=this.auth.currentUser()?.organizationId;const yes=await this.confirm.confirm({title:'Delete organization role',message:`Delete “${role.name}” and remove its permissions from all assigned members?`,confirmText:'Delete role',confirmButtonClass:'ui-btn-danger'});if(!yes||this.destroyed||org!==this.auth.currentUser()?.organizationId||!this.canManage||this.saving)return;this.write(this.api.remove('/api/v1/organization-roles',role.id),'Role deleted.');}
++ grant(){if(!this.selected||!this.permissionId||this.saving||!this.canManage)return;this.write(this.api.create(`/api/v1/organization-roles/${this.selected.id}/permissions`,{permissionId:this.permissionId}),'Permission granted.');}
++ revoke(id:string){if(!this.selected||this.saving||!this.canManage)return;this.write(this.api.remove(`/api/v1/organization-roles/${this.selected.id}/permissions`,id),'Permission removed.');}
++ assign(){if(!this.selected?.isActive||!this.userId||this.saving||!this.canManage)return;this.write(this.api.create(`/api/v1/organization-roles/${this.selected.id}/members`,{userId:this.userId}),'Member assigned.');}
++ unassign(id:string){if(!this.selected||this.saving||!this.canManage)return;this.write(this.api.remove(`/api/v1/organization-roles/${this.selected.id}/members`,id),'Member removed from role.');}
++ private write(stream:ReturnType<ApiService['remove']>,message:string){this.saving=true;this.error='';this.subscriptions.add(stream.subscribe({next:()=>{this.saving=false;this.notice=message;this.permissionId='';this.userId='';this.load();},error:e=>{this.saving=false;this.error=e?.error?.message||'Unable to update role.';}}));}
++}
+--- a/client/src/app/pages/user-detail-page/user-detail-page.component.html
++++ b/client/src/app/pages/user-detail-page/user-detail-page.component.html
+@@ -204,9 +204,9 @@
+ 
+ <section class="ui-card shadow-panel rounded-xl" *ngIf="user() as row">
+   <div class="ui-card-body p-6">
+-    <h2 class="text-base font-semibold mb-4">User Roles</h2>
+-
+-    <div class="ui-grid grid grid-cols-12 gap-2 items-end mb-4">
++    <h2 class="text-base font-semibold mb-4">Global user roles</h2><p *ngIf="!isSuperuser" class="text-sm text-muted mb-4">Global assignments are managed by the superuser. <a routerLink="/organization-roles" class="text-brand">Manage organization roles</a> for your team.</p>
++
++    <div *ngIf="isSuperuser" class="ui-grid grid grid-cols-12 gap-2 items-end mb-4">
+       <div class="col-span-12 md:col-span-8">
+         <label class="ui-form-label">Assign Role</label>
+         <select class="ui-form-select" [(ngModel)]="selectedRoleId">
+@@ -239,7 +239,7 @@
+             <td colspan="4" class="text-center text-muted py-6">No roles assigned.</td>
+           </tr>
+           <tr *ngFor="let role of (row.roles || []); trackBy: trackByRoleId">
+-            <td class="row-actions-cell"><app-row-actions label="User detail actions">
++            <td class="row-actions-cell"><app-row-actions *ngIf="isSuperuser" label="User detail actions">
+               <button
+ 
+                 type="button"
+--- a/client/tests/organization-messages.test.cjs
++++ b/client/tests/organization-messages.test.cjs
+@@ -30,7 +30,7 @@
+     const module = { exports: {} };
+     const mocks = {
+       '@angular/core': core, '@angular/common': {}, '@angular/forms': {}, '@angular/router': {},
+-      '../../shared/organization-required.component': {},
++      '../../shared/organization-required.component': {}, '../../shared/row-actions.component': {},
+     };
+     const requireMock = (name) => {
+       if (name === 'rxjs') return rx;
+--- /dev/null
++++ b/client/tests/organization-roles.test.cjs
+@@ -0,0 +1,15 @@
++const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),rx=require('rxjs');
++function setup(codes=['administrator']){
++ const requests=[],effects=[];let user={organizationId:'a',roleCodes:codes};
++ const deps={AuthService:{currentUser:()=>user},ConfirmDialogService:{confirm:async()=>true}};
++ deps.ApiService=new Proxy({},{get:(_,method)=>(url,body)=>{const stream=new rx.Subject();requests.push({method,url,body,stream});return stream;}});
++ const source=ts.transpileModule(fs.readFileSync(require.resolve('../src/app/pages/organization-roles-page/organization-roles-page.component.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,experimentalDecorators:true}}).outputText;
++ const module={exports:{}};vm.runInNewContext(source,{module,exports:module.exports,require(name){if(name==='rxjs')return rx;if(name==='@angular/core')return{Component:()=>value=>value,inject:key=>deps[key],effect:fn=>effects.push(fn)};return new Proxy({},{get:(_,key)=>key});}});
++ return {page:new module.exports.OrganizationRolesPageComponent(),requests,effects,deps,setUser:u=>user=u};
++}
++const role={id:'r',name:'Accounts',code:'accounts',isActive:true,permissions:[],members:[]};
++test('only organization administrators can load or mutate roles',async()=>{for(const codes of [[],['staff'],['superuser'],['org:administrator']]){const {page,requests}=setup(codes);page.load();page.open();page.selected=role;page.permissionId='p';page.userId='u';page.grant();page.assign();page.revoke('p');page.unassign('u');await page.remove(role);assert.equal(requests.length,0);assert.equal(page.modal,false);}});
++test('role validation blocks reserved codes and duplicate submissions; failures retain drafts',()=>{const {page,requests}=setup();page.open();page.draft={name:'Accounts',code:'administrator',description:'',isActive:true};page.save();assert.equal(requests.length,0);page.draft.code='accounts';page.save();page.save();assert.equal(requests.length,1);requests[0].stream.error({error:{message:'Duplicate'}});assert.equal(page.formError,'Duplicate');assert.equal(page.draft.name,'Accounts');page.save();requests[1].stream.next({});assert.equal(page.modal,false);assert.equal(requests[2].method,'getFresh');});
++test('organization changes cancel pending reads and writes and clear role details',()=>{const {page,requests,effects,setUser}=setup();page.load();page.select(role);page.permissionId='p';page.grant();setUser({organizationId:'b',roleCodes:['administrator']});effects[0]();assert.equal(page.selected,null);assert.equal(page.rows.length,0);for(const r of requests.slice(0,3))assert.equal(r.stream.observers.length,0);});
++test('delete confirmation cannot delete after organization changes',async()=>{const {page,requests,deps,setUser}=setup();let resolve;deps.ConfirmDialogService.confirm=()=>new Promise(r=>resolve=r);const pending=page.remove(role);setUser({organizationId:'b',roleCodes:['administrator']});resolve(true);await pending;assert.equal(requests.length,0);});
++test('inactive roles cannot gain members and unassignment refreshes authoritative data',()=>{const {page,requests}=setup();page.selected={...role,isActive:false};page.userId='u';page.assign();assert.equal(requests.length,0);page.unassign('u');assert.equal(requests[0].url,'/api/v1/organization-roles/r/members');requests[0].stream.next({});assert.equal(requests[1].method,'getFresh');page.ngOnDestroy();assert.equal(requests[1].stream.observers.length,0);});
+--- a/client/tests/search.test.cjs
++++ b/client/tests/search.test.cjs
+@@ -43,7 +43,7 @@
+     '../../core/table-preferences': {}, '../../shared/tooltip.directive': {},
+     '../../core/expense-calculation': {}, '../../shared/country-select.component': {},
+     '../../shared/countries': {}, '../../shared/modal.directive': {},
+-    '../../shared/dropdown.directive': {}, '../../shared/organization-required.component': {},
++    '../../shared/dropdown.directive': {}, '../../shared/row-actions.component': {}, '../../shared/organization-required.component': {},
+   })[name];
+ }
+ 

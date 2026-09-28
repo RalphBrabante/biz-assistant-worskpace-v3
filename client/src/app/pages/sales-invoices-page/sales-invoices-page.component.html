@@ -290,6 +290,7 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th>Issue Date</th>
           <th *ngIf="isSuperuser">Organization</th>
           <th>Invoice #</th>
@@ -298,7 +299,7 @@
           <th>Status</th>
           <th>Payment</th>
           <th>Total</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -313,7 +314,28 @@
         </tr>
 
         <tr *ngFor="let row of rows(); trackBy: trackById">
-          <td>{{ row.issueDate ? (row.issueDate | date: 'mediumDate') : '-' }}</td>
+          <td class="row-actions-cell">
+            <div class="ui-btn-group table-actions-menu">
+              <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Invoice actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+                <li>
+                  <a class="ui-dropdown-item flex items-center gap-2" [routerLink]="['/sales-invoices', row.id]">
+                    <i class="bi bi-eye"></i> View Details
+                  </a>
+                </li>
+                <li><hr class="ui-dropdown-divider" /></li>
+                <li>
+                  <button class="ui-dropdown-item flex items-center gap-2 text-danger" type="button"
+                    [disabled]="deletingId() === row.id" (click)="removeInvoice(row.id)">
+                    <i class="bi bi-trash3"></i> {{ deletingId() === row.id ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </td>
+<td>{{ row.issueDate ? (row.issueDate | date: 'mediumDate') : '-' }}</td>
           <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
           <td class="font-semibold">{{ row.invoiceNumber }}</td>
           <td class="text-xs">{{ row.orderId || '-' }}</td>
@@ -349,27 +371,7 @@
               </span>
             </div>
           </td>
-          <td class="text-right">
-            <div class="ui-btn-group table-actions-menu">
-              <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Invoice actions">
-                <i class="bi bi-three-dots-vertical"></i>
-              </button>
-              <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
-                <li>
-                  <a class="ui-dropdown-item flex items-center gap-2" [routerLink]="['/sales-invoices', row.id]">
-                    <i class="bi bi-eye"></i> View Details
-                  </a>
-                </li>
-                <li><hr class="ui-dropdown-divider" /></li>
-                <li>
-                  <button class="ui-dropdown-item flex items-center gap-2 text-danger" type="button"
-                    [disabled]="deletingId() === row.id" (click)="removeInvoice(row.id)">
-                    <i class="bi bi-trash3"></i> {{ deletingId() === row.id ? 'Deleting...' : 'Delete' }}
-                  </button>
-                </li>
-              </ul>
-            </div>
-          </td>
+
         </tr>
       </tbody>
     </table>
@@ -452,14 +454,14 @@
             </label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="amount" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="amount" placeholder="0.00" />
             </div>
           </div>
           <div class="col-span-12 md:col-span-3">
             <label class="ui-form-label font-semibold">Promo / Regular Discount</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="discountAmount" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="discountAmount" placeholder="0.00" />
             </div>
           </div>
           <div class="col-span-12 md:col-span-3">
@@ -472,7 +474,7 @@
             </label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="scPwdDiscount" placeholder="0.00" [readonly]="scPwdEnabled" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="scPwdDiscount" placeholder="0.00" [readonly]="scPwdEnabled" />
             </div>
             <div *ngIf="scPwdEnabled && !isPercentageTaxOrganization" class="ui-form-text text-brand">
               <i class="bi bi-person-wheelchair mr-1"></i>Auto: 20% of VAT-exclusive amount (VAT-exempt)
@@ -485,7 +487,7 @@
             <label class="ui-form-label font-semibold">Service Charge</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="serviceCharge" placeholder="0.00" />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="serviceCharge" placeholder="0.00" />
             </div>
           </div>
           <div class="col-span-12 md:col-span-4">
@@ -505,7 +507,7 @@
             <label class="ui-form-label font-semibold">EWT Amount</label>
             <div class="ui-input-group">
               <span class="ui-input-group-text">{{ currentOrganizationCurrency }}</span>
-              <input type="number" step="0.01" min="0" class="ui-form-control" formControlName="withHoldingTaxAmount" placeholder="0.00" readonly />
+              <input appMoney [moneyAsNumber]="true" type="text" step="0.01" min="0" class="ui-form-control" formControlName="withHoldingTaxAmount" placeholder="0.00" readonly />
             </div>
           </div>
 

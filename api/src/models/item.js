@@ -1,3 +1,4 @@
+const { notifyStockChange, validateInventory } = require('../services/stock-alerts');
 const { DataTypes, Model } = require('sequelize');
 
 class Item extends Model {}
@@ -98,6 +99,11 @@ function initItemModel(sequelize) {
       tableName: 'items',
       timestamps: true,
       underscored: true,
+      hooks: {
+        beforeValidate: validateInventory,
+        afterCreate: (item, options) => notifyStockChange(item, { ...options, stockCreated: true }),
+        afterUpdate: notifyStockChange,
+      },
       indexes: [
         { fields: ['organization_id'] },
         { fields: ['vendor_id'] },

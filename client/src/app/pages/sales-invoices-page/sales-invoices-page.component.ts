@@ -1,3 +1,4 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
@@ -108,7 +109,7 @@ interface WithholdingTaxTypeOption {
 @Component({
   selector: 'app-sales-invoices-page',
   standalone: true,
-  imports: [ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [MoneyInputDirective, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
   templateUrl: './sales-invoices-page.component.html',
 })
 export class SalesInvoicesPageComponent implements OnDestroy {

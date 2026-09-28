@@ -110,3 +110,17 @@ test('payment history is paginated and uses the same transaction as its balance'
   assert.equal(r.body.data.payments.length, 3); assert.equal(r.body.data.debt.remainingAmount, '77.00'); assert.equal(r.body.meta.totalPages, 2);
   assert.equal(e.queries[0].transaction, e.queries[1].transaction);
 });
+test('deletion locks the scoped debt and destroys it inside the transaction', async () => {
+  const e = fixture(); let destroyed = false;
+  e.debt.destroy = async ({transaction}) => {assert.equal(transaction.LOCK.UPDATE, 'UPDATE'); destroyed = true;};
+  const r = response(); await e.c.remove(request(), r);
+  assert.equal(r.statusCode, 200); assert.equal(destroyed, true); assert.equal(e.queries[0].lock, 'UPDATE');
+});
+test('deletion rejects other organizations and reports failed deletes', async () => {
+  const e = fixture(); let destroyed = false;
+  e.debt.destroy = async () => {destroyed = true; throw new Error('database failure');};
+  const foreign = response();
+  await e.c.remove(request({}, {auth: {userId: 'other', user: {organizationId: 'org-b'}, roleCodes: ['administrator']}, query: {organizationId: 'org-a'}}), foreign);
+  assert.equal(foreign.statusCode, 404); assert.equal(destroyed, false);
+  const failed = response(); await e.c.remove(request(), failed); assert.equal(failed.statusCode, 500);
+});

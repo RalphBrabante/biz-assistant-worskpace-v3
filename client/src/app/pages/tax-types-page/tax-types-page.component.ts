@@ -1,3 +1,5 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -34,7 +36,7 @@ interface WithholdingTaxTypeRow {
 @Component({
   selector: 'app-tax-types-page',
   standalone: true,
-  imports: [ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
+  imports: [MoneyInputDirective, RowActionsComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective],
   templateUrl: './tax-types-page.component.html',
 })
 export class TaxTypesPageComponent {

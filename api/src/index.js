@@ -1,3 +1,9 @@
+const vouchersRoutes = require('./routes/vouchers-routes');
+const chequesRoutes = require('./routes/cheques-routes');
+const organizationRolesRoutes=require('./routes/organization-roles-routes');
+const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('./jobs/quarterly-tax-reminder-job');
+const banksRoutes = require('./routes/banks-routes');
+const {startDebtReminderJob, stopDebtReminderJob} = require('./jobs/debt-reminder-job');
 const debtsRoutes = require('./routes/debts-routes');
 const ticketsRoutes = require('./routes/tickets-routes');
 const {startGmailTicketJob, stopGmailTicketJob} = require('./services/gmail-tickets');
@@ -310,6 +316,10 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/bug-reports', bugReportsRoutes);
 app.use('/api/v1/tickets', ticketsRoutes);
 app.use('/api/v1/debts', debtsRoutes);
+app.use('/api/v1/banks', banksRoutes);
+app.use('/api/v1/cheques', chequesRoutes);
+app.use('/api/v1/vouchers', vouchersRoutes);
+app.use('/api/v1/organization-roles', organizationRolesRoutes);
 app.use('/api/v1', systemRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -340,6 +350,8 @@ async function bootstrap() {
   }
 
   startLicenseExpiryJob();
+  startDebtReminderJob();
+  startQuarterlyTaxReminderJob();
   startOrderUploadCleanupJob();
   startGmailTicketJob();
 
@@ -354,6 +366,8 @@ async function bootstrap() {
 
 process.on('SIGINT', async () => {
   try {
+    await stopQuarterlyTaxReminderJob();
+    await stopDebtReminderJob();
     stopLicenseExpiryJob();
     stopOrderUploadCleanupJob();
     await stopGmailTicketJob();

@@ -525,7 +525,7 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
             ticks: {
               color: '#8993a5', font: { family: 'Inter', size: 10 }, padding: 12,
               callback: (tickValue: string | number) =>
-                this.toCurrency(Number(tickValue || 0), this.orgCurrency, 0, 0),
+                this.toCurrency(Number(tickValue || 0), this.orgCurrency),
             },
           },
         },

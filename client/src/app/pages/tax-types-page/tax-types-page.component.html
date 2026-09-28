@@ -73,12 +73,13 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th>Code</th>
           <th>Name</th>
           <th>Percentage</th>
           <th>Description</th>
           <th>Active</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -87,31 +88,42 @@
         </tr>
         <tr *ngFor="let row of filteredTaxRows(); trackBy: trackById">
           <ng-container *ngIf="editingTaxId !== row.id; else taxEditRow">
-            <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
+            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+              <div class="row-action-items">
+                <button type="button" (click)="startTaxEdit(row)" title="Edit" class="ui-dropdown-item">
+                  <i class="bi bi-pencil-square"></i>
+                 Edit</button>
+                <button
+
+                  type="button"
+                  [disabled]="deletingId() === row.id || !canManageGlobalTaxes"
+                  (click)="removeTaxType(row.id)"
+
+                  title="Delete"
+                 class="ui-dropdown-item text-danger">
+                  <i class="bi bi-trash3"></i>
+                 Delete</button>
+              </div>
+            </app-row-actions></td>
+          <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
             <td class="font-semibold">{{ row.name }}</td>
             <td>{{ row.percentage }}%</td>
             <td>{{ row.description || '-' }}</td>
             <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="startTaxEdit(row)" appTooltip title="Edit">
-                  <i class="bi bi-pencil-square"></i>
-                </button>
-                <button
-                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                  type="button"
-                  [disabled]="deletingId() === row.id || !canManageGlobalTaxes"
-                  (click)="removeTaxType(row.id)"
-                  appTooltip
-                  title="Delete"
-                >
-                  <i class="bi bi-trash3"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-container>
           <ng-template #taxEditRow>
-            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['code']" /></td>
+            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+              <div class="row-action-items">
+                <button type="button" [disabled]="submitting()" (click)="saveTaxEdit()" title="Save" class="ui-dropdown-item">
+                  <i class="bi bi-floppy2"></i>
+                 Save</button>
+                <button type="button" (click)="cancelTaxEdit()" title="Cancel" class="ui-dropdown-item">
+                  <i class="bi bi-x-lg"></i>
+                 Cancel</button>
+              </div>
+            </app-row-actions></td>
+          <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['code']" /></td>
             <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['name']" /></td>
             <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['percentage']" /></td>
             <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="taxEditForm['description']" /></td>
@@ -120,16 +132,7 @@
                 <input class="ui-form-check-input" type="checkbox" [(ngModel)]="taxEditForm['isActive']" />
               </div>
             </td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveTaxEdit()" appTooltip title="Save">
-                  <i class="bi bi-floppy2"></i>
-                </button>
-                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelTaxEdit()" appTooltip title="Cancel">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-template>
         </tr>
       </tbody>
@@ -145,13 +148,14 @@
     <table class="ui-table ui-table-hover align-middle mb-0">
       <thead class="ui-table-light">
         <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
           <th>Code</th>
           <th>Name</th>
           <th>Percentage</th>
           <th>Applies To</th>
           <th>Min Base</th>
           <th>Active</th>
-          <th class="text-right">Actions</th>
+
         </tr>
       </thead>
       <tbody>
@@ -160,32 +164,43 @@
         </tr>
         <tr *ngFor="let row of filteredWithholdingRows(); trackBy: trackById">
           <ng-container *ngIf="editingWithholdingId !== row.id; else withholdingEditRow">
-            <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
+            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+              <div class="row-action-items">
+                <button type="button" (click)="startWithholdingEdit(row)" title="Edit" class="ui-dropdown-item">
+                  <i class="bi bi-pencil-square"></i>
+                 Edit</button>
+                <button
+
+                  type="button"
+                  [disabled]="deletingId() === row.id || !canManageWithholding"
+                  (click)="removeWithholdingTaxType(row.id)"
+
+                  title="Delete"
+                 class="ui-dropdown-item text-danger">
+                  <i class="bi bi-trash3"></i>
+                 Delete</button>
+              </div>
+            </app-row-actions></td>
+          <td><span class="ui-badge ui-badge-light border">{{ row.code }}</span></td>
             <td class="font-semibold">{{ row.name }}</td>
             <td>{{ row.percentage }}%</td>
             <td>{{ row.appliesTo }}</td>
             <td>{{ formatMoney(row.minimumBaseAmount ?? 0, currentOrganizationCurrency) }}</td>
             <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="startWithholdingEdit(row)" appTooltip title="Edit">
-                  <i class="bi bi-pencil-square"></i>
-                </button>
-                <button
-                  class="ui-btn ui-btn-sm ui-btn-outline-danger"
-                  type="button"
-                  [disabled]="deletingId() === row.id || !canManageWithholding"
-                  (click)="removeWithholdingTaxType(row.id)"
-                  appTooltip
-                  title="Delete"
-                >
-                  <i class="bi bi-trash3"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-container>
           <ng-template #withholdingEditRow>
-            <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['code']" /></td>
+            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+              <div class="row-action-items">
+                <button type="button" [disabled]="submitting()" (click)="saveWithholdingEdit()" title="Save" class="ui-dropdown-item">
+                  <i class="bi bi-floppy2"></i>
+                 Save</button>
+                <button type="button" (click)="cancelWithholdingEdit()" title="Cancel" class="ui-dropdown-item">
+                  <i class="bi bi-x-lg"></i>
+                 Cancel</button>
+              </div>
+            </app-row-actions></td>
+          <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['code']" /></td>
             <td><input class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['name']" /></td>
             <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['percentage']" /></td>
             <td>
@@ -195,22 +210,13 @@
                 <option value="both">both</option>
               </select>
             </td>
-            <td><input type="number" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['minimumBaseAmount']" /></td>
+            <td><input appMoney [moneyAsNumber]="true" type="text" step="0.01" class="ui-form-control ui-form-control-sm" [(ngModel)]="withholdingEditForm['minimumBaseAmount']" /></td>
             <td>
               <div class="ui-form-check">
                 <input class="ui-form-check-input" type="checkbox" [(ngModel)]="withholdingEditForm['isActive']" />
               </div>
             </td>
-            <td class="text-right">
-              <div class="table-actions-inline">
-                <button class="ui-btn ui-btn-sm ui-btn-outline-success" type="button" [disabled]="submitting()" (click)="saveWithholdingEdit()" appTooltip title="Save">
-                  <i class="bi bi-floppy2"></i>
-                </button>
-                <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="cancelWithholdingEdit()" appTooltip title="Cancel">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-            </td>
+
           </ng-template>
         </tr>
       </tbody>
@@ -312,7 +318,7 @@
           </div>
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Minimum Base Amount</label>
-            <input type="number" step="0.01" class="ui-form-control" formControlName="minimumBaseAmount" />
+            <input appMoney [moneyAsNumber]="true" type="text" step="0.01" class="ui-form-control" formControlName="minimumBaseAmount" />
             <div class="text-danger text-xs mt-1" *ngIf="controlHasError(withholdingCreateForm, 'minimumBaseAmount', 'min')">Minimum base cannot be negative.</div>
           </div>
           <div class="col-span-12">

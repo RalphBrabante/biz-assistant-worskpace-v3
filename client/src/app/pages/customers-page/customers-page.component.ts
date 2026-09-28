@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { getBrowserCountry } from '../../shared/countries';
 import { ModalDirective } from '../../shared/modal.directive';
 import { DropdownDirective } from '../../shared/dropdown.directive';
@@ -50,7 +51,7 @@ interface CustomerRow {
 @Component({
   selector: 'app-customers-page',
   standalone: true,
-  imports: [ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective, CustomerFormFieldsComponent],
+  imports: [RowActionsComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective, CustomerFormFieldsComponent],
   templateUrl: './customers-page.component.html',
 })
 export class CustomersPageComponent {

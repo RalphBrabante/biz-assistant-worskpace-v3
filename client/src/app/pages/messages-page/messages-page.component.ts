@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -15,7 +16,7 @@ import { OrganizationRequiredComponent } from '../../shared/organization-require
 @Component({
   selector: 'app-messages-page',
   standalone: true,
-  imports: [OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './messages-page.component.html',
   styleUrl: './messages-page.component.css',
 })

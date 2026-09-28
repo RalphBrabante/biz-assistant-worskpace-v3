@@ -1,3 +1,4 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
@@ -117,7 +118,7 @@ interface WithholdingTaxTypeOption {
 @Component({
   selector: 'app-order-preview-page',
   standalone: true,
-  imports: [ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [MoneyInputDirective, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
   templateUrl: './order-preview-page.component.html',
 })
 export class OrderPreviewPageComponent {

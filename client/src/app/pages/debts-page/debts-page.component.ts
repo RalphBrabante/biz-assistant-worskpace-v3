@@ -1,3 +1,6 @@
+import {MoneyInputDirective} from '../../shared/money-input.directive';
+import {DropdownDirective} from '../../shared/dropdown.directive';
+import {ConfirmDialogService} from '../../core/confirm-dialog.service';
 import {CommonModule} from '@angular/common';
 import {Component, OnDestroy, effect, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
@@ -11,14 +14,18 @@ interface Debt {
   currency: string; borrowedOn: string; dueOn: string | null; notes: string; status: 'outstanding' | 'paid';
 }
 interface Payment {id: string; amount: string; paidOn: string; reference: string; notes: string; author?: {firstName: string; lastName: string};}
+interface RowHistory {payments: Payment[]; page: number; pages: number; total: number; loading: boolean; error: string; sub?: Subscription;}
 interface Summary {currency: string; originalAmount: string; paidAmount: string; remainingAmount: string;}
 interface ListData {debts: Debt[]; currency: string; summary: Summary[];}
 interface Detail {debt: Debt; payments: Payment[];}
-@Component({selector: 'app-debts-page', standalone: true, imports: [CommonModule, FormsModule, ModalDirective], templateUrl: './debts-page.component.html', styleUrl: './debts-page.component.css'})
+@Component({selector: 'app-debts-page', standalone: true, imports: [MoneyInputDirective, CommonModule, FormsModule, ModalDirective, DropdownDirective], templateUrl: './debts-page.component.html', styleUrl: './debts-page.component.css'})
 export class DebtsPageComponent implements OnDestroy {
+  private readonly confirmDialog = inject(ConfirmDialogService);
+  private destroyed = false;
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
   readonly organizations = inject(OrganizationContextService);
+  expanded: Record<string, RowHistory> = {};
   rows: Debt[] = []; summary: Summary[] = []; currency = 'PHP'; search = ''; status = ''; page = 1; pages = 1; total = 0;
   loading = false; saving = false; error = ''; notice = ''; createError = ''; detailError = '';
   createOpen = false; selected: Debt | null = null; detailLoading = false; payments: Payment[] = []; paymentPage = 1; paymentPages = 1; paymentTotal = 0;
@@ -30,14 +37,15 @@ export class DebtsPageComponent implements OnDestroy {
     effect(() => {
       this.organizations.selectedOrganizationId(); this.auth.currentUser();
       this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.writes.unsubscribe(); this.writes = new Subscription(); clearTimeout(this.searchTimer);
-      this.rows = []; this.summary = []; this.selected = null; this.payments = []; this.createOpen = false; this.saving = false; this.loading = false;
+      this.clearExpanded(); this.rows = []; this.summary = []; this.selected = null; this.payments = []; this.createOpen = false; this.saving = false; this.loading = false;
       this.error = ''; this.notice = ''; this.search = ''; this.status = ''; this.page = 1; this.total = 0; this.pages = 1;
       this.draft = this.newDebt(); this.payment = this.newPayment(); this.createKey = crypto.randomUUID(); this.paymentKey = crypto.randomUUID();
       if (this.organizations.getActiveOrganizationId()) this.load();
     });
   }
-  ngOnDestroy(): void {clearTimeout(this.searchTimer); this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.writes.unsubscribe();}
+  ngOnDestroy(): void {this.destroyed = true; this.clearExpanded(); clearTimeout(this.searchTimer); this.listSub?.unsubscribe(); this.detailSub?.unsubscribe(); this.writes.unsubscribe();}
   get canCreate(): boolean {return this.auth.hasPermission('debts.create');}
+  get canDelete(): boolean {return this.auth.hasPermission('debts.delete');}
   get canPay(): boolean {return this.auth.hasPermission('debts.pay');}
   today(): string {const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);}
   newDebt() {return {title: '', creditor: '', amount: '', borrowedOn: this.today(), dueOn: '', notes: ''};}
@@ -75,10 +83,28 @@ export class DebtsPageComponent implements OnDestroy {
     const params = new URLSearchParams({page: String(this.page)});
     if (this.search.trim()) params.set('q', this.search.trim()); if (this.status) params.set('status', this.status);
     this.listSub = this.api.getFresh<ListData>(this.url('', params)).subscribe({next: response => {
-      this.loading = false; this.rows = response.data?.debts || []; this.summary = response.data?.summary || []; this.currency = response.data?.currency || 'PHP';
+      this.loading = false; this.rows = response.data?.debts || [];
+      for (const id of Object.keys(this.expanded)) {
+        if (!this.rows.some(row => row.id === id)) {this.expanded[id].sub?.unsubscribe(); delete this.expanded[id];}
+        else {this.expanded[id].page = 1; this.loadHistory(id);}
+      } this.summary = response.data?.summary || []; this.currency = response.data?.currency || 'PHP';
       this.total = response.meta?.total || 0; this.pages = Math.max(1, response.meta?.totalPages || 1);
       if (this.page > this.pages) {this.page = this.pages; this.load();}
     }, error: error => {this.loading = false; this.error = error?.error?.message || 'Unable to load debts.';}});
+  }
+  clearExpanded(): void {Object.values(this.expanded).forEach(row => row.sub?.unsubscribe()); this.expanded = {};}
+  toggleHistory(debt: Debt): void {
+    if (this.expanded[debt.id]) {this.expanded[debt.id].sub?.unsubscribe(); delete this.expanded[debt.id]; return;}
+    this.expanded[debt.id] = {payments: [], page: 1, pages: 1, total: 0, loading: false, error: ''};
+    this.loadHistory(debt.id);
+  }
+  loadHistory(id: string, delta = 0): void {
+    const row = this.expanded[id]; if (!row || row.page + delta < 1 || row.page + delta > row.pages) return;
+    row.sub?.unsubscribe(); row.page += delta; row.loading = true; row.error = '';
+    row.sub = this.api.getFresh<Detail>(this.url(`/${id}`, new URLSearchParams({page: String(row.page)}))).subscribe({next: response => {
+      if (this.expanded[id] !== row) return;
+      row.loading = false; row.payments = response.data?.payments || []; row.total = response.meta?.total || 0; row.pages = Math.max(1, response.meta?.totalPages || 1);
+    }, error: error => {row.loading = false; row.error = error?.error?.message || 'Unable to load payments.';}});
   }
   changePage(delta: number): void {const next = this.page + delta; if (this.loading || next < 1 || next > this.pages) return; this.page = next; this.load();}
   openCreate(): void {if (!this.canCreate || this.saving) return; this.draft = this.newDebt(); this.createKey = crypto.randomUUID(); this.createError = ''; this.createOpen = true;}
@@ -107,6 +133,21 @@ export class DebtsPageComponent implements OnDestroy {
     }, error: error => {this.detailLoading = false; this.detailError = error?.error?.message || 'Unable to load payment history.';}});
   }
   changePaymentPage(delta: number): void {const next = this.paymentPage + delta; if (this.detailLoading || next < 1 || next > this.paymentPages) return; this.paymentPage = next; this.fetchDetail();}
+  async deleteDebt(debt: Debt): Promise<void> {
+    if (!this.canDelete || this.saving) return;
+    const organizationId = this.organizations.getActiveOrganizationId();
+    const confirmed = await this.confirmDialog.confirm({title: 'Delete debt',
+      message: `Delete “${debt.title}” and all its recorded payments? This cannot be undone.`,
+      confirmText: 'Delete debt', confirmButtonClass: 'ui-btn-danger', iconClass: 'bi-trash'});
+    if (!confirmed || this.destroyed || this.saving || !this.canDelete || organizationId !== this.organizations.getActiveOrganizationId()) return;
+    this.saving = true; this.error = ''; this.notice = '';
+    this.writes.add(this.api.remove('/api/v1/debts', `${debt.id}?${new URLSearchParams({organizationId})}`).subscribe({next: () => {
+      this.saving = false;
+      this.expanded[debt.id]?.sub?.unsubscribe(); delete this.expanded[debt.id];
+      if (this.selected?.id === debt.id) this.close();
+      this.notice = 'Debt and its payment history deleted.'; this.load();
+    }, error: error => {this.saving = false; this.error = error?.error?.message || 'Unable to delete debt. Please refresh and try again.';}}));
+  }
   recordPayment(): void {
     if (!this.selected || !this.canPay || this.saving || this.detailLoading || !this.validPayment) return;
     this.saving = true; this.detailError = ''; this.notice = '';

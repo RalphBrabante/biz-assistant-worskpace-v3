@@ -1,3 +1,4 @@
+import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
 import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -14,7 +15,7 @@ import { TooltipDirective } from '../../shared/tooltip.directive';
 @Component({
   selector: 'app-orders-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TooltipDirective, OrderBoardComponent],
+  imports: [RowActionsComponent, CommonModule, FormsModule, RouterLink, TooltipDirective, OrderBoardComponent],
   templateUrl: './orders-page.component.html',
 })
 export class OrdersPageComponent {
