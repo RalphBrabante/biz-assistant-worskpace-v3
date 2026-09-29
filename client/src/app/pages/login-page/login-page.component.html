@@ -16,7 +16,7 @@
     <div class="flex justify-between items-center"><span class="text-sm font-semibold lg:invisible">biz assistant.</span><button type="button" class="topbar-icon" (click)="toggleTheme()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()" aria-hidden="true"></i></button></div>
     <div class="w-full max-w-sm mx-auto my-auto py-12">
       <div class="section-eyebrow mb-3">Welcome to your workspace</div><h1 class="text-3xl font-semibold tracking-tight mb-3">Welcome back</h1><p class="text-sm text-muted mb-8">Enter your details to continue to your account.</p>
-            <form (ngSubmit)="submit()" #f="ngForm">
+            <form (ngSubmit)="submit(f.form.valid)" #f="ngForm" [attr.aria-busy]="loading">
               <div class="mb-4">
                 <label class="ui-form-label font-semibold" for="email">Email</label>
                 <input
@@ -27,6 +27,7 @@
                   [(ngModel)]="email"
                   required
                   autocomplete="username"
+                  [readOnly]="loading"
                 />
               </div>
 
@@ -40,9 +41,10 @@
                   [(ngModel)]="password"
                   required
                   autocomplete="current-password"
+                  [readOnly]="loading"
                 />
                 <div class="flex justify-end mt-2">
-                  <button class="ui-btn ui-btn-link ui-btn-sm no-underline px-0" type="button" (click)="openForgotModal()">
+                  <button class="ui-btn ui-btn-link ui-btn-sm no-underline px-0" type="button" (click)="openForgotModal()" [disabled]="loading">
                     Forgot password?
                   </button>
                 </div>
@@ -50,10 +52,12 @@
 
               <div class="grid">
                 <button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" [disabled]="loading || !f.form.valid">
-                  {{ loading ? 'Signing in...' : 'Sign In' }}
+                  <span *ngIf="loading" class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent mr-2" aria-hidden="true"></span>
+                  {{ loading ? 'Signing in…' : 'Sign In' }}
                 </button>
               </div>
             </form>
+            <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ loading && !organizationSelectionVisible ? 'Signing in…' : '' }}</p>
 
             <div *ngIf="error" class="ui-alert ui-alert-danger mt-6 mb-0" role="alert">
               <div>{{ error }}</div>
@@ -155,7 +159,7 @@
           <i class="bi bi-buildings mr-2 text-brand"></i>
           Select Organization
         </h5>
-        <button type="button" class="ui-btn-close" (click)="closeOrganizationSelectionModal()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close" (click)="closeOrganizationSelectionModal()" [disabled]="loading" aria-label="Close dialog"></button>
       </div>
       <div class="ui-modal-body">
         <p class="text-muted mb-4">
@@ -182,7 +186,8 @@
           Organizations without active license cannot be used for login.
         </div>
 
-        <div *ngIf="organizationSelectionError" class="ui-alert ui-alert-danger mt-4 mb-0">
+        <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ loading ? 'Signing in…' : '' }}</p>
+        <div *ngIf="organizationSelectionError" class="ui-alert ui-alert-danger mt-4 mb-0" role="alert">
           {{ organizationSelectionError }}
         </div>
       </div>

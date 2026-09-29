@@ -75,7 +75,8 @@ export class LoginPageComponent {
     this.theme.toggle();
   }
 
-  submit(): void {
+  submit(valid = true): void {
+    if (this.loading || !valid || !this.email || !this.password) return;
     this.organizationSelectionError = '';
     this.organizationSelectionVisible = false;
     this.organizationOptions = [];
@@ -84,6 +85,7 @@ export class LoginPageComponent {
   }
 
   submitWithSelectedOrganization(): void {
+    if (this.loading) return;
     const organizationId = String(this.selectedOrganizationId || '').trim();
     if (!organizationId) {
       this.organizationSelectionError = 'Select an organization to continue.';
@@ -93,6 +95,7 @@ export class LoginPageComponent {
   }
 
   closeOrganizationSelectionModal(): void {
+    if (this.loading) return;
     this.organizationSelectionVisible = false;
     this.organizationOptions = [];
     this.selectedOrganizationId = '';
@@ -113,6 +116,7 @@ export class LoginPageComponent {
   }
 
   private attemptLogin(organizationId?: string): void {
+    if (this.loading) return;
     this.loading = true;
     this.error = '';
     this.verificationMessage = '';
@@ -135,17 +139,18 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          this.loading = false;
           const token = response.data?.accessToken;
 
           if (!token) {
-            this.error = this.toErrorMessage(response?.message, 'Login failed.');
+            this.loading = false;
+            const message = this.toErrorMessage(response?.message, 'Login failed.');
+            if (this.organizationSelectionVisible) this.organizationSelectionError = message;
+            else this.error = message;
             return;
           }
 
-          this.auth.setSession(token, response.data?.user);
-          this.closeOrganizationSelectionModal();
-          void this.router.navigate(['/']);
+          // Keep feedback and the submit lock through session validation/navigation.
+          void this.finishLogin(token, response.data?.user);
         },
         error: (errorResponse) => {
           this.loading = false;
@@ -182,6 +187,22 @@ export class LoginPageComponent {
           this.error = this.toErrorMessage(errorResponse?.error?.message, 'Unable to log in.');
         },
       });
+  }
+
+  private async finishLogin(token: string, user: LoginPayload['user']): Promise<void> {
+    try {
+      this.auth.setSession(token, user);
+      const navigated = await this.router.navigate(['/']);
+      if (!navigated || this.router.url.split('?')[0] === '/login') {
+        throw new Error('Login navigation did not complete.');
+      }
+      // Successful navigation destroys this page; do not unlock it beforehand.
+    } catch {
+      this.loading = false;
+      const message = 'Unable to finish signing in. Please try again.';
+      if (this.organizationSelectionVisible) this.organizationSelectionError = message;
+      else this.error = message;
+    }
   }
 
   openForgotModal(): void {
