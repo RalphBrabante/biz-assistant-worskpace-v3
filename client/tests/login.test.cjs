@@ -78,3 +78,62 @@ test('organization selection stays interactive between requests and locked durin
   assert.equal(e.page.loading, false); assert.equal(e.page.organizationSelectionError, 'Organization unavailable.');
   e.page.submitWithSelectedOrganization(); assert.equal(e.requests.length, 3);
 });
+
+// HttpClient emits null for both an empty successful body (including 204) and JSON null.
+// Undefined also exercises an absent body from an adapter/test double.
+for (const [bodyName, body] of [['null/empty HTTP body', null], ['absent body', undefined]]) {
+  for (const organization of [false, true]) {
+    test(`${bodyName} unlocks ${organization ? 'organization continuation' : 'ordinary login'} and permits successful retry`, async () => {
+      const { config } = require('rxjs');
+      const unhandledErrors = [];
+      const previousHandler = config.onUnhandledError;
+      config.onUnhandledError = error => unhandledErrors.push(error.message);
+      try {
+        const e = setup();
+        e.page.submit();
+        if (organization) {
+          e.requests[0].stream.error({ error: { code: 'ORGANIZATION_SELECTION_REQUIRED', data: {
+            organizations: [{ id: 'eligible' }], suggestedOrganizationId: 'eligible' } } });
+          e.page.submitWithSelectedOrganization();
+        }
+        const requestCount = e.requests.length;
+        e.requests.at(-1).stream.next(body);
+        e.requests.at(-1).stream.complete();
+        // RxJS reports exceptions thrown by next handlers asynchronously, not via error.
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const error = organization ? e.page.organizationSelectionError : e.page.error;
+        assert.deepEqual({ loading: e.page.loading, error, unhandledErrors },
+          { loading: false, error: 'Login failed.', unhandledErrors: [] });
+        assert.equal(e.sessions.length, 0);
+        if (organization) {
+          assert.equal(e.page.organizationSelectionVisible, true);
+          assert.equal(e.page.selectedOrganizationId, 'eligible');
+          assert.equal(e.page.error, '');
+          e.page.submitWithSelectedOrganization();
+          assert.equal(e.requests.at(-1).payload.organizationId, 'eligible');
+          assert.equal(e.page.organizationSelectionError, '');
+        } else {
+          e.page.submit();
+          assert.equal(e.page.error, '');
+        }
+        assert.equal(e.requests.length, requestCount + 1);
+        assert.equal(e.page.loading, true);
+        e.requests.at(-1).stream.next({ data: { accessToken: 'synthetic-token', user: { id: 'synthetic-user' } } });
+        e.requests.at(-1).stream.complete();
+        await flush();
+        assert.equal(e.sessions.length, 1);
+        assert.equal(e.sessions[0][0], 'synthetic-token');
+        assert.equal(e.sessions[0][1].id, 'synthetic-user');
+        assert.equal(e.page.loading, true);
+        if (organization) e.page.submitWithSelectedOrganization();
+        else e.page.submit();
+        assert.equal(e.requests.length, requestCount + 1);
+        e.resolve(true);
+        await flush();
+        assert.equal(e.page.loading, true);
+      } finally {
+        config.onUnhandledError = previousHandler;
+      }
+    });
+  }
+}

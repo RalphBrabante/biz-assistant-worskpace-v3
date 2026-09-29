@@ -139,7 +139,8 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          const token = response.data?.accessToken;
+          // Successful HTTP responses may have a null body (for example, 204).
+          const token = response?.data?.accessToken;
 
           if (!token) {
             this.loading = false;
