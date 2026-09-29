@@ -42,7 +42,7 @@ interface ItemRow {
   cost?: number;
   discountedPrice?: number;
   currency?: string;
-  stock?: number;
+  stock?: number | string;
   reorderLevel?: number;
   isActive?: boolean;
 }
@@ -748,6 +748,13 @@ export class ItemsPageComponent {
     if (normalized === 'service') return 'ui-badge-info';
     if (normalized === 'product') return 'ui-badge-primary';
     return 'ui-badge-secondary';
+  }
+
+  formatStock(stock: ItemRow['stock'] | null): string {
+    const value = String(stock ?? 0);
+    // MySQL DECIMAL values arrive as strings (e.g. "25.000"). Only remove
+    // an all-zero fractional part; preserve real fractions and exact digits.
+    return /^[+-]?\d+\.0+$/.test(value) ? value.slice(0, value.indexOf('.')) : value;
   }
 
   itemStockBadgeClass(row: ItemRow): string {
