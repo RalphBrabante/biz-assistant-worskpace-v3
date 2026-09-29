@@ -218,6 +218,7 @@ async function authenticateRequest(req, res, next) {
 
     req.auth = {
       tokenId: tokenRecord.id,
+      expiresAt: tokenRecord.expiresAt,
       userId: user.id,
       user: {
         ...user.toJSON(),

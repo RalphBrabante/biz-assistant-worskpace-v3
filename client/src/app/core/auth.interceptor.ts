@@ -49,10 +49,6 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   if (!token || request.url.includes('/api/v1/auth/login') || request.url.includes('/api/v1/dev/')) {
     return next(request).pipe(
       catchError((err) => {
-        if (shouldForceLogout(err)) {
-          forceLogout(auth, organizationContext, router);
-          return throwError(() => err);
-        }
         if (err?.status === 403) {
           auth.showUnauthorizedAccess(
             err?.error?.message || 'You are not allowed to access this resource.'
@@ -71,7 +67,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     })
   ).pipe(
     catchError((err) => {
-      if (shouldForceLogout(err)) {
+      if (auth.token() === token && request.url.includes('/api/v1/') && shouldForceLogout(err)) {
         forceLogout(auth, organizationContext, router);
         return throwError(() => err);
       }
@@ -111,16 +107,6 @@ function isOrganizationsEndpoint(rawUrl: string): boolean {
   return /^\/api\/v1\/organizations(\/|$)/.test(pathname);
 }
 
-function isTokenExpiredError(err: any): boolean {
-  if (!err || err.status !== 401) {
-    return false;
-  }
-
-  const code = String(err?.error?.code || '').trim().toUpperCase();
-  const message = String(err?.error?.message || '').trim().toLowerCase();
-  return code === 'TOKEN_EXPIRED' || message.includes('token has expired');
-}
-
 function isLicenseInactiveError(err: any): boolean {
   if (!err || err.status !== 403) {
     return false;
@@ -137,7 +123,7 @@ function isLicenseInactiveError(err: any): boolean {
 }
 
 function shouldForceLogout(err: any): boolean {
-  return isTokenExpiredError(err) || isLicenseInactiveError(err);
+  return err?.status === 401 || isLicenseInactiveError(err);
 }
 
 function forceLogout(auth: AuthService, organizationContext: OrganizationContextService, router: Router): void {
@@ -145,6 +131,6 @@ function forceLogout(auth: AuthService, organizationContext: OrganizationContext
   auth.clearSession();
   organizationContext.clearSelectedOrganizationId();
   if (!window.location.pathname.startsWith('/login')) {
-    void router.navigate(['/login']);
+    void router.navigate(['/login'], { replaceUrl: true });
   }
 }

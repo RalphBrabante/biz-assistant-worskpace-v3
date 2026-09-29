@@ -1,3 +1,5 @@
+@if (auth.token()) {
+<div [hidden]="!auth.isAuthenticated()">
 <a href="#workspace-content" class="skip-link sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-lg focus:bg-surface focus:p-3">Skip to main content</a>
 <div class="app-layout bg-canvas">
   <div class="sidebar-backdrop lg:hidden" *ngIf="sidebarOpen" (click)="closeSidebar()"></div>
@@ -278,3 +280,6 @@
     </div>
   </div>
 </dialog>
+
+</div>
+}

@@ -48,6 +48,7 @@ export const routes: Routes = [
     path: '',
     component: AppShellComponent,
     canActivate: [authGuard],
+    canActivateChild: [authGuard],
     children: [
       { path: 'vouchers', loadComponent: () => import('./pages/vouchers-page/vouchers-page.component').then(m => m.VouchersPageComponent), canActivate: [administratorGuard], data: { permissions: ['banks.read'] } },
       { path: 'cheques', loadComponent: () => import('./pages/cheques-page/cheques-page.component').then(m => m.ChequesPageComponent), canActivate: [administratorGuard], data: { permissions: ['banks.read'] } },

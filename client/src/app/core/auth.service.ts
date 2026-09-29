@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-interface CurrentUser {
+export interface CurrentUser {
   id?: string;
   email?: string;
   firstName?: string;
@@ -44,12 +44,15 @@ export class AuthService {
     icon: 'bi-shield-lock',
   });
 
+  readonly sessionVerified = signal(false);
+
   isAuthenticated(): boolean {
-    return Boolean(this.token());
+    return Boolean(this.token()) && this.sessionVerified();
   }
 
   setSession(token: string, user?: CurrentUser): void {
     localStorage.setItem(this.tokenKey, token);
+    this.sessionVerified.set(false);
     this.token.set(token);
 
     if (user) {
@@ -59,6 +62,7 @@ export class AuthService {
   }
 
   updateCurrentUser(partial: CurrentUser): void {
+    if (!this.token()) return;
     const current = this.currentUser() || {};
     const updated = { ...current, ...partial };
     localStorage.setItem(this.userKey, JSON.stringify(updated));
@@ -66,6 +70,8 @@ export class AuthService {
   }
 
   clearSession(): void {
+    this.sessionVerified.set(false);
+    this.clearUnauthorizedAccess();
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);
     this.token.set('');

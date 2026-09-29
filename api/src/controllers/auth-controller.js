@@ -427,6 +427,7 @@ async function login(req, res) {
 }
 
 async function getSession(req, res) {
+  res.set('Cache-Control', 'no-store');
   try {
     const models = getModels();
     if (!models || !models.Organization) {
@@ -456,6 +457,7 @@ async function getSession(req, res) {
       ok: true,
       message: 'Session resolved.',
       data: {
+        expiresAt: req.auth.expiresAt,
         user: {
           id: authUser.id,
           email: authUser.email,
