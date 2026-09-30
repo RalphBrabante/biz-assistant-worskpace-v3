@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 function page(){
  const module={exports:{}};
  const source=ts.transpileModule(fs.readFileSync(require.resolve('../src/app/pages/items-page/items-page.component.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,experimentalDecorators:true}}).outputText;
- vm.runInNewContext(source,{module,exports:module.exports,require(name){if(name==='@angular/core')return{Component:()=>v=>v};return {};}});
+ vm.runInNewContext(source,{module,exports:module.exports,URLSearchParams,require(name){if(name==='@angular/core')return{Component:()=>v=>v};return {};}});
  return Object.create(module.exports.ItemsPageComponent.prototype);
 }
 test('item save payload retains its own stock threshold including zero',()=>{
@@ -49,4 +49,49 @@ test('Items stock badge binds to the display formatter', () => {
   assert.ok(html.includes('[ngClass]="itemStockBadgeClass(row)"'));
   assert.ok(html.includes('{{ formatStock(row.stock) }}'));
   assert.ok(!html.includes('{{ row.stock ?? 0 }}'));
+});
+
+test('Items pagination preserves API row order and raw decimal values across pages', () => {
+  const p = page();
+  const signal = (value) => {
+    const read = () => value;
+    read.set = next => { value = next; };
+    return read;
+  };
+  const pages = [
+    Object.freeze([Object.freeze({id: 'newest', stock: '25.000'}), Object.freeze({id: 'middle', stock: '0.000'})]),
+    Object.freeze([Object.freeze({id: 'oldest', stock: '1.125'})]),
+  ];
+  const requests = [];
+  Object.assign(p, {
+    organizationContext: {getActiveOrganizationId: () => 'org-a', isSuperuser: () => false},
+    lastVendorScope: 'org-a', filter: signal(''), vendorFilter: '',
+    loading: signal(false), error: signal(''), rows: signal([]),
+    page: 1, pageSize: 2, total: 0, totalPages: 1,
+    persistTablePreferences() {},
+    api: {list(url) {
+      const params = new URL(url, 'http://fixture').searchParams;
+      requests.push(params);
+      return {subscribe({next}) {
+        const requestedPage = Number(params.get('page'));
+        next({data: pages[requestedPage - 1], meta: {page: requestedPage, total: 3, totalPages: 2}});
+      }};
+    }},
+  });
+  p.load();
+  assert.strictEqual(p.rows(), pages[0]);
+  assert.deepEqual(p.rows().map(row => p.formatStock(row.stock)), ['25', '0']);
+  assert.deepEqual(p.rows().map((row, i) => p.trackById(i, row)), ['newest', 'middle']);
+  p.goToPage(2);
+  assert.strictEqual(p.rows(), pages[1]);
+  assert.equal(p.formatStock(p.rows()[0].stock), '1.125');
+  assert.equal(p.total, 3);
+  assert.equal(p.totalPages, 2);
+  p.goToPage(3);
+  assert.equal(requests.length, 2, 'out-of-range navigation must not request a page');
+  p.goToPage(1);
+  assert.strictEqual(p.rows(), pages[0]);
+  assert.equal(p.rows()[0].stock, '25.000');
+  assert.deepEqual(requests.map(params => params.get('page')), ['1', '2', '1']);
+  assert.ok(requests.every(params => params.get('limit') === '2'));
 });
