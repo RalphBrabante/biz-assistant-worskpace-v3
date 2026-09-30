@@ -34,15 +34,17 @@ from the repository root. They cover exact formatting, unchanged values/badges,
 API `createdAt DESC` ordering, and forward/back client pagination. The Items
 table has no user-selectable sorting control; the existing API order is retained.
 
-Visual acceptance remains outstanding as of 2026-09-30: the managed browser
-started, but navigation to the local application was rejected with
-`browser navigation blocked by policy`. No workaround or policy change was
-attempted. In a permitted local/test environment, load the actual Items table
-with synthetic `0.000`, `1.000`, `25.000`, and `1.125` rows; inspect badges and
-stock text, change page size, use Next/Prev, and confirm server row order is
-preserved. Capture screenshots and the test fixture/API responses. Do not treat
-the automated checks as a substitute for this visual gate or as production-data
-verification.
+Visual verification was not performed. The earlier managed-browser attempt
+returned `browser navigation blocked by policy` for localhost; no bypass or
+policy change was attempted. Ralph's updated instruction on 2026-09-30 makes
+visual tests unnecessary under the local machine's strict policy: do not run
+them or treat their absence as a review-readiness blocker. The non-visual
+regressions above verify behavior, not rendered appearance or production data.
+
+Exact fractional behavior: string `1.500` remains `1.500`, `1.125` remains
+`1.125`, and `1.0000000000000001` remains unchanged. Numeric `0.1 + 0.2`
+displays as `0.30000000000000004`; no epsilon-based rounding is applied.
+The broader integer-input and data-reconciliation decisions above remain open.
 
 ## Inventory behavior
 
