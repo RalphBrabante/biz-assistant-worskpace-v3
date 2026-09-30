@@ -35,10 +35,10 @@ async function notifyStockChange(item, options = {}) {
 }
 
 function validateInventory(item) {
-  for (const [field, maximum, decimals] of [['stock', 999999999.999, 3], ['reorderLevel', 2147483647, 0]]) {
+  for (const [field, maximum] of [['stock', 999999999], ['reorderLevel', 2147483647]]) {
     const raw = item[field], value = Number(raw);
-    if (raw === null || raw === '' || typeof raw === 'boolean' || !Number.isFinite(value) || value < 0 || value > maximum || Math.abs(value * 10 ** decimals - Math.round(value * 10 ** decimals)) > 0.00001) {
-      const error = new Error(field === 'stock' ? 'Stock must be non-negative with at most three decimal places.' : 'Low-stock threshold must be a non-negative whole number.');
+    if (raw === null || (typeof raw !== 'number' && typeof raw !== 'string') || String(raw).trim() === '' || typeof raw === 'boolean' || !Number.isFinite(value) || value < 0 || value > maximum || !Number.isInteger(value)) {
+      const error = new Error(field === 'stock' ? 'Stock must be a non-negative whole number (maximum 999999999).' : 'Low-stock threshold must be a non-negative whole number.');
       error.status = 400;
       throw error;
     }

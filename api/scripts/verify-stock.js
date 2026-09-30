@@ -13,7 +13,7 @@ const { setSocketServer } = require('../src/services/socket-service');
     const org = await m.Organization.create({name:'Stock fixture',addressLine1:'Test',city:'Test',country:'Philippines',contactEmail:'test@example.invalid',phone:'0',currency:'PHP',taxTypeId:tax.id});
     const events = [];
     setSocketServer({to:room=>({emit:(event,payload)=>events.push({room,event,payload})})});
-    const product = await db.transaction(transaction=>m.Item.create({organizationId:org.id,name:'Fractional product',stock:10,reorderLevel:5}, {transaction}));
+    const product = await db.transaction(transaction=>m.Item.create({organizationId:org.id,name:'Whole-unit product',stock:10,reorderLevel:5}, {transaction}));
     const write = values => db.transaction(async transaction => {
       await product.reload({transaction,lock:transaction.LOCK.UPDATE});
       return product.update(values,{transaction});
@@ -21,13 +21,13 @@ const { setSocketServer } = require('../src/services/socket-service');
     const count = ()=>m.Message.count({where:{entityId:product.id}});
     assert.equal(await count(),0);
     await write({stock:5}); assert.equal(await count(),1); assert.equal(events.length,1); assert.equal(events[0].room,`org:${org.id}`); assert.equal(events[0].payload.createdBy,null);
-    await write({stock:4.125}); await write({name:'Updated name'}); assert.equal(await count(),1);
+    await write({stock:4}); await write({name:'Updated name'}); assert.equal(await count(),1);
     await assert.rejects(db.transaction(async transaction=>{await product.reload({transaction,lock:transaction.LOCK.UPDATE});await product.update({stock:0},{transaction});assert.equal(events.length,1);throw Error('rollback');}),/rollback/);
-    await product.reload();assert.equal(Number(product.stock),4.125);assert.equal(await count(),1);assert.equal(events.length,1);
+    await product.reload();assert.equal(Number(product.stock),4);assert.equal(await count(),1);assert.equal(events.length,1);
     await write({stock:0});assert.equal(await count(),2);assert.equal(events.at(-1).payload.metadata.status,'out');
     await write({stock:8});await write({stock:5});assert.equal(await count(),3);
     await write({stock:8});await write({reorderLevel:9});assert.equal(await count(),4);
-    for (const values of [{stock:-1},{stock:1.0001},{stock:'bad'},{reorderLevel:-1},{reorderLevel:1.5},{reorderLevel:null}]) await assert.rejects(write(values));
+    for (const values of [{stock:-1},{stock:1.0001},{stock:1.5},{stock:'bad'},{reorderLevel:-1},{reorderLevel:1.5},{reorderLevel:null}]) await assert.rejects(write(values));
     const service = await m.Item.create({organizationId:org.id,name:'Service',type:'service',stock:0,reorderLevel:5});assert.equal(await m.Message.count({where:{entityId:service.id}}),0);
     const inactive = await m.Item.create({organizationId:org.id,name:'Inactive',isActive:false,stock:0});assert.equal(await m.Message.count({where:{entityId:inactive.id}}),0);
     const empty = await db.transaction(transaction=>m.Item.create({organizationId:org.id,name:'Empty',stock:0,reorderLevel:0},{transaction}));assert.equal(await m.Message.count({where:{entityId:empty.id}}),1);
@@ -36,7 +36,7 @@ const { setSocketServer } = require('../src/services/socket-service');
     await write({stock:20});
     try {m.Message.create=async()=>{throw Error('storage failure');};await assert.rejects(write({stock:0}),/storage failure/);} finally {m.Message.create=original;}
     assert.equal(Number((await product.reload()).stock),20);
-    console.log('PASS: product thresholds, fractional balances, organization-wide alert delivery, transition deduplication, restock rearming, transaction rollback, validation, service/inactive exclusion, and notification persistence failures.');
+    console.log('PASS: product thresholds, whole-number balances, organization-wide alert delivery, transition deduplication, restock rearming, transaction rollback, validation, service/inactive exclusion, and notification persistence failures.');
     setSocketServer(null);
   } finally {await db.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

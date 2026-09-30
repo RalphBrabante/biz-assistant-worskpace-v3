@@ -1,6 +1,6 @@
 # Stock management
 
-Products expose **Low-stock threshold** in both Add Item and Edit Item. Thresholds are non-negative whole numbers; stock supports three decimal places. A threshold of zero disables low-stock warnings while keeping out-of-stock warnings enabled. CSV import/export retains the existing `reorderLevel` column.
+Products expose **Low-stock threshold** in both Add Item and Edit Item. Stock and thresholds must be non-negative whole numbers. Stock is limited to 999999999 units. Item creation, edits, and CSV imports reject fractional stock through model validation. The Items table removes database decimal padding (for example, `17472.000` displays as `17,472`). Existing stored balances are not changed or rounded; historical fractions remain visible until explicitly corrected. A threshold of zero disables low-stock warnings while keeping out-of-stock warnings enabled. CSV import/export retains the existing `reorderLevel` column.
 
 Managed orders deduct product quantities once at confirmation with inventory enabled. Drafts, fulfillment, invoicing, payments, and financial refunds do not deduct again. Eligible cancellation restores committed quantities once. Services do not consume stock. Orders and product rows are locked during confirmation to prevent competing orders from overselling.
 

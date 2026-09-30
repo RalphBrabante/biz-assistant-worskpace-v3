@@ -215,7 +215,7 @@
           <td>{{ formatMoney(row.cost ?? 0, row.currency || currentOrganizationCurrency) }}</td>
           <td>
             <span class="ui-badge rounded-full" [ngClass]="itemStockBadgeClass(row)">
-              {{ row.stock ?? 0 }}
+              {{ formatStock(row.stock) }}
             </span>
           </td>
           <td>
@@ -346,7 +346,7 @@
           <div class="col-span-12 md:col-span-3">
             <label class="ui-form-label font-semibold">Stock <span *ngIf="isCreateFieldRequired('stock')" class="text-danger">*</span></label>
             <div class="relative">
-              <input type="number" min="0" step="0.001" class="ui-form-control" formControlName="stock" [class.is-invalid]="shouldShowCreateFieldError('stock')" />
+              <input type="number" min="0" step="1" max="999999999" class="ui-form-control" formControlName="stock" [class.is-invalid]="shouldShowCreateFieldError('stock')" />
               <div *ngIf="shouldShowCreateFieldError('stock')" class="field-validation-icon" appTooltip [attr.title]="getCreateFieldError('stock')">
                 <i class="bi bi-exclamation-circle-fill text-danger"></i>
               </div>
@@ -502,7 +502,8 @@
           </div>
           <div class="col-span-12 md:col-span-3">
             <label class="ui-form-label font-semibold">Stock</label>
-            <input type="number" min="0" step="0.001" class="ui-form-control" [(ngModel)]="editForm['stock']" />
+            <input type="number" min="0" step="1" max="999999999" class="ui-form-control" [(ngModel)]="editForm['stock']" [class.is-invalid]="!isValidStock(editForm['stock'])" />
+            <div *ngIf="!isValidStock(editForm['stock'])" class="text-xs text-danger" role="alert">Stock must be a non-negative whole number (maximum 999999999).</div>
           </div>
 
           <div class="col-span-12 md:col-span-6" *ngIf="editForm['type'] === 'product'">

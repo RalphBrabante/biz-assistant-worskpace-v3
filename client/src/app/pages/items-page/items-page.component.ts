@@ -321,6 +321,12 @@ export class ItemsPageComponent {
       return;
     }
 
+    if (!this.isValidStock(this.createItemForm.getRawValue()['stock'])) {
+      this.createItemForm.markAllAsTouched();
+      this.createModalError.set('Stock must be a non-negative whole number (maximum 999999999).');
+      return;
+    }
+
     if (this.createItemForm.invalid) {
       this.createItemForm.markAllAsTouched();
       this.createModalError.set('Please complete all required item fields.');
@@ -550,6 +556,9 @@ export class ItemsPageComponent {
     if (!this.editingId) {
       return;
     }
+    if (!this.isValidStock(this.editForm['stock'])) {
+      return;
+    }
     const confirmed = await this.confirmDialog.confirm({
       title: 'Update Item',
       message: 'Save changes to this item?',
@@ -750,6 +759,18 @@ export class ItemsPageComponent {
     return 'ui-badge-secondary';
   }
 
+  isValidStock(raw: unknown): boolean {
+    const value = Number(raw);
+    return (typeof raw === 'number' || typeof raw === 'string') && String(raw).trim() !== ''
+      && Number.isInteger(value) && value >= 0 && value <= 999999999;
+  }
+
+  formatStock(raw: unknown): string {
+    const value = Number(raw ?? 0);
+    // Remove database decimal padding without silently rounding historical balances.
+    return Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 3 }) : '—';
+  }
+
   itemStockBadgeClass(row: ItemRow): string {
     const stock = Number(row.stock ?? 0);
     const reorderLevel = Number(row.reorderLevel ?? 0);
@@ -805,7 +826,7 @@ export class ItemsPageComponent {
       cost: [defaults['cost'], [Validators.required, Validators.min(0)]],
       discountedPrice: [defaults['discountedPrice'], [Validators.min(0)]],
       currency: [defaults['currency']],
-      stock: [defaults['stock'], [Validators.required, Validators.min(0)]],
+      stock: [defaults['stock'], [Validators.required, Validators.min(0), Validators.max(999999999), Validators.pattern(/^\d+$/)]],
       reorderLevel: [defaults['reorderLevel'], [Validators.required, Validators.min(0), Validators.pattern(/^\d+$/)]],
       isActive: [defaults['isActive']],
     });
