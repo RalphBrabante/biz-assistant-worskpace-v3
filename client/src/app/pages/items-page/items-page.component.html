@@ -215,7 +215,7 @@
           <td>{{ formatMoney(row.cost ?? 0, row.currency || currentOrganizationCurrency) }}</td>
           <td>
             <span class="ui-badge rounded-full" [ngClass]="itemStockBadgeClass(row)">
-              {{ row.stock ?? 0 }}
+              {{ formatStock(row.stock) }}
             </span>
           </td>
           <td>
