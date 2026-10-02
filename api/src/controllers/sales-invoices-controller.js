@@ -385,13 +385,13 @@ async function importSalesInvoices(req, res) {
             updatedBy: req.auth?.user?.id || target.updatedBy || null,
           };
           // eslint-disable-next-line no-await-in-loop
-          await target.update(updatePayload);
+          await SalesInvoice.sequelize.transaction(transaction => target.update(updatePayload, { transaction }));
           updated += 1;
           continue;
         }
 
         // eslint-disable-next-line no-await-in-loop
-        await SalesInvoice.create(payload);
+        await SalesInvoice.sequelize.transaction(transaction => SalesInvoice.create(payload, { transaction }));
         imported += 1;
       } catch (rowErr) {
         skipped += 1;
@@ -490,7 +490,7 @@ async function createSalesInvoice(req, res) {
     }
     normalizeInvoiceTotals(payload, organization.taxType, withholdingTaxType);
 
-    const salesInvoice = await SalesInvoice.create(payload);
+    const salesInvoice = await SalesInvoice.sequelize.transaction(transaction => SalesInvoice.create(payload, { transaction }));
     const actorName = getActorDisplayName(req.auth?.user);
     await createOrganizationMessage({
       organizationId: salesInvoice.organizationId,
@@ -855,7 +855,9 @@ async function updateSalesInvoice(req, res) {
       payload.paidAt = salesInvoice.paidAt || new Date();
     }
 
-    await salesInvoice.update(payload);
+    await SalesInvoice.sequelize.transaction(async transaction => {
+      await salesInvoice.update(payload, { transaction });
+    });
     return res.status(200).json({ ok: true, data: salesInvoice });
   } catch (err) {
     console.error('Update sales invoice error:', err);
@@ -884,7 +886,7 @@ async function deleteSalesInvoice(req, res) {
     }
 
     if (salesInvoice.orderId && (await getModels().Order.findByPk(salesInvoice.orderId))?.workflow) return res.status(400).json({ ok: false, message: 'Manage this invoice from its order workspace.' });
-    await salesInvoice.destroy();
+    await SalesInvoice.sequelize.transaction(transaction => salesInvoice.destroy({ transaction }));
     return res.status(200).json({ ok: true, message: 'Sales invoice deleted successfully.' });
   } catch (err) {
     console.error('Delete sales invoice error:', err);

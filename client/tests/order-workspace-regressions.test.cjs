@@ -87,3 +87,27 @@ test('failed invoice preview retains details and does not issue an invoice', () 
   e.requests[0].stream.error({ error: { message: 'The order changed. Reload.' } });
   assert.equal(e.requests.length, 1); assert.equal(e.page.invoicePreview, null); assert.equal(e.page.invoiceDetails.soldTo, 'Reviewed buyer'); assert.equal(e.page.busy, false);
 });
+
+test('saved biohazard lines show their share of Services withholding without depending on active tax lookups', () => {
+  const e = setup();
+  e.page.accept({ ...e.order, status: 'completed', workflow: null, withHoldingTaxAmount: 1587.50, totalAmount: 87312.50,
+    withholdingTaxTypeId: 'services', orderedItemSnapshots: [{ id: 'bags', name: 'Biohazard specimen bags', quantity: 10000, unitPrice: 8.89, lineTotal: 88900, lineTax: 9525 }] });
+  e.page.taxes = []; e.page.organizationTaxType = { code: 'VAT', percentage: 15 };
+  assert.equal(e.page.lineAmounts[0].tax, 9525);
+  assert.equal(e.page.lineAmounts[0].withholding, 1587.50);
+  assert.equal(e.page.lineAmounts[0].due, 87312.50);
+});
+test('Services withholding applies to every draft line and sums exactly across centavo rounding', () => {
+  const e = setup(); e.page.organizationTaxType = { code: 'VAT', percentage: 12 };
+  e.page.lines = Array.from({ length: 7 }, (_, i) => ({ name: `Biohazard bags ${i}`, quantity: 1, unitPrice: 1, type: 'product', unit: 'pack' }));
+  e.page.taxes = [{ id: 'services', name: 'Services', percentage: 2 }]; e.page.withholdingTaxTypeId = 'services';
+  const amounts = e.page.lineAmounts;
+  assert.equal(Math.round(amounts.reduce((s, line) => s + line.withholding, 0) * 100) / 100, e.page.estimatedWithholding);
+  assert.equal(Math.round(amounts.reduce((s, line) => s + line.due, 0) * 100) / 100, e.page.estimate);
+  assert.ok(amounts.every(line => line.withholding > 0));
+});
+test('unavailable selected rates do not silently become zero WHT while editing', () => {
+  const e = setup(); e.page.accept({ ...e.order, withHoldingTaxAmount: 2, withholdingTaxTypeId: 'services' }); e.page.changed();
+  assert.equal(e.page.estimatedWithholding, null); assert.equal(e.page.estimate, null);
+  assert.equal(e.page.lineAmounts[0].withholding, null); assert.equal(e.page.lineAmounts[0].due, null);
+});

@@ -16,13 +16,13 @@ import { OrderProofUploadComponent, ProofUploadState } from './proof-upload/orde
 interface Settings { preset: string; customerRequired: boolean; inventoryEnabled: boolean; shippingEnabled: boolean; approvalThreshold: number | null; paymentTermsDays: number; }
 interface CatalogItem { id: string; name: string; sku?: string; type: string; unit: string; price: number; discountedPrice?: number; stock: number; }
 interface Customer { legalName?: string; taxId?: string; addressLine1?: string; addressLine2?: string; city?: string; state?: string; postalCode?: string; country?: string; id: string; name: string; requiresPurchaseOrder: boolean; paymentTermsDays?: number; }
-interface Line { id?: string; itemId: string | null; name: string; type: string; unit: string; quantity: number; unitPrice: number; discountedUnitPrice?: number | null; lineTotal?: number; taxRate?: number; }
+interface Line { id?: string; itemId: string | null; name: string; type: string; unit: string; quantity: number; unitPrice: number; discountedUnitPrice?: number | null; lineTotal?: number; lineTax?: number; taxRate?: number; }
 interface Invoice { id: string; invoiceNumber: string; status: string; paymentStatus: string; totalAmount: number; dueDate?: string; }
-interface Payment { id: string; kind: string; amount: number; reference: string; date: string; invoiceId: string; }
+interface Payment { source?: string; id: string; kind: string; amount: number; reference: string; date: string; invoiceId: string; }
 interface Document { id: string; name: string; size: number; createdAt: string; }
 interface Activity { id: string; title: string; description: string; createdAt: string; actor?: { firstName: string; lastName: string }; }
 interface Workflow { settings: Settings; approval: string; poRequired: boolean; po: { status?: string; date?: string; amount?: number | null; documentId?: string; verifiedAt?: string; verificationNote?: string }; paymentTermsDays: number; fulfilled: Record<string, number>; payments: Payment[]; }
-interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
+interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; withholdingTaxType?: { name: string; percentage: number }; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
 @Component({ selector: 'app-order-workspace-page', standalone: true, imports: [SalesInvoiceSheetComponent, MoneyInputDirective, RowActionsComponent, CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
 export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
@@ -97,8 +97,31 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
       return sum + (rate ? this.round(total - total / (1 + rate / 100)) : 0);
     }, 0));
   }
-  get estimatedWithholding(): number { return this.round((this.estimatedSubtotal - this.estimatedTax) * Number(this.taxes.find(tax => tax.id === this.withholdingTaxTypeId)?.percentage || 0) / 100); }
-  get estimate(): number { return this.round(this.estimatedSubtotal + Number(this.shippingAmount || 0) - this.estimatedWithholding); }
+  get estimatedWithholding(): number | null {
+    if (this.selectedTaxUnavailable) return null;
+    return this.round((this.estimatedSubtotal - this.estimatedTax) * Number(this.taxes.find(tax => tax.id === this.withholdingTaxTypeId)?.percentage || 0) / 100);
+  }
+  get estimate(): number | null { const withholding = this.estimatedWithholding; return withholding === null ? null : this.round(this.estimatedSubtotal + Number(this.shippingAmount || 0) - withholding); }
+  get lineAmounts(): { gross: number; tax: number; withholding: number | null; due: number | null }[] {
+    const saved = !!this.order && !this.dirty;
+    const amounts = this.lines.map(line => {
+      const gross = saved && line.lineTotal != null ? Number(line.lineTotal) : this.round(Number(line.quantity || 0) * Number(line.unitPrice || 0));
+      const rate = this.organizationTaxType ? (isVatTaxType(this.organizationTaxType) ? Number(this.organizationTaxType.percentage || 0) : 0) : Number(line.taxRate || 0);
+      const tax = saved && line.lineTax != null ? Number(line.lineTax) : rate ? this.round(gross - gross / (1 + rate / 100)) : 0;
+      return { gross, tax, base: Math.max(0, this.round(gross - tax)) };
+    });
+    const base = this.round(amounts.reduce((sum, line) => sum + line.base, 0));
+    const withholding = saved ? Number(this.order!.withHoldingTaxAmount || 0) : this.estimatedWithholding;
+    let cumulative = 0, allocated = 0;
+    return amounts.map(line => {
+      if (withholding === null) return { ...line, withholding: null, due: null };
+      cumulative = this.round(cumulative + line.base);
+      const target = base > 0 ? this.round(withholding * cumulative / base) : 0;
+      const share = this.round(target - allocated); allocated = target;
+      return { ...line, withholding: share, due: this.round(line.gross - share) };
+    });
+  }
+  amountOrUnavailable(value: number | null): string { return value === null ? 'Unavailable' : this.money(value); }
   get selectedTaxUnavailable(): boolean { return !!this.withholdingTaxTypeId && !this.taxes.some(tax => tax.id === this.withholdingTaxTypeId); }
   get canFulfill(): boolean { return !!this.order?.workflow && ['confirmed', 'processing'].includes(this.order.status) && this.can('orders.update'); }
   get fulfillmentSelection(): { id: string; name: string; quantity: number; unit: string }[] {

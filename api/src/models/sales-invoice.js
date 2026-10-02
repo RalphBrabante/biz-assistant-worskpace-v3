@@ -1,13 +1,15 @@
 const { indexesFor } = require('../database/schema-indexes-v1');
 const { jsonObjectAttribute } = require('./json-object-attribute');
 const { DataTypes, Model } = require('sequelize');
+const { syncLegacyOrderPayment } = require('../services/order-invoice-payment');
 
 class SalesInvoice extends Model {}
 async function protectOrderInvoice(invoice, options) {
   if (options.orderWorkflow) return;
   const orderId = invoice.orderId || invoice.previous('orderId');
   if (!orderId) return;
-  const order = await invoice.sequelize.models.Order.findByPk(orderId, { transaction: options.transaction });
+  const order = await invoice.sequelize.models.Order.findByPk(orderId, { transaction: options.transaction,
+    ...(options.transaction ? { lock: options.transaction.LOCK.UPDATE } : {}) });
   if (order?.workflow) throw new Error('Manage this invoice through its order workspace to preserve financial history.');
 }
 
@@ -124,7 +126,8 @@ function initSalesInvoiceModel(sequelize) {
     {
       sequelize,
       modelName: 'SalesInvoice',
-      hooks: { beforeCreate: protectOrderInvoice, beforeUpdate: protectOrderInvoice, beforeDestroy: protectOrderInvoice },
+      hooks: { beforeCreate: protectOrderInvoice, beforeUpdate: protectOrderInvoice, beforeDestroy: protectOrderInvoice,
+        afterCreate: syncLegacyOrderPayment, afterUpdate: syncLegacyOrderPayment, afterDestroy: syncLegacyOrderPayment },
       tableName: 'sales_invoices',
       timestamps: true,
       underscored: true,

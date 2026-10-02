@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { isVatTaxType } = require('./tax-calculation');
+const { invoicePaymentSummary } = require('./order-invoice-payment');
 const DEFAULT_SETTINGS = Object.freeze({ preset: 'distribution', customerRequired: false, inventoryEnabled: true, shippingEnabled: true, approvalThreshold: null, paymentTermsDays: 30 });
 const PRESETS = {
   distribution: { ...DEFAULT_SETTINGS },
@@ -86,7 +87,8 @@ function confirmationChecks(order, customerRequiresPo = false) {
 function balances(order, invoices) {
   const active = invoices.filter(i => i.status !== 'void');
   const invoiced = money(active.reduce((s, i) => s + Number(i.totalAmount), 0));
-  const paid = money((order.workflow?.payments || []).reduce((s, p) => s + (p.kind === 'refund' ? -p.amount : p.amount), 0));
+  const paid = order.workflow ? money((order.workflow.payments || []).reduce((s, p) => s + (p.kind === 'refund' ? -Number(p.amount) : Number(p.amount)), 0))
+    : invoicePaymentSummary(order, active).paid;
   return { invoiced, paid, toInvoice: money(Number(order.totalAmount) - invoiced), outstanding: money(invoiced - paid), orderBalance: money(Number(order.totalAmount) - paid) };
 }
 function invoiceAllocation(order, invoices, amount, field) {

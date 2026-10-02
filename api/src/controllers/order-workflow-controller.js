@@ -6,6 +6,7 @@ const { getScopedOrganizationId, applyOrganizationWhereScope, isPrivilegedReques
 const { createOrganizationMessage } = require('../services/message-service');
 const W = require('../services/order-workflow');
 const { buildInvoiceDocument } = require('../services/sales-invoice-document');
+const { paidInvoice, invoicePaymentSummary } = require('../services/order-invoice-payment');
 
 const actions = { start_processing: 'orders.update', return_to_draft: 'orders.update', submit: 'orders.update', approve: 'orders.approve', reject: 'orders.approve', verify_po: 'orders.verify_po', confirm: 'orders.update', fulfill: 'orders.update', invoice: 'sales_invoices.create', void_invoice: 'sales_invoices.update', payment: 'sales_invoices.update', refund: 'orders.refund', complete: 'orders.update', cancel: 'orders.update', reconcile: 'orders.reconcile' };
 const endpoint = fn => async (req, res) => {
@@ -87,14 +88,15 @@ const discardUpload = endpoint(async (req, res) => {
 });
 async function detail(order) {
   const m = models();
-  const [lines, customer, invoices, activities, documents] = await Promise.all([
+  const [lines, customer, invoices, activities, documents, withholdingTaxType] = await Promise.all([
     m.OrderItemSnapshot.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC'], ['id', 'ASC']] }),
     order.customerId ? m.Customer.findByPk(order.customerId, { attributes: ['id', 'name', 'legalName', 'taxId', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country', 'requiresPurchaseOrder'] }) : null,
     m.SalesInvoice.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC']] }),
     m.OrderActivity.findAll({ where: { orderId: order.id }, include: [{ association: 'actor', attributes: ['id', 'firstName', 'lastName'] }], order: [['createdAt', 'DESC'], ['id', 'DESC']] }),
     m.OrderDocument.findAll({ where: { orderId: order.id }, order: [['createdAt', 'DESC']] }),
+    order.withholdingTaxTypeId && m.WithholdingTaxType ? m.WithholdingTaxType.findOne({ where: { id: order.withholdingTaxTypeId, organizationId: order.organizationId }, attributes: ['id', 'code', 'name', 'percentage', 'isActive'] }) : null,
   ]);
-  return { ...order.toJSON(), customer, orderedItemSnapshots: lines.sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0)), salesInvoices: invoices, activities, documents, balances: W.balances(order, invoices) };
+  return { ...order.toJSON(), customer, withholdingTaxType, orderedItemSnapshots: lines.sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0)), salesInvoices: invoices, activities, documents, balances: W.balances(order, invoices) };
 }
 async function getOrganization(req, transaction, id) {
   const organizationId = id || getScopedOrganizationId(req);
@@ -286,20 +288,26 @@ const performAction = endpoint(async (req, res) => {
     let event = {};
     if (action === 'reconcile') {
       if (workflow) W.fail('This order already uses the current workflow.');
-      if (['completed', 'cancelled', 'refunded'].includes(order.status)) W.fail('Finalized legacy orders retain their original history and cannot be adopted.');
+      if (['cancelled', 'refunded'].includes(order.status)) W.fail('Cancelled or refunded legacy orders cannot be adopted.');
       const org = await getOrganization(req, transaction, order.organizationId);
       workflow = W.newWorkflow(org.orderWorkflowSettings || {});
       workflow.paymentTermsDays = workflow.settings.paymentTermsDays;
       if (!note) W.fail('Record the result of the legacy order review.');
-      if (order.paymentStatus !== 'unpaid' || invoices.some(i => i.paymentStatus !== 'unpaid')) W.fail('Legacy orders with payment history must retain their original records. Create a new order for remaining work.');
-      if (['confirmed', 'processing'].includes(order.status)) {
+      if (invoices.some(i => ['partially_paid', 'refunded', 'failed'].includes(i.paymentStatus) || i.status === 'partially_paid' || i.status === 'void' && i.paymentStatus === 'paid')
+        || !['unpaid', 'paid'].includes(order.paymentStatus)
+        || order.paymentStatus === 'paid' && invoicePaymentSummary(order, invoices).paymentStatus !== 'paid') W.fail('Legacy payment amounts cannot be reconstructed from these invoices. Review the payment records before enabling the workflow.');
+      workflow.payments = invoices.filter(paidInvoice).map(invoice => ({ id: randomUUID(), invoiceId: invoice.id, kind: 'payment', amount: W.money(invoice.totalAmount),
+        date: invoice.paidAt ? new Date(invoice.paidAt).toISOString().slice(0, 10) : null,
+        reference: `Opening paid balance from invoice ${invoice.invoiceNumber}; original payment details remain on the invoice.`, source: 'legacy_invoice', userId: null }));
+      if (['confirmed', 'processing', 'completed'].includes(order.status)) {
         if (!['already_deducted', 'deduct_now', 'not_tracked'].includes(req.body.inventoryDecision)) W.fail('Confirm whether stock was already deducted for this legacy order.');
         const quantities = W.demand(lines);
         if (req.body.inventoryDecision === 'deduct_now') await stock(order, quantities, -1, transaction);
         workflow.stockCommitted = req.body.inventoryDecision === 'not_tracked' ? {} : quantities;
+        if (order.status === 'completed') values.status = 'processing';
       } else values.status = 'draft';
       if (order.fulfillmentStatus !== 'unfulfilled') W.fail('Legacy orders with fulfillment history must retain their original records. Create a new order for remaining work.');
-      event = { inventoryDecision: req.body.inventoryDecision, note };
+      event = { inventoryDecision: req.body.inventoryDecision, note, previousStatus: order.status, openingPayments: workflow.payments };
     } else if (action === 'start_processing') {
       if (order.status !== 'confirmed') W.fail('Only confirmed orders can be moved to processing.');
       values.status = 'processing';
@@ -381,7 +389,7 @@ const performAction = endpoint(async (req, res) => {
     const balance = W.balances(order, invoices);
     values.invoicingStatus = balance.invoiced > 0 && balance.toInvoice <= 0 ? 'invoiced' : balance.invoiced > 0 ? 'partially_invoiced' : 'not_invoiced';
     values.paymentStatus = balance.paid > 0 && balance.paid >= Number(order.totalAmount) ? 'paid' : balance.paid > 0 ? 'partially_paid' : workflow.payments.some(p => p.kind === 'refund') ? 'refunded' : 'unpaid';
-    values.paidAt = values.paymentStatus === 'paid' ? order.paidAt || new Date() : null;
+    values.paidAt = values.paymentStatus === 'paid' ? order.paidAt || invoicePaymentSummary(order, invoices).paidAt || new Date() : null;
     await order.update({ ...values, workflow }, { transaction });
     await activity(order, req, transaction, action, note || `Order action: ${action.replace(/_/g, ' ')}.`, event);
     return order;

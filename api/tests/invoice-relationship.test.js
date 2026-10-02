@@ -11,7 +11,7 @@ function setup({orderExists=true, privileged=true}={}) {
   const models = {
     Order: {findOne: async query => {lookups.push(query); return orderExists ? {id:query.where.id} : null;}},
     Organization: {findByPk: async () => ({taxTypeId:'vat',taxType:{code:'VAT',percentage:12,isActive:true}})},
-    SalesInvoice: {create: async payload => {writes.push(payload);return {id:'invoice',...payload};}},
+    SalesInvoice: {sequelize: {transaction: async fn => fn({})}, create: async payload => {writes.push(payload);return {id:'invoice',...payload};}},
   };
   const mocks = {
     '../sequelize': {getModels: () => models},
