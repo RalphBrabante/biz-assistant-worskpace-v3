@@ -1,3 +1,4 @@
+import { SalesInvoiceSheetComponent, PrintableInvoice } from '../../shared/sales-invoice-sheet/sales-invoice-sheet.component';
 import {MoneyInputDirective} from '../../shared/money-input.directive';
 import {RowActionsComponent} from '../../shared/row-actions.component';
 import { CommonModule } from '@angular/common';
@@ -14,7 +15,7 @@ import { ModalDirective } from '../../shared/modal.directive';
 import { OrderProofUploadComponent, ProofUploadState } from './proof-upload/order-proof-upload.component';
 interface Settings { preset: string; customerRequired: boolean; inventoryEnabled: boolean; shippingEnabled: boolean; approvalThreshold: number | null; paymentTermsDays: number; }
 interface CatalogItem { id: string; name: string; sku?: string; type: string; unit: string; price: number; discountedPrice?: number; stock: number; }
-interface Customer { id: string; name: string; requiresPurchaseOrder: boolean; paymentTermsDays?: number; }
+interface Customer { legalName?: string; taxId?: string; addressLine1?: string; addressLine2?: string; city?: string; state?: string; postalCode?: string; country?: string; id: string; name: string; requiresPurchaseOrder: boolean; paymentTermsDays?: number; }
 interface Line { id?: string; itemId: string | null; name: string; type: string; unit: string; quantity: number; unitPrice: number; discountedUnitPrice?: number | null; lineTotal?: number; taxRate?: number; }
 interface Invoice { id: string; invoiceNumber: string; status: string; paymentStatus: string; totalAmount: number; dueDate?: string; }
 interface Payment { id: string; kind: string; amount: number; reference: string; date: string; invoiceId: string; }
@@ -22,7 +23,7 @@ interface Document { id: string; name: string; size: number; createdAt: string; 
 interface Activity { id: string; title: string; description: string; createdAt: string; actor?: { firstName: string; lastName: string }; }
 interface Workflow { settings: Settings; approval: string; poRequired: boolean; po: { status?: string; date?: string; amount?: number | null; documentId?: string; verifiedAt?: string; verificationNote?: string }; paymentTermsDays: number; fulfilled: Record<string, number>; payments: Payment[]; }
 interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
-@Component({ selector: 'app-order-workspace-page', standalone: true, imports: [MoneyInputDirective, RowActionsComponent, CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
+@Component({ selector: 'app-order-workspace-page', standalone: true, imports: [SalesInvoiceSheetComponent, MoneyInputDirective, RowActionsComponent, CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
 export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
@@ -48,6 +49,8 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   promisedDate = ''; dueDate = ''; paymentTermsDays = 30; shippingAmount = 0; withholdingTaxTypeId = ''; billingAddress = ''; shippingAddress = ''; notes = '';
   fulfillment: Record<string, number> = {};
   actionModal = ''; actionNote = ''; actionAmount = 0; actionInvoiceId = ''; actionInvoiceNumber = ''; actionDate = new Date().toISOString().slice(0, 10); actionDueDate = ''; inventoryDecision = '';
+  invoicePreview: PrintableInvoice | null = null;
+  invoiceDetails = { soldTo: '', address: '', taxId: '', businessStyle: '', terms: '', oscaPwdId: '' };
   private requestKey = crypto.randomUUID();
   private org = '';
   private routeId = '';
@@ -208,19 +211,35 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   openAction(action: string): void {
     if (this.hasUnsavedChanges) { this.error = 'Save the draft and selected attachment before taking this action.'; return; }
     if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
+    this.invoicePreview = null;
+    const customer = this.order?.customer;
+    this.invoiceDetails = { soldTo: customer?.legalName || customer?.name || '', address: this.order?.billingAddress || [customer?.addressLine1, customer?.addressLine2, customer?.city, customer?.state, customer?.postalCode, customer?.country].filter(Boolean).join(', '), taxId: customer?.taxId || '', businessStyle: customer?.legalName || customer?.name || '', terms: this.paymentTermsDays === 0 ? 'Cash' : `${this.paymentTermsDays} days`, oscaPwdId: '' };
     this.actionModal = action; this.actionNote = ''; this.actionInvoiceNumber = ''; this.actionDueDate = ''; this.inventoryDecision = '';
     this.actionInvoiceId = this.order?.salesInvoices.find(i => i.status !== 'void')?.id || '';
     this.actionAmount = action === 'invoice' ? this.order?.balances.toInvoice || 0 : 0;
-    this.actionDate = new Date().toISOString().slice(0, 10); this.error = '';
+    const now = new Date(); this.actionDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; this.error = '';
+  }
+  reviewInvoice(): void {
+    if (!this.order || this.busy || this.hasUnsavedChanges) return;
+    this.busy = true; this.error = '';
+    this.subscriptions.add(this.api.create<PrintableInvoice>(`/api/v1/orders/${this.order.id}/invoice-preview`, {
+      revision: this.order.revision, amount: this.actionAmount, invoiceNumber: this.actionInvoiceNumber,
+      issueDate: this.actionDate, dueDate: this.actionDueDate, note: this.actionNote, invoiceDetails: this.invoiceDetails,
+    }).subscribe({ next: response => {
+      this.busy = false; this.invoicePreview = response.data || null;
+      if (this.invoicePreview) { this.actionInvoiceNumber = this.invoicePreview.invoiceNumber; this.actionDueDate = this.invoicePreview.dueDate || ''; }
+    }, error: e => this.fail(e) }));
   }
   runAction(action: string): void {
     if (!this.order || this.busy || this.hasUnsavedChanges) return;
     if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
+    if (action === 'invoice' && !this.invoicePreview) { this.reviewInvoice(); return; }
     this.busy = true; this.error = '';
+    const previousInvoiceIds = new Set(this.order.salesInvoices.map(invoice => invoice.id));
     const lines = this.lines.filter(l => Number(this.fulfillment[l.id!]) > 0).map(l => ({ id: l.id, quantity: Number(this.fulfillment[l.id!]) }));
     this.subscriptions.add(this.api.create<Order>(`/api/v1/orders/${this.order.id}/actions`, { action, revision: this.order.revision, note: this.actionNote,
       amount: this.actionAmount, invoiceId: this.actionInvoiceId, invoiceNumber: this.actionInvoiceNumber, date: this.actionDate, issueDate: this.actionDate, dueDate: this.actionDueDate,
-      inventoryDecision: this.inventoryDecision, lines }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; this.success = action === 'fulfill' ? 'Fulfillment recorded successfully.' : 'Order updated.'; }, error: e => this.fail(e) }));
+      invoiceDetails: this.invoiceDetails, inventoryDecision: this.inventoryDecision, lines }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; if (action === 'invoice') { this.tab = 'invoices'; const issued = this.order?.salesInvoices.find(invoice => !previousInvoiceIds.has(invoice.id)); if (issued && this.can('sales_invoices.read')) this.router.navigate(['/sales-invoices', issued.id]); } this.success = action === 'fulfill' ? 'Fulfillment recorded successfully.' : 'Order updated.'; }, error: e => this.fail(e) }));
   }
   fileSize(bytes: number): string { return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
   download(doc: Document): void {

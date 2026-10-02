@@ -8,7 +8,7 @@
       </div>
       <div class="flex gap-2">
         <a class="ui-btn ui-btn-outline-dark" routerLink="/sales-invoices"><i class="bi bi-arrow-left mr-1"></i>Back to Sales Invoices</a>
-        <button class="ui-btn ui-btn-dark" type="button" *ngIf="isPaid && invoice()" (click)="printInvoice()">
+        <button class="ui-btn ui-btn-dark" type="button" *ngIf="invoice()" (click)="printInvoice()">
           <i class="bi bi-printer mr-1"></i>Print Invoice
         </button>
       </div>
@@ -19,7 +19,7 @@
 <div *ngIf="message()" class="ui-alert ui-alert-success no-print">{{ message() }}</div>
 <div *ngIf="error()" class="ui-alert ui-alert-danger no-print">{{ error() }}</div>
 
-<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="invoice() && !isPaid">
+<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="invoice() && !isPaid && !isManaged">
   <div class="ui-card-body p-6">
     <h2 class="text-base font-semibold mb-4">Status Update</h2>
     <div class="ui-grid grid grid-cols-12 gap-4">
@@ -41,6 +41,10 @@
   </div>
 </section>
 
+<p *ngIf="invoice()?.orderId" class="no-print mb-4"><a class="ui-btn ui-btn-outline-dark" [routerLink]="['/orders', invoice()!.orderId]">Back to order</a><span *ngIf="isManaged" class="text-muted ml-3">Manage payments and voiding from the order workspace.</span></p>
+<p *ngIf="loading()" class="no-print">Loading invoice…</p>
+<app-sales-invoice-sheet *ngIf="invoice()?.invoiceDocument" [invoice]="invoice()!"></app-sales-invoice-sheet>
+<ng-container *ngIf="!invoice()?.invoiceDocument">
 <section class="ui-card shadow-panel rounded-xl print-delivery-sheet" *ngIf="invoice() as row">
   <div class="ui-card-body p-6 lg:p-12">
     <div class="flex justify-between items-start mb-6">
@@ -82,7 +86,7 @@
           <div><strong>Withholding Tax Amount:</strong> {{ formatMoney(invoiceWithHoldingTaxAmount, invoiceCurrency) }}</div>
           <div><strong>Discount:</strong> {{ formatMoney((row.discountAmount ?? itemsDiscount), invoiceCurrency) }}</div>
           <div><strong>Shipping:</strong> {{ formatMoney(orderShippingAmount, invoiceCurrency) }}</div>
-          <div class="text-lg mt-2"><strong>Total Paid:</strong> {{ formatMoney(invoicePaidTotal, invoiceCurrency) }}</div>
+          <div class="text-lg mt-2"><strong>Total Amount Due:</strong> {{ formatMoney(invoicePaidTotal, invoiceCurrency) }}</div>
         </div>
       </div>
       <div class="col-span-12" *ngIf="row.notes">
@@ -127,3 +131,5 @@
     </div>
   </div>
 </section>
+
+</ng-container>

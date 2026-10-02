@@ -1,3 +1,4 @@
+import { SalesInvoiceSheetComponent, InvoiceDocument } from '../../shared/sales-invoice-sheet/sales-invoice-sheet.component';
 import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -7,6 +8,7 @@ import { ConfirmDialogService } from '../../core/confirm-dialog.service';
 import { ApiResponse } from '../../core/types';
 
 interface SalesInvoiceRow {
+  invoiceDocument?: InvoiceDocument | null;
   id: string;
   organizationId: string;
   orderId: string;
@@ -27,6 +29,7 @@ interface SalesInvoiceRow {
   notes?: string;
   order?: {
     id: string;
+    workflow?: unknown;
     orderNumber?: string;
     shippingAmount?: number;
     customer?: {
@@ -54,7 +57,7 @@ interface SnapshotRow {
 @Component({
   selector: 'app-sales-invoice-detail-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [SalesInvoiceSheetComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './sales-invoice-detail-page.component.html',
 })
 export class SalesInvoiceDetailPageComponent {
@@ -92,6 +95,8 @@ export class SalesInvoiceDetailPageComponent {
     }
     this.loadInvoice();
   }
+
+  get isManaged(): boolean { return !!this.invoice()?.order?.workflow; }
 
   get isPaid(): boolean {
     return String(this.invoice()?.status || '').toLowerCase() === 'paid';
@@ -193,7 +198,7 @@ export class SalesInvoiceDetailPageComponent {
   }
 
   async saveStatus(): Promise<void> {
-    if (this.submitting() || !this.invoiceId || this.isPaid) {
+    if (this.submitting() || !this.invoiceId || this.isPaid || this.isManaged) {
       return;
     }
     const confirmed = await this.confirmDialog.confirm({
@@ -227,7 +232,7 @@ export class SalesInvoiceDetailPageComponent {
   }
 
   async markCancelled(): Promise<void> {
-    if (this.submitting() || this.isPaid) {
+    if (this.submitting() || this.isPaid || this.isManaged) {
       return;
     }
     this.status = 'cancelled';

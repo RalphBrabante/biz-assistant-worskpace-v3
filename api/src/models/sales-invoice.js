@@ -1,4 +1,5 @@
 const { indexesFor } = require('../database/schema-indexes-v1');
+const { jsonObjectAttribute } = require('./json-object-attribute');
 const { DataTypes, Model } = require('sequelize');
 
 class SalesInvoice extends Model {}
@@ -13,6 +14,7 @@ async function protectOrderInvoice(invoice, options) {
 function initSalesInvoiceModel(sequelize) {
   SalesInvoice.init(
     {
+      invoiceDocument: jsonObjectAttribute('invoiceDocument'),
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,

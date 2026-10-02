@@ -1,0 +1,52 @@
+<article tabindex="-1" class="invoice-paper" *ngIf="invoice.invoiceDocument as doc" aria-label="Sales invoice">
+  <header class="seller">
+    <h2>{{ doc.seller.name }}</h2>
+    <p>{{ doc.seller.address }}</p>
+    <p *ngIf="doc.seller.phone">Tel. No.: {{ doc.seller.phone }}</p>
+    <p>TIN: {{ doc.seller.taxId || '____________________' }}</p>
+  </header>
+  <div class="invoice-title"><h3>SALES INVOICE</h3><strong>No. {{ invoice.invoiceNumber }}</strong></div>
+  <p *ngIf="preview" class="watermark">PREVIEW · Not yet issued</p>
+  <p *ngIf="invoice.status === 'void'" class="watermark">VOID</p>
+  <div class="customer-fields">
+    <div><b>Sold to:</b><span>{{ doc.buyer.name || '____________________' }}</span></div>
+    <div><b>Date:</b><span>{{ invoice.issueDate | date:'MMM d, y' }}</span></div>
+    <div><b>Address:</b><span>{{ doc.buyer.address || '____________________' }}</span></div>
+    <div><b>TIN:</b><span>{{ doc.buyer.taxId || '____________________' }}</span></div>
+    <div><b>Bus. Style:</b><span>{{ doc.buyer.businessStyle || '____________________' }}</span></div>
+    <div><b>Terms:</b><span>{{ doc.terms }}</span></div>
+    <div><b>OSCA/PWD ID No.:</b><span>{{ doc.oscaPwdId || '____________________' }}</span></div>
+    <div><b>Signature:</b><span>&nbsp;</span></div>
+  </div>
+  <div class="order-reference">Order: {{ doc.orderNumber }} <span *ngIf="invoice.dueDate"> · Due: {{ invoice.dueDate | date:'MMM d, y' }}</span> · {{ invoice.currency }}</div>
+  <table class="items">
+    <colgroup><col class="qty"><col class="unit"><col><col class="price"><col class="amount"></colgroup>
+    <thead><tr><th>QTY.</th><th>UNIT</th><th>PARTICULARS</th><th>UNIT PRICE</th><th>AMOUNT</th></tr></thead>
+    <tbody>
+      <tr *ngFor="let item of doc.items"><td>{{ item.quantity }}</td><td>{{ item.unit }}</td><td>{{ item.name }}<small *ngIf="item.description">{{ item.description }}</small></td><td class="number">{{ money(item.unitPrice) }}</td><td class="number">{{ money(item.amount) }}</td></tr>
+      <tr *ngFor="let row of blankRows" class="blank-row" aria-hidden="true"><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <div class="summary">
+    <div class="tax-breakdown"><table><tbody>
+      <tr><th>VATable Sales</th><td>{{ money(doc.vatableSales) }}</td></tr>
+      <tr><th>VAT Exempt</th><td>{{ money(doc.vatExemptSales) }}</td></tr>
+      <tr><th>Zero Rated</th><td>{{ money(doc.zeroRatedSales) }}</td></tr>
+      <tr><th>VAT Amount</th><td>{{ money(doc.tax) }}</td></tr>
+    </tbody></table></div>
+    <table class="totals"><tbody>
+      <tr><th>TOTAL SALES{{ doc.tax > 0 ? ' (VAT Inclusive)' : '' }}</th><td>{{ money(doc.grossSales) }}</td></tr>
+      <tr><th>LESS: VAT</th><td>{{ money(doc.tax) }}</td></tr>
+      <tr><th>AMOUNT: Net of VAT</th><td>{{ money(doc.netSales) }}</td></tr>
+      <tr><th>Less: SC/PWD Discount</th><td>{{ money(doc.scPwdDiscount) }}</td></tr>
+      <tr><th>AMOUNT DUE</th><td>{{ money(doc.netSales - doc.scPwdDiscount) }}</td></tr>
+      <tr><th>ADD: VAT</th><td>{{ money(doc.tax) }}</td></tr>
+      <tr *ngIf="doc.shipping"><th>ADD: Shipping</th><td>{{ money(doc.shipping) }}</td></tr>
+      <tr *ngIf="doc.roundingAdjustment"><th>Rounding adjustment</th><td>{{ money(doc.roundingAdjustment) }}</td></tr>
+      <tr><th>LESS: WHT (Withholding Tax)</th><td>{{ money(doc.withholding) }}</td></tr>
+      <tr class="grand-total"><th>TOTAL AMOUNT DUE</th><td>{{ money(doc.total) }}</td></tr>
+    </tbody></table>
+  </div>
+  <p class="notes" *ngIf="invoice.notes"><b>Notes:</b> {{ invoice.notes }}</p>
+  <footer><div class="signature">Cashier / Authorized Representative</div></footer>
+</article>

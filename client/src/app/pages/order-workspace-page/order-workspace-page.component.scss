@@ -17,3 +17,6 @@ h1 { font-size: 1.6rem; font-weight: 700; margin: .6rem 0 .25rem; } h2 { font-si
 @media print { .panel, .status-grid > div { background: #fff; color: #000; } h1,h2 { color: #000; } }
 
 .document-link { overflow-wrap: anywhere; }
+
+.invoice-dialog { width: min(900px, 100%); }.invoice-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 1rem 0; }
+@media(max-width: 560px) { .invoice-fields { grid-template-columns: 1fr; } }

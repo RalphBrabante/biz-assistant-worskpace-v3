@@ -5,6 +5,7 @@ const { getModels } = require('../sequelize');
 const { getScopedOrganizationId, applyOrganizationWhereScope, isPrivilegedRequest } = require('../services/request-scope');
 const { createOrganizationMessage } = require('../services/message-service');
 const W = require('../services/order-workflow');
+const { buildInvoiceDocument } = require('../services/sales-invoice-document');
 
 const actions = { start_processing: 'orders.update', return_to_draft: 'orders.update', submit: 'orders.update', approve: 'orders.approve', reject: 'orders.approve', verify_po: 'orders.verify_po', confirm: 'orders.update', fulfill: 'orders.update', invoice: 'sales_invoices.create', void_invoice: 'sales_invoices.update', payment: 'sales_invoices.update', refund: 'orders.refund', complete: 'orders.update', cancel: 'orders.update', reconcile: 'orders.reconcile' };
 const endpoint = fn => async (req, res) => {
@@ -88,7 +89,7 @@ async function detail(order) {
   const m = models();
   const [lines, customer, invoices, activities, documents] = await Promise.all([
     m.OrderItemSnapshot.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC'], ['id', 'ASC']] }),
-    order.customerId ? m.Customer.findByPk(order.customerId, { attributes: ['id', 'name', 'requiresPurchaseOrder'] }) : null,
+    order.customerId ? m.Customer.findByPk(order.customerId, { attributes: ['id', 'name', 'legalName', 'taxId', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country', 'requiresPurchaseOrder'] }) : null,
     m.SalesInvoice.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC']] }),
     m.OrderActivity.findAll({ where: { orderId: order.id }, include: [{ association: 'actor', attributes: ['id', 'firstName', 'lastName'] }], order: [['createdAt', 'DESC'], ['id', 'DESC']] }),
     m.OrderDocument.findAll({ where: { orderId: order.id }, order: [['createdAt', 'DESC']] }),
@@ -233,6 +234,42 @@ const downloadDocument = endpoint(async (req, res) => {
   res.set({ 'Content-Type': doc.mimeType, 'Content-Disposition': `attachment; filename="${doc.name.replace(/"/g, '_')}"`, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store' });
   res.send(doc.content);
 });
+async function prepareInvoice(req, order, invoices, lines, transaction) {
+  W.assertManaged(order);
+  W.assertRevision(order, req.body.revision);
+  if (!['confirmed', 'processing', 'completed'].includes(order.status)) W.fail('Confirm the order before issuing an invoice.');
+  const amount = W.number(req.body.amount, 'Invoice amount', { min: 0.01 });
+  if (amount > W.balances(order, invoices).toInvoice) W.fail('The invoice amount exceeds the remaining order amount.');
+  const issueDate = W.date(req.body.issueDate || new Date().toISOString().slice(0, 10), 'Issue date');
+  const due = new Date(`${issueDate}T00:00:00Z`); due.setUTCDate(due.getUTCDate() + (order.workflow.paymentTermsDays ?? 30));
+  const dueDate = W.date(req.body.dueDate, 'Invoice due date') || due.toISOString().slice(0, 10);
+  if (dueDate < issueDate) W.fail('Invoice due date cannot be before the issue date.');
+  const allocated = field => W.invoiceAllocation(order, invoices, amount, field);
+  const tax = allocated('taxAmount'); const withholding = allocated('withHoldingTaxAmount');
+  const invoice = { orderId: order.id, organizationId: order.organizationId,
+    invoiceNumber: W.text(req.body.invoiceNumber, 'Invoice number', 100) || `INV-${randomUUID().slice(0, 12).toUpperCase()}`,
+    status: 'issued', paymentStatus: 'unpaid', issueDate, dueDate, currency: order.currency,
+    amount: W.money(amount + withholding), taxableAmount: W.money(amount + withholding - tax), subtotalAmount: allocated('subtotalAmount'), taxAmount: tax,
+    withHoldingTaxAmount: withholding, withholdingTaxTypeId: order.withholdingTaxTypeId, discountAmount: allocated('discountAmount'), totalAmount: amount,
+    notes: W.text(req.body.note, 'Note', 2000) };
+  const organization = await getOrganization(req, transaction, order.organizationId);
+  const customer = order.customerId ? await models().Customer.findOne({ where: { id: order.customerId, organizationId: order.organizationId }, transaction }) : null;
+  const shippingAmount = W.invoiceAllocation(order, invoices.map(existing => ({
+    status: existing.status, totalAmount: existing.totalAmount,
+    shippingAmount: existing.invoiceDocument?.shipping ?? W.money(Number(existing.amount) - Number(existing.subtotalAmount)),
+  })), amount, 'shippingAmount');
+  invoice.invoiceDocument = buildInvoiceDocument({ order, organization, customer, lines, invoice: { ...invoice, shippingAmount }, details: req.body.invoiceDetails });
+  return invoice;
+}
+const previewInvoice = endpoint(async (req, res) => {
+  W.requirePermission(req, 'sales_invoices.create');
+  const order = await findOrder(req);
+  const [invoices, lines] = await Promise.all([
+    models().SalesInvoice.findAll({ where: { orderId: order.id } }),
+    models().OrderItemSnapshot.findAll({ where: { orderId: order.id } }),
+  ]);
+  res.json({ ok: true, data: await prepareInvoice(req, order, invoices, lines) });
+});
 const performAction = endpoint(async (req, res) => {
   const m = models(); const action = req.body.action;
   if (!actions[action]) W.fail('Unknown order action.');
@@ -308,21 +345,9 @@ const performAction = endpoint(async (req, res) => {
       workflow.receipts.push({ id: randomUUID(), date: new Date().toISOString(), userId: actor(req), note, lines: submitted });
       event = { lines: submitted };
     } else if (action === 'invoice') {
-      if (!['confirmed', 'processing', 'completed'].includes(order.status)) W.fail('Confirm the order before issuing an invoice.');
-      const balance = W.balances(order, invoices);
-      const amount = W.number(req.body.amount, 'Invoice amount', { min: 0.01 });
-      if (amount > balance.toInvoice) W.fail('The invoice amount exceeds the remaining order amount.');
-      const issueDate = W.date(req.body.issueDate || new Date().toISOString().slice(0, 10), 'Issue date');
-      const due = new Date(`${issueDate}T00:00:00Z`); due.setUTCDate(due.getUTCDate() + (workflow.paymentTermsDays ?? 30));
-      const allocated = field => W.invoiceAllocation(order, invoices, amount, field);
-      const tax = allocated('taxAmount'); const withholding = allocated('withHoldingTaxAmount');
-      const invoice = await m.SalesInvoice.create({ orderId: order.id, organizationId: order.organizationId,
-        invoiceNumber: W.text(req.body.invoiceNumber, 'Invoice number', 100) || `INV-${randomUUID().slice(0, 12).toUpperCase()}`,
-        status: 'issued', paymentStatus: 'unpaid', issueDate, dueDate: W.date(req.body.dueDate, 'Invoice due date') || due.toISOString().slice(0, 10), currency: order.currency,
-        amount: W.money(amount + withholding), taxableAmount: W.money(amount + withholding - tax), subtotalAmount: allocated('subtotalAmount'), taxAmount: tax,
-        withHoldingTaxAmount: withholding, withholdingTaxTypeId: order.withholdingTaxTypeId, discountAmount: allocated('discountAmount'), totalAmount: amount,
-        notes: note, createdBy: actor(req), updatedBy: actor(req) }, { transaction, orderWorkflow: true });
-      invoices.push(invoice); event = { invoiceId: invoice.id, amount };
+      const payload = await prepareInvoice(req, order, invoices, lines, transaction);
+      const invoice = await m.SalesInvoice.create({ ...payload, createdBy: actor(req), updatedBy: actor(req) }, { transaction, orderWorkflow: true });
+      invoices.push(invoice); event = { invoiceId: invoice.id, amount: payload.totalAmount };
     } else if (action === 'void_invoice') {
       const invoice = invoices.find(i => i.id === req.body.invoiceId);
       if (!invoice || invoice.status === 'void') W.fail('Choose an active invoice.');
@@ -363,4 +388,4 @@ const performAction = endpoint(async (req, res) => {
   });
   res.json({ ok: true, data: await detail(order) });
 });
-module.exports = { stageDocument, discardUpload, getSettings, saveSettings, createOrder, getOrder, updateOrder, deleteOrder, uploadDocument, downloadDocument, performAction };
+module.exports = { previewInvoice, stageDocument, discardUpload, getSettings, saveSettings, createOrder, getOrder, updateOrder, deleteOrder, uploadDocument, downloadDocument, performAction };

@@ -36,6 +36,7 @@ router.get('/:id', authorize('orders.read'), workflow.getOrder);
 router.put('/:id', authorize('orders.update'), receiveOrder, workflow.updateOrder);
 router.patch('/:id', authorize('orders.update'), receiveOrder, workflow.updateOrder);
 router.delete('/:id', authorize('orders.update'), workflow.deleteOrder);
+router.post('/:id/invoice-preview', authorize('sales_invoices.create'), workflow.previewInvoice);
 router.post('/:id/actions', authorize(), workflow.performAction);
 router.post('/:id/documents', authorize('orders.update'), receiveDocument, workflow.uploadDocument);
 router.get('/:id/documents/:documentId', authorize('orders.read'), workflow.downloadDocument);

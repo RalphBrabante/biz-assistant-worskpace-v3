@@ -68,3 +68,22 @@ test('failed fulfillment preserves entered quantities for correction or retry', 
   const e = setup(); e.page.accept({ ...e.order, status: 'confirmed', orderedItemSnapshots: [{ ...e.page.lines[0], id: 'line' }], workflow: { po: {}, fulfilled: {} } });
   e.page.fulfillment.line = 0.5; e.page.openAction('fulfill'); e.page.runAction('fulfill'); e.requests[0].stream.error({ error: { message: 'Reload this order' } }); assert.equal(e.page.fulfillment.line, 0.5); assert.equal(e.page.actionModal, 'fulfill'); assert.equal(e.page.busy, false);
 });
+
+test('creating a sales invoice first previews it, then issues the reviewed number and customer details', () => {
+  const e = setup(['sales_invoices.create', 'sales_invoices.read']);
+  e.page.accept({ ...e.order, status: 'confirmed', totalAmount: 110, balances: { toInvoice: 110 }, customer: { id: 'c', name: 'Buyer', taxId: 'TIN' }, workflow: { po: {}, paymentTermsDays: 0 } });
+  e.page.openAction('invoice'); assert.equal(e.page.invoiceDetails.soldTo, 'Buyer'); assert.equal(e.page.invoiceDetails.taxId, 'TIN'); assert.equal(e.page.invoiceDetails.terms, 'Cash');
+  e.page.invoiceDetails.businessStyle = 'Updated business style'; e.page.runAction('invoice');
+  assert.match(e.requests[0].url, /invoice-preview$/); assert.equal(e.requests[0].body.amount, 110);
+  e.requests[0].stream.next({ data: { invoiceNumber: 'INV-PREVIEW', dueDate: '2026-10-02', invoiceDocument: {} } });
+  e.page.runAction('invoice'); assert.match(e.requests[1].url, /actions$/);
+  assert.equal(e.requests[1].body.invoiceNumber, 'INV-PREVIEW'); assert.equal(e.requests[1].body.invoiceDetails.businessStyle, 'Updated business style');
+  e.requests[1].stream.next({ data: { ...e.order, salesInvoices: [{ id: 'new-invoice' }] } });
+  assert.equal(e.page.tab, 'invoices'); assert.equal(e.navigations[0][0][0], '/sales-invoices'); assert.equal(e.navigations[0][0][1], 'new-invoice');
+});
+test('failed invoice preview retains details and does not issue an invoice', () => {
+  const e = setup(); e.page.accept({ ...e.order, balances: { toInvoice: 100 } }); e.page.openAction('invoice');
+  e.page.invoiceDetails.soldTo = 'Reviewed buyer'; e.page.runAction('invoice');
+  e.requests[0].stream.error({ error: { message: 'The order changed. Reload.' } });
+  assert.equal(e.requests.length, 1); assert.equal(e.page.invoicePreview, null); assert.equal(e.page.invoiceDetails.soldTo, 'Reviewed buyer'); assert.equal(e.page.busy, false);
+});
