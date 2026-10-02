@@ -38,12 +38,11 @@
       <tr><th>TOTAL SALES{{ doc.tax > 0 ? ' (VAT Inclusive)' : '' }}</th><td>{{ money(doc.grossSales) }}</td></tr>
       <tr><th>LESS: VAT</th><td>{{ money(doc.tax) }}</td></tr>
       <tr><th>AMOUNT: Net of VAT</th><td>{{ money(doc.netSales) }}</td></tr>
-      <tr><th>Less: SC/PWD Discount</th><td>{{ money(doc.scPwdDiscount) }}</td></tr>
-      <tr><th>AMOUNT DUE</th><td>{{ money(doc.netSales - doc.scPwdDiscount) }}</td></tr>
+      <tr><th>LESS: WHT (Withholding Tax)</th><td>{{ money(doc.withholding) }}</td></tr>
+      <tr><th>AMOUNT DUE</th><td>{{ money(doc.netSales - doc.withholding) }}</td></tr>
       <tr><th>ADD: VAT</th><td>{{ money(doc.tax) }}</td></tr>
       <tr *ngIf="doc.shipping"><th>ADD: Shipping</th><td>{{ money(doc.shipping) }}</td></tr>
       <tr *ngIf="doc.roundingAdjustment"><th>Rounding adjustment</th><td>{{ money(doc.roundingAdjustment) }}</td></tr>
-      <tr><th>LESS: WHT (Withholding Tax)</th><td>{{ money(doc.withholding) }}</td></tr>
       <tr class="grand-total"><th>TOTAL AMOUNT DUE</th><td>{{ money(doc.total) }}</td></tr>
     </tbody></table>
   </div>
