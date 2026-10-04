@@ -20,16 +20,16 @@
       <div class="col-span-12 md:col-span-3">
         <label class="ui-form-label font-semibold">Year</label>
         <select class="ui-form-select" [ngModel]="selectedYear()" (ngModelChange)="selectedYear.set($event); onFilterChange()">
-          <option *ngFor="let year of availableYears()" [value]="year">{{ year }}</option>
+          <option *ngFor="let year of availableYears()" [ngValue]="year">{{ year }}</option>
         </select>
       </div>
       <div class="col-span-12 md:col-span-3">
         <label class="ui-form-label font-semibold">Quarter</label>
         <select class="ui-form-select" [ngModel]="selectedQuarter()" (ngModelChange)="selectedQuarter.set($event); onFilterChange()">
-          <option [value]="1">Q1</option>
-          <option [value]="2">Q2</option>
-          <option [value]="3">Q3</option>
-          <option [value]="4">Q4</option>
+          <option [ngValue]="1">Q1</option>
+          <option [ngValue]="2">Q2</option>
+          <option [ngValue]="3">Q3</option>
+          <option [ngValue]="4">Q4</option>
         </select>
       </div>
       <div class="col-span-12 md:col-span-3">
@@ -449,7 +449,7 @@
   <div class="ui-card-body p-6 flex flex-wrap justify-between items-center gap-2">
     <div>
       <h2 class="text-base font-semibold mb-1">Quarterly Sales Reports</h2>
-      <div class="text-muted text-xs">All saved quarterly sales reports.</div>
+      <div class="text-muted text-xs">Saved quarterly sales reports for {{ selectedYear() }}.</div>
     </div>
     <button class="ui-btn ui-btn-primary" *ngIf="canGenerateReports" [disabled]="generatingSales()" (click)="generateQuarterlySalesReport()">
       <i class="bi bi-arrow-clockwise mr-1"></i>{{ generatingSales() ? 'Generating...' : (selectedQuarterSalesReport() ? 'Regenerate Sales Report' : 'Generate Sales Report') }}
@@ -492,7 +492,7 @@
       </thead>
       <tbody>
         <tr *ngIf="!loadingSales() && salesRows().length === 0">
-          <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No sales reports found.</td>
+          <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No sales reports found for {{ selectedYear() }}.</td>
         </tr>
         <tr *ngFor="let row of salesRows(); trackBy: trackById">
           <td class="row-actions-cell"><app-row-actions label="Reports actions">
@@ -556,7 +556,7 @@
   <div class="ui-card-body p-6 flex flex-wrap justify-between items-center gap-2">
     <div>
       <h2 class="text-base font-semibold mb-1">Quarterly Expense Reports</h2>
-      <div class="text-muted text-xs">All saved quarterly expense reports (excluding cancelled entries).</div>
+      <div class="text-muted text-xs">Saved quarterly expense reports for {{ selectedYear() }} (excluding cancelled entries).</div>
     </div>
     <button class="ui-btn ui-btn-outline-primary" *ngIf="canGenerateReports" [disabled]="generatingExpenses()" (click)="generateQuarterlyExpenseReport()">
       <i class="bi bi-arrow-clockwise mr-1"></i>{{ generatingExpenses() ? 'Generating...' : (selectedQuarterExpenseReport() ? 'Regenerate Expense Report' : 'Generate Expense Report') }}
@@ -599,7 +599,7 @@
       </thead>
       <tbody>
         <tr *ngIf="!loadingExpenses() && expenseRows().length === 0">
-          <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No expense reports found.</td>
+          <td [attr.colspan]="isSuperuser ? 11 : 10" class="text-center text-muted py-6">No expense reports found for {{ selectedYear() }}.</td>
         </tr>
         <tr *ngFor="let row of expenseRows(); trackBy: trackById">
           <td class="row-actions-cell"><app-row-actions label="Reports actions">

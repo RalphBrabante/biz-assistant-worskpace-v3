@@ -57,6 +57,7 @@ interface OrganizationOption {
   standalone: true,
   imports: [RowActionsComponent, ModalDirective, DropdownDirective, OrganizationRequiredComponent, CommonModule, FormsModule, ReactiveFormsModule, TooltipDirective, VendorFormFieldsComponent],
   templateUrl: './vendors-page.component.html',
+  styleUrl: './vendors-page.component.css',
 })
 export class VendorsPageComponent {
   private readonly api: ApiService;
@@ -556,6 +557,12 @@ export class VendorsPageComponent {
 
   trackById(_index: number, row: VendorRow): string {
     return row.id;
+  }
+
+  distinctLegalName(row: VendorRow): string {
+    const legalName = String(row.legalName || '').replace(/\s+/g, ' ').trim();
+    const name = String(row.name || '').replace(/\s+/g, ' ').trim();
+    return legalName.toLowerCase() === name.toLowerCase() ? '' : legalName;
   }
 
   organizationLabel(row: VendorRow): string {

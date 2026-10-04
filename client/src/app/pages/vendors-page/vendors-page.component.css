@@ -1,0 +1,65 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.vendors-table-wrapper {
+  max-width: 100%;
+}
+
+.vendors-table-wrapper:focus-visible {
+  outline: 2px solid var(--text-soft);
+  outline-offset: 2px;
+}
+
+.vendors-table-wrapper:not(.table-card-view) .vendor-identity {
+  min-width: 16rem;
+  max-width: 24rem;
+}
+
+.vendors-table-wrapper:not(.table-card-view) .vendor-organization {
+  min-width: 11rem;
+  max-width: 18rem;
+}
+
+.vendors-table-wrapper:not(.table-card-view) .vendor-contact {
+  min-width: 17rem;
+  max-width: 23rem;
+}
+
+.vendors-table-wrapper .vendor-identity,
+.vendors-table-wrapper .vendor-organization,
+.vendors-table-wrapper .vendor-contact {
+  overflow-wrap: anywhere;
+}
+
+.vendors-table-wrapper .vendor-tin {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.vendors-table-wrapper:not(.table-card-view) .vendor-tin {
+  min-width: 12rem;
+}
+
+.vendors-table-wrapper .vendor-status {
+  white-space: nowrap;
+}
+
+.vendor-secondary {
+  margin-top: .25rem;
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.vendors-table-wrapper.table-card-view tbody {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+}
+
+.vendors-table-wrapper.table-card-view .vendor-identity,
+.vendors-table-wrapper.table-card-view .vendor-organization,
+.vendors-table-wrapper.table-card-view .vendor-contact,
+.vendors-table-wrapper.table-card-view .vendor-tin,
+.vendors-table-wrapper.table-card-view td[colspan] {
+  grid-column: 1 / -1;
+}

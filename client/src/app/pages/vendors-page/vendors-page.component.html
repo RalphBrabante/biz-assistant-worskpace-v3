@@ -108,35 +108,34 @@
 </section>
 
 <section class="ui-card shadow-panel rounded-xl mb-6">
-  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+  <div class="ui-table-responsive table-view-wrapper vendors-table-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }" role="region" aria-label="Vendors table" tabindex="0">
     <table class="ui-table ui-table-hover align-middle mb-0">
+      <caption class="sr-only">Vendor profiles, tax identification numbers, contacts, and organization assignments</caption>
       <thead class="ui-table-light">
         <tr>
           <th class="row-actions-cell" scope="col">Actions</th>
-          <th *ngIf="isSuperuser">Organization</th>
-          <th>Organizations</th>
-          <th>Name</th>
-          <th>Legal Name</th>
-          <th>TIN</th>
-          <th>Contact</th>
-          <th>Email</th>
-          <th>Status</th>
+          <th *ngIf="isSuperuser" scope="col" class="vendor-organization">Owner organization</th>
+          <th scope="col" class="vendor-organization">Assigned organizations</th>
+          <th scope="col" class="vendor-identity">Vendor</th>
+          <th scope="col" class="vendor-tin">TIN</th>
+          <th scope="col" class="vendor-contact">Contact</th>
+          <th scope="col" class="vendor-status">Status</th>
 
         </tr>
       </thead>
       <tbody>
         <tr *ngIf="loading()">
-          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center py-12 border-0">
+          <td [attr.colspan]="isSuperuser ? 7 : 6" class="text-center py-12 border-0">
             <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>
             <span class="text-muted text-xs">Loading...</span>
           </td>
         </tr>
         <tr *ngIf="!loading() && rows().length === 0">
-          <td [attr.colspan]="isSuperuser ? 9 : 8" class="text-center text-muted py-6">No vendors found.</td>
+          <td [attr.colspan]="isSuperuser ? 7 : 6" class="text-center text-muted py-6">No vendors found.</td>
         </tr>
 
         <tr *ngFor="let row of rows(); trackBy: trackById">
-          <td class="row-actions-cell"><app-row-actions label="Vendors actions">
+          <td class="row-actions-cell card-actions-cell" data-label="Actions"><app-row-actions [label]="'Actions for ' + row.name">
             <div class="row-action-items">
               <button type="button" (click)="openEditModal(row)" title="Edit" [disabled]="isContextLocked" class="ui-dropdown-item">
                 <i class="bi bi-pencil-square"></i>
@@ -153,14 +152,19 @@
                Delete</button>
             </div>
           </app-row-actions></td>
-        <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
-          <td class="text-xs text-muted">{{ assignedOrganizationsLabel(row) }}</td>
-          <td class="font-semibold">{{ row.name }}</td>
-          <td>{{ row.legalName || '-' }}</td>
-          <td>{{ row.taxId || '-' }}</td>
-          <td>{{ row.contactPerson || '-' }}</td>
-          <td>{{ row.contactEmail || '-' }}</td>
-          <td>
+          <td *ngIf="isSuperuser" class="vendor-organization text-xs" data-label="Owner organization">{{ organizationLabel(row) }}</td>
+          <td class="vendor-organization text-xs text-muted" data-label="Assigned organizations">{{ assignedOrganizationsLabel(row) }}</td>
+          <td class="vendor-identity" data-label="Vendor">
+            <div class="font-semibold">{{ row.name }}</div>
+            <div *ngIf="distinctLegalName(row) as legalName" class="vendor-secondary text-muted">Legal name: {{ legalName }}</div>
+          </td>
+          <td class="vendor-tin" data-label="TIN">{{ row.taxId || '—' }}</td>
+          <td class="vendor-contact" data-label="Contact">
+            <div *ngIf="row.contactPerson">{{ row.contactPerson }}</div>
+            <div *ngIf="row.contactEmail" [class.vendor-secondary]="row.contactPerson" class="text-muted">{{ row.contactEmail }}</div>
+            <span *ngIf="!row.contactPerson && !row.contactEmail" class="text-muted">—</span>
+          </td>
+          <td class="vendor-status" data-label="Status">
             <span class="ui-badge rounded-full" [ngClass]="statusBadgeClass(row.status)">{{ row.status || '-' }}</span>
           </td>
 

@@ -1,4 +1,5 @@
 import {RowActionsComponent} from '../../shared/row-actions.component';
+import { Subscription } from 'rxjs';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
 import { CommonModule } from '@angular/common';
 import { Component, computed, signal } from '@angular/core';
@@ -247,6 +248,8 @@ export class ReportsPageComponent {
   private readonly auth: AuthService;
   private readonly confirmDialog: ConfirmDialogService;
   private readonly organizationContext: OrganizationContextService;
+  private salesRequest?: Subscription;
+  private expenseRequest?: Subscription;
 
   constructor(api: ApiService, auth: AuthService, confirmDialog: ConfirmDialogService, organizationContext: OrganizationContextService) {
     this.api = api;
@@ -524,6 +527,11 @@ export class ReportsPageComponent {
   }
 
   loadSalesReports(): void {
+    this.salesRequest?.unsubscribe();
+    this.salesRows.set([]);
+    this.latestSalesReport.set(null);
+    this.salesTotal = 0;
+    this.salesTotalPages = 1;
     if (this.isContextLocked) {
       this.loadingSales.set(false);
       this.salesRows.set([]);
@@ -540,12 +548,13 @@ export class ReportsPageComponent {
     const params = new URLSearchParams({
       page: String(this.salesPage),
       limit: String(this.salesPageSize),
+      year: String(this.selectedYear()),
     });
     if (this.orgParamValue) {
       params.set('organizationId', this.orgParamValue);
     }
 
-    this.api.list<QuarterlySalesReportRow>(`/api/v1/reports/quarterly-sales?${params.toString()}`).subscribe({
+    this.salesRequest = this.api.list<QuarterlySalesReportRow>(`/api/v1/reports/quarterly-sales?${params.toString()}`).subscribe({
       next: (response: ApiResponse<QuarterlySalesReportRow[]>) => {
         this.loadingSales.set(false);
         const rows = (response.data || []).filter((row) =>
@@ -569,6 +578,11 @@ export class ReportsPageComponent {
   }
 
   loadExpenseReports(): void {
+    this.expenseRequest?.unsubscribe();
+    this.expenseRows.set([]);
+    this.latestExpenseReport.set(null);
+    this.expenseTotal = 0;
+    this.expenseTotalPages = 1;
     if (this.isContextLocked) {
       this.loadingExpenses.set(false);
       this.expenseRows.set([]);
@@ -585,12 +599,13 @@ export class ReportsPageComponent {
     const params = new URLSearchParams({
       page: String(this.expensePage),
       limit: String(this.expensePageSize),
+      year: String(this.selectedYear()),
     });
     if (this.orgParamValue) {
       params.set('organizationId', this.orgParamValue);
     }
 
-    this.api.list<QuarterlyExpenseReportRow>(`/api/v1/reports/quarterly-expenses?${params.toString()}`).subscribe({
+    this.expenseRequest = this.api.list<QuarterlyExpenseReportRow>(`/api/v1/reports/quarterly-expenses?${params.toString()}`).subscribe({
       next: (response: ApiResponse<QuarterlyExpenseReportRow[]>) => {
         this.loadingExpenses.set(false);
         const rows = (response.data || []).filter((row) =>
@@ -906,6 +921,11 @@ export class ReportsPageComponent {
       this.matchingSalesReportForExpense(expenseReport),
       expenseReport
     );
+  }
+
+  ngOnDestroy(): void {
+    this.salesRequest?.unsubscribe();
+    this.expenseRequest?.unsubscribe();
   }
 
   onFilterChange(): void {
