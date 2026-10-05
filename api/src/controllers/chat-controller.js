@@ -2,10 +2,12 @@ const { Op, fn, col } = require('sequelize');
 const { getModels } = require('../sequelize');
 const { getSocketServer } = require('../services/socket-service');
 const { AppError } = require('../utils/app-error');
+const { organizationPresence } = require('../services/chat-presence');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const userFields = ['id', 'firstName', 'lastName', 'email', 'profileImageUrl', 'profileImageCdnUrl'];
-const messageFields = ['id', 'organizationId', 'senderUserId', 'recipientUserId', 'clientMessageId', 'body', 'readAt', 'createdAt'];
+const messageFields = ['id', 'organizationId', 'senderUserId', 'recipientUserId', 'clientMessageId', 'replyToMessageId', 'body', 'readAt', 'createdAt'];
+const replyFields = ['id', 'senderUserId', 'body', 'createdAt'];
 const activeUser = { isActive: true, status: 'active' };
 function invalid(message) { throw new AppError('BAD_REQUEST', message, 400); }
 function uuid(value, label) { if (typeof value !== 'string' || !UUID.test(value)) invalid(`${label} must be a valid UUID.`); return value.toLowerCase(); }
@@ -75,6 +77,7 @@ const users = handler(async (req, res, models, scope) => {
   });
   return res.json({ data: result.rows.map(row => row.chatUser), meta: { page, total: result.count, totalPages: Math.ceil(result.count / 50) } });
 });
+const presence = handler(async (_req, res, models, scope) => res.json({ data: await organizationPresence(models, scope.organizationId) }));
 const unread = handler(async (_req, res, models, scope) => {
   const sender = { model: models.User, as: 'sender', attributes: [], required: true, where: activeUser,
     include: [{ model: models.OrganizationUser, as: 'chatMemberships', attributes: [], required: true, where: { organizationId: scope.organizationId, isActive: true } }] };
@@ -112,7 +115,9 @@ const history = handler(async (req, res, models, scope) => {
     ] } : boundary(cursor)];
   }
   const direction = after ? 'ASC' : 'DESC';
-  const rows = await models.ChatMessage.findAll({ where, attributes: messageFields, order: [['createdAt', direction], ['id', direction]], limit: 51 });
+  const rows = await models.ChatMessage.findAll({ where, attributes: messageFields,
+    include: [{ model: models.ChatMessage, as: 'replyTo', attributes: replyFields, required: false }],
+    order: [['createdAt', direction], ['id', direction]], limit: 51 });
   const hasMore = rows.length > 50;
   const page = rows.slice(0, 50);
   if (!after) page.reverse();
@@ -130,21 +135,31 @@ const send = handler(async (req, res, models, scope) => {
   const body = req.body.body.trim();
   if (!body || body.length > 4000) invalid('Messages must contain between 1 and 4,000 characters.');
   const clientMessageId = uuid(req.body.clientMessageId, 'Message request');
+  const replyToMessageId = req.body.replyToMessageId == null ? null : uuid(req.body.replyToMessageId, 'Reply message');
   let created = false;
+  let replyTo = null;
   const row = await models.ChatMessage.sequelize.transaction(async transaction => {
     // Stable lock ordering serializes retries and protects against removal
     // between checking membership and writing the message.
     for (const id of [scope.userId, peerId].sort()) await membership(models, scope.organizationId, id, transaction);
+    if (replyToMessageId) {
+      replyTo = await models.ChatMessage.findOne({ where: { ...conversation(scope, peerId), id: replyToMessageId }, transaction });
+      if (!replyTo) throw new AppError('NOT_FOUND', 'Reply message was not found in this conversation.', 404);
+    }
     const existing = await models.ChatMessage.findOne({ where: { organizationId: scope.organizationId, senderUserId: scope.userId, clientMessageId }, transaction });
     if (existing) {
-      if (existing.recipientUserId !== peerId || existing.body !== body) throw new AppError('CONFLICT', 'This message request was already used. Refresh before sending.', 409);
+      if (existing.recipientUserId !== peerId || existing.body !== body || (existing.replyToMessageId || null) !== replyToMessageId) throw new AppError('CONFLICT', 'This message request was already used. Refresh before sending.', 409);
       return existing;
     }
     created = true;
-    return models.ChatMessage.create({ organizationId: scope.organizationId, senderUserId: scope.userId, recipientUserId: peerId, clientMessageId, body }, { transaction });
+    return models.ChatMessage.create({ organizationId: scope.organizationId, senderUserId: scope.userId, recipientUserId: peerId, clientMessageId, body,
+      replyToMessageId, replySenderUserId: replyTo?.senderUserId || null, replyRecipientUserId: replyTo?.recipientUserId || null }, { transaction });
   });
   notify(scope, peerId);
-  return res.status(created ? 201 : 200).json({ data: row });
+  return res.status(created ? 201 : 200).json({ data: {
+    ...Object.fromEntries(messageFields.map(field => [field, row[field]])),
+    replyTo: replyTo ? Object.fromEntries(replyFields.map(field => [field, replyTo[field]])) : null,
+  } });
 });
 const read = handler(async (req, res, models, scope) => {
   const peerId = await peerFor(req, models, scope);
@@ -157,4 +172,4 @@ const read = handler(async (req, res, models, scope) => {
   notify(scope, peerId);
   return res.json({ data: { ok: true } });
 });
-module.exports = { users, unread, history, send, read };
+module.exports = { users, presence, unread, history, send, read };

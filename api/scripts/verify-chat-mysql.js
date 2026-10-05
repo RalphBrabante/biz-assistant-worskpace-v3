@@ -24,6 +24,8 @@ async function main() {
       is_primary BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY membership (organization_id,user_id), FOREIGN KEY (organization_id) REFERENCES organizations(id), FOREIGN KEY (user_id) REFERENCES users(id))`);
     await require('../src/migrations/20261005000000-create-chat-messages').up(sequelize.getQueryInterface(), Sequelize);
+    const replyMigration = require('../src/migrations/20261006000000-add-chat-replies');
+    await replyMigration.up(sequelize.getQueryInterface(), Sequelize);
     const models = require('../src/models').initModels(sequelize);
     const org = randomUUID(), otherOrg = randomUUID(), alice = randomUUID(), bob = randomUUID(), carol = randomUUID();
     await sequelize.query('INSERT INTO organizations VALUES (?),(?)', { replacements: [org, otherOrg] });
@@ -77,12 +79,36 @@ async function main() {
     assert.equal((await request('history', { peer: carol })).statusCode, 403);
     assert.equal((await request('history', { roles: ['superuser'], query: { organizationId: otherOrg } })).statusCode, 403);
     await assert.rejects(models.ChatMessage.create({ organizationId: org, senderUserId: alice, recipientUserId: carol, clientMessageId: randomUUID(), body: 'Foreign member' }), { name: 'SequelizeForeignKeyConstraintError' });
+    const targetId = simultaneous[0].body.data.id;
+    const replyBody = { body: 'Reply to the greeting', clientMessageId: randomUUID(), replyToMessageId: targetId };
+    const reply = await request('send', { actor: bob, peer: alice, body: replyBody });
+    assert.equal(reply.statusCode, 201); assert.equal(reply.body.data.replyTo.body, 'Hello 👋');
+    assert.equal((await request('send', { actor: bob, peer: alice, body: replyBody })).statusCode, 200);
+    const quotedHistory = await request('history', { query: { before: recent.body.meta.before } });
+    assert.equal(quotedHistory.body.data.find(row => row.id === reply.body.data.id).replyTo.id, targetId);
+    await assert.rejects(models.ChatMessage.destroy({ where: { id: targetId } }), { name: 'SequelizeForeignKeyConstraintError' });
+    for (const [organizationId, userId] of [[org, carol], [otherOrg, alice]]) {
+      await sequelize.query('INSERT INTO organization_users (id,organization_id,user_id) VALUES (?,?,?)', { replacements: [randomUUID(), organizationId, userId] });
+    }
+    const unrelated = await models.ChatMessage.create({ organizationId: org, senderUserId: carol, recipientUserId: alice, clientMessageId: randomUUID(), body: 'Other conversation' });
+    assert.equal((await request('send', { body: { ...replyBody, clientMessageId: randomUUID(), replyToMessageId: unrelated.id } })).statusCode, 404);
+    await assert.rejects(models.ChatMessage.create({ organizationId: org, senderUserId: alice, recipientUserId: bob, clientMessageId: randomUUID(), body: 'Invalid pair',
+      replyToMessageId: unrelated.id, replySenderUserId: carol, replyRecipientUserId: alice }));
+    await assert.rejects(models.ChatMessage.create({ organizationId: org, senderUserId: alice, recipientUserId: bob, clientMessageId: randomUUID(), body: 'Forged pair',
+      replyToMessageId: unrelated.id, replySenderUserId: alice, replyRecipientUserId: bob }), { name: 'SequelizeForeignKeyConstraintError' });
+    const foreign = await models.ChatMessage.create({ organizationId: otherOrg, senderUserId: carol, recipientUserId: alice, clientMessageId: randomUUID(), body: 'Foreign organization' });
+    await assert.rejects(models.ChatMessage.create({ organizationId: org, senderUserId: alice, recipientUserId: bob, clientMessageId: randomUUID(), body: 'Foreign reply',
+      replyToMessageId: foreign.id, replySenderUserId: carol, replyRecipientUserId: alice }));
+    await assert.rejects(models.ChatMessage.create({ organizationId: org, senderUserId: alice, recipientUserId: bob, clientMessageId: randomUUID(), body: 'Incomplete reference', replyToMessageId: targetId }));
+    const countBeforeRemoval = await models.ChatMessage.count();
     await models.OrganizationUser.update({ isActive: false }, { where: { organizationId: org, userId: bob } });
-    assert.equal((await request('unread')).body.data.latestIncoming, null, 'Inactive senders must not trigger sounds.');
+    assert.equal((await request('unread')).body.data.latestIncoming.id, unrelated.id, 'Inactive senders must not trigger sounds.');
     assert.equal((await request('history')).statusCode, 403);
     assert.equal((await request('send', { body: { body: 'Blocked', clientMessageId: randomUUID() } })).statusCode, 403);
-    assert.equal(await models.ChatMessage.count(), 61, 'Removal must preserve chat history.');
-    console.log('MySQL chat verification passed: member search, persistent messages, concurrent retries, unread counts, read receipts, cursor pagination, isolation and membership removal.');
+    assert.equal(await models.ChatMessage.count(), countBeforeRemoval, 'Removal must preserve chat history.');
+    await replyMigration.down(sequelize.getQueryInterface());
+    await replyMigration.up(sequelize.getQueryInterface(), Sequelize);
+    console.log('MySQL chat verification passed: persistence, retries, unread counts, pagination, organization isolation, quoted replies, reply constraints, membership removal and migration rollback.');
   } finally { await sequelize.close(); }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

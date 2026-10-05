@@ -6,56 +6,76 @@
   </button>
   <section *ngIf="open" #panel id="organization-chat" class="chat-panel" role="dialog" aria-modal="false" aria-labelledby="chat-title">
     <header class="chat-header">
-      <button *ngIf="selected" type="button" class="chat-icon" (click)="back()" [disabled]="sending" aria-label="Back to organization members"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
-      <span *ngIf="selected" class="chat-avatar chat-header-avatar" aria-hidden="true">
-        <img *ngIf="photo(selected) as url" [src]="url" alt="" (error)="photoFailed(selected, $event)" />
-        <span *ngIf="!photo(selected)">{{ initials(selected) }}</span>
-      </span>
-      <div class="chat-heading"><h2 id="chat-title">{{ selected ? name(selected) : 'Team chat' }}</h2><p>{{ selected ? 'Private conversation' : 'Connect with your organization' }}</p></div>
-      <button type="button" class="chat-icon" (click)="sound.toggle()" [attr.aria-label]="sound.enabled ? 'Mute chat sounds' : 'Enable chat sounds'" [attr.title]="sound.enabled ? 'Mute chat sounds' : 'Enable chat sounds'" [attr.aria-pressed]="sound.enabled"><i class="bi" [class.bi-volume-up]="sound.enabled" [class.bi-volume-mute]="!sound.enabled" aria-hidden="true"></i></button>
+      <button *ngIf="selected" type="button" class="chat-icon chat-back" (click)="back()" [disabled]="sending" aria-label="Back to organization members"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
+      <ng-container *ngIf="selected" [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ $implicit: selected, small: true }"></ng-container>
+      <div class="chat-heading"><h2 id="chat-title">{{ selected ? name(selected) : 'Team chat' }}</h2><p>{{ selected ? statusLabel(selected) + ' · Private conversation' : 'Connect with your organization' }}</p></div>
+      <button type="button" class="chat-icon" (click)="toggleSound()" [attr.aria-label]="sound.enabled ? 'Mute chat sounds' : 'Enable chat sounds'" [attr.title]="sound.enabled ? 'Mute chat sounds' : 'Enable chat sounds'" [attr.aria-pressed]="sound.enabled"><i class="bi" [class.bi-volume-up]="sound.enabled" [class.bi-volume-mute]="!sound.enabled" aria-hidden="true"></i></button>
       <button type="button" class="chat-icon" (click)="close()" aria-label="Close team chat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
     </header>
     <div *ngIf="!organizations.getActiveOrganizationId()" class="chat-empty">
       <i class="bi bi-building" aria-hidden="true"></i><p>Select an organization to chat with its members.</p>
       <button type="button" class="ui-btn ui-btn-primary" (click)="organizations.requestSelection(true)">Select organization</button>
     </div>
-    <ng-container *ngIf="organizations.getActiveOrganizationId()">
-      <ng-container *ngIf="!selected">
+    <div *ngIf="organizations.getActiveOrganizationId()" class="chat-workspace" [class.chat-has-selection]="selected">
+      <aside class="chat-sidebar" aria-label="Organization members">
         <div class="chat-search"><label for="chat-member-search" class="sr-only">Search organization members</label>
           <input #searchInput id="chat-member-search" class="ui-form-control" type="search" placeholder="Search members…" autocomplete="off" [(ngModel)]="search" (ngModelChange)="searchChanged()" /></div>
         <div class="chat-members">
           <div *ngIf="usersError" class="chat-error" role="alert">{{ usersError }} <button type="button" class="ui-btn ui-btn-link" (click)="loadUsers()">Retry</button></div>
-          <button *ngFor="let user of users; trackBy: trackUser" type="button" class="chat-member" (click)="select(user)">
-            <span class="chat-avatar" aria-hidden="true">
-              <img *ngIf="photo(user) as url" [src]="url" alt="" loading="lazy" (error)="photoFailed(user, $event)" />
-              <span *ngIf="!photo(user)">{{ initials(user) }}</span>
-            </span>
-            <span class="chat-member-name"><strong>{{ name(user) }}</strong><small>{{ user.email }}</small></span>
-            <span *ngIf="unreadCounts[user.id]" class="chat-badge" [attr.aria-label]="unreadCounts[user.id] + ' unread messages'">{{ unreadCounts[user.id] }}</span>
-          </button>
+          <ng-container *ngFor="let group of memberGroups">
+            <h3 class="chat-group-heading">{{ group.label }} <span>{{ group.users.length }}</span></h3>
+            <button *ngFor="let user of group.users; trackBy: trackUser" type="button" class="chat-member" (click)="select(user)" [class.chat-member-selected]="selected?.id === user.id" [attr.aria-current]="selected?.id === user.id ? 'true' : null" [disabled]="sending">
+              <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ $implicit: user }"></ng-container>
+              <span class="chat-member-name"><strong>{{ name(user) }}</strong><small>{{ statusLabel(user) }}</small></span>
+              <span *ngIf="unreadCounts[user.id]" class="chat-badge" [attr.aria-label]="unreadCounts[user.id] + ' unread messages'">{{ unreadCounts[user.id] }}</span>
+            </button>
+          </ng-container>
           <p *ngIf="usersLoading" class="chat-status" role="status">Loading members…</p>
           <div *ngIf="!usersLoading && !usersError && !users.length" class="chat-empty"><i class="bi bi-people" aria-hidden="true"></i><p>{{ search ? 'No members match your search.' : 'No other active members are available in this organization.' }}</p></div>
           <button *ngIf="hasMoreUsers" type="button" class="ui-btn ui-btn-link chat-more" [disabled]="usersLoading" (click)="loadUsers(true)">More members</button>
         </div>
-      </ng-container>
-      <ng-container *ngIf="selected">
+      </aside>
+      <main class="chat-conversation" aria-label="Private conversation">
+        <div *ngIf="!selected" class="chat-welcome chat-empty"><i class="bi bi-chat-square-text" aria-hidden="true"></i><p>Select a member to start chatting.</p><small>Your messages stay within this organization.</small></div>
+        <ng-container *ngIf="selected">
         <div #messageList class="chat-messages" (scroll)="messageScrolled()" role="log" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions">
           <button *ngIf="hasOlder" type="button" class="ui-btn ui-btn-link chat-more" [disabled]="olderLoading || messagesLoading" (click)="loadMessages(true)">{{ olderLoading ? 'Loading…' : 'Load older messages' }}</button>
           <p *ngIf="messagesLoading" class="chat-status" role="status">Loading conversation…</p>
           <p *ngIf="!messagesLoading && !messages.length && !error" class="chat-empty">Start a conversation with {{ name(selected) }}.</p>
-          <article *ngFor="let message of messages; trackBy: trackMessage" class="chat-message" [class.chat-mine]="message.senderUserId === auth.currentUser()?.id">
-            <p>{{ message.body }}</p>
-            <small><span class="sr-only">{{ message.senderUserId === auth.currentUser()?.id ? 'You' : name(selected) }}, </span><time [attr.datetime]="message.createdAt" [title]="dateTime(message.createdAt)">{{ timestamp(message.createdAt) }}</time>
-              <span *ngIf="message.senderUserId === auth.currentUser()?.id"> · {{ message.readAt ? 'Read' : 'Sent' }}</span></small>
+          <article *ngFor="let message of messages; trackBy: trackMessage" class="chat-message-row" [class.chat-mine]="message.senderUserId === auth.currentUser()?.id">
+            <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ $implicit: sender(message), small: true }"></ng-container>
+            <div class="chat-message-content">
+              <div class="chat-message">
+                <blockquote *ngIf="message.replyTo as quoted" class="chat-quote"><strong>{{ senderName(quoted) }}</strong><p>{{ quoted.body }}</p></blockquote>
+                <p>{{ message.body }}</p>
+                <small><span class="sr-only">{{ senderName(message) }}, </span><time [attr.datetime]="message.createdAt" [title]="dateTime(message.createdAt)">{{ timestamp(message.createdAt) }}</time>
+                  <span *ngIf="message.senderUserId === auth.currentUser()?.id"> · {{ message.readAt ? 'Read' : 'Sent' }}</span></small>
+              </div>
+              <button type="button" class="chat-reply-action" (click)="startReply(message)" [disabled]="sending" [attr.aria-label]="'Reply to ' + senderName(message) + ': ' + message.body.slice(0, 80)"><i class="bi bi-reply" aria-hidden="true"></i> Reply</button>
+            </div>
           </article>
         </div>
         <div *ngIf="error" class="chat-error" role="alert">{{ error }} <button type="button" class="ui-btn ui-btn-link" [disabled]="sending" (click)="loadMessages()">Refresh</button></div>
         <form class="chat-compose" (ngSubmit)="send()">
+          <div *ngIf="reply" class="chat-reply-preview" role="status">
+            <div><strong>Replying to {{ senderName(reply) }}</strong><p>{{ reply.body }}</p></div>
+            <button type="button" class="chat-icon" (click)="cancelReply()" [disabled]="sending" aria-label="Cancel reply"><i class="bi bi-x" aria-hidden="true"></i></button>
+          </div>
           <label for="chat-draft" class="sr-only">Message {{ name(selected) }}</label>
           <textarea #composer id="chat-draft" class="ui-form-control" name="chatDraft" rows="2" maxlength="4000" placeholder="Write a message…" [(ngModel)]="draft" [disabled]="sending" (keydown)="composerKeydown($event)"></textarea>
           <div class="chat-compose-footer"><small>Enter to send · Shift+Enter for a new line</small><button type="submit" class="ui-btn ui-btn-primary" [disabled]="sending || !draft.trim()">{{ sending ? 'Sending…' : 'Send' }}</button></div>
         </form>
-      </ng-container>
-    </ng-container>
+        </ng-container>
+      </main>
+    </div>
   </section>
+  <ng-template #avatar let-user let-small="small">
+    <span class="chat-avatar-wrap" [class.chat-avatar-small]="small" role="img" [attr.aria-label]="name(user) + ', ' + statusLabel(user)" [attr.title]="name(user) + ' · ' + statusLabel(user)">
+      <span class="chat-avatar" aria-hidden="true">
+        <img *ngIf="photo(user) as url" [src]="url" alt="" loading="lazy" (error)="photoFailed(user, $event)" />
+        <span *ngIf="!photo(user)">{{ initials(user) }}</span>
+      </span>
+      <span class="chat-presence-dot" [attr.data-status]="status(user)" aria-hidden="true"></span>
+    </span>
+  </ng-template>
 </ng-container>

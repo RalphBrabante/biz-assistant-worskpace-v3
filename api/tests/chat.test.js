@@ -74,7 +74,7 @@ function fixture() {
   return { request, messages, members, inactiveUsers, locks, queries, events };
 }
 test('all chat endpoints require authentication and active organization membership, including superusers', async () => {
-  for (const method of ['users', 'unread', 'history', 'send', 'read']) {
+  for (const method of ['users', 'presence', 'unread', 'history', 'send', 'read']) {
     const e = fixture();
     assert.equal((await e.request(method, { authenticated: false })).statusCode, 401);
     assert.equal((await e.request(method, { query: { organizationId: otherOrg } })).statusCode, 403);
@@ -116,6 +116,24 @@ test('message validation rejects empty, oversized, non-string and invalid retry 
     assert.equal((await e.request('send', { body })).statusCode, 400);
   }
   assert.equal(e.messages.length, 0);
+});
+test('replies retain a quoted target and reject references outside the conversation or organization', async () => {
+  const e = fixture();
+  const original = await e.request('send', { userId: bob, peer: alice, body: { body: 'Question', clientMessageId: randomUUID() } });
+  const target = original.body.data.id;
+  const body = { body: 'Answer', clientMessageId: randomUUID(), replyToMessageId: target };
+  const sent = await e.request('send', { body }); assert.equal(sent.statusCode, 201);
+  assert.equal(sent.body.data.replyToMessageId, target); assert.equal(sent.body.data.replyTo.body, 'Question');
+  assert.equal(sent.body.data.replyTo.senderUserId, bob);
+  assert.equal(e.messages[1].replySenderUserId, bob); assert.equal(e.messages[1].replyRecipientUserId, alice);
+  assert.ok(!Object.keys(sent.body.data).includes('replySenderUserId'));
+  assert.equal((await e.request('send', { body })).statusCode, 200);
+  assert.equal((await e.request('send', { body: { ...body, replyToMessageId: null } })).statusCode, 409);
+  e.members.set(`${org}:${carol}`, true);
+  assert.equal((await e.request('send', { peer: carol, body: { ...body, clientMessageId: randomUUID() } })).statusCode, 404);
+  e.messages.push({ id: randomUUID(), organizationId: otherOrg, senderUserId: bob, recipientUserId: alice, createdAt: new Date(), body: 'Foreign' });
+  assert.equal((await e.request('send', { body: { ...body, replyToMessageId: e.messages.at(-1).id } })).statusCode, 404);
+  assert.equal((await e.request('send', { body: { ...body, replyToMessageId: 'invalid' } })).statusCode, 400);
 });
 test('history and cursors are private to the selected pair and organization, including timestamp ties', async () => {
   const e = fixture(), time = new Date('2026-10-05T01:00:00Z');
@@ -174,6 +192,7 @@ test('model registration supports private chat associations and composite migrat
   try {
     const models = require('../src/models').initModels(sequelize);
     assert.equal(models.ChatMessage.associations.sender.target, models.User);
+    assert.equal(models.ChatMessage.associations.replyTo.target, models.ChatMessage);
     assert.equal(models.OrganizationUser.associations.chatUser.target, models.User);
     const constraints = [], indexes = [], sql = [];
     await require('../src/migrations/20261005000000-create-chat-messages').up({

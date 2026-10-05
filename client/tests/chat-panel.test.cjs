@@ -16,15 +16,15 @@ const display = loadTypeScript('../src/app/core/chat-display.ts');
 
 function setup(t) {
   const requests = [], timers = new Map(), intervals = new Map(); let serial = 0, effect;
-  const sockets = new rx.Subject();
+  const sockets = new rx.Subject(), presenceEvents = new rx.Subject();
   let org = 'org-a', user = 'user-a', verified = true;
   function request(kind, args) { const stream = new rx.Subject(); requests.push({ kind, args, stream }); return stream; }
   const deps = {
-    auth: { isAuthenticated: () => verified, currentUser: () => ({ id: user }) },
+    auth: { isAuthenticated: () => verified, currentUser: () => ({ id: user, firstName: 'Alice', email: 'alice@example.test', profileImageUrl: '/alice.jpg' }) },
     organizations: { getActiveOrganizationId: () => org },
-    sockets: { chatChanged$: sockets },
+    sockets: { chatChanged$: sockets, presenceChanged$: presenceEvents, setChatSilent(silent) { this.silent = silent; } },
     sound: { plays: 0, enabled: true, play() { this.plays++; }, toggle() { this.enabled = !this.enabled; } },
-    chat: Object.fromEntries(['users', 'unread', 'history', 'send', 'read'].map(kind => [kind, (...args) => request(kind, args)])),
+    chat: Object.fromEntries(['users', 'presence', 'unread', 'history', 'send', 'read'].map(kind => [kind, (...args) => request(kind, args)])),
   };
   const decorator = () => () => {};
   const module = { exports: {} };
@@ -46,7 +46,7 @@ function setup(t) {
   };
   const flush = () => { for (const [id, fn] of [...timers]) { timers.delete(id); fn(); } };
   const context = (nextOrg, nextUser = user, nextVerified = verified) => { org = nextOrg; user = nextUser; verified = nextVerified; effect(); };
-  return { component, requests, sockets, finish, flush, context, intervals, sound: deps.sound };
+  return { component, requests, sockets, finish, flush, context, intervals, sound: deps.sound, presenceEvents, socketService: deps.sockets };
 }
 const bob = { id: 'user-b', email: 'bob@example.test', firstName: 'Bob' };
 function message(id, overrides = {}) { return { id, organizationId: 'org-a', senderUserId: 'user-b', recipientUserId: 'user-a', body: 'Hello', readAt: null, createdAt: `2026-10-05T01:00:${id.padStart(2, '0')}Z`, ...overrides }; }
@@ -180,6 +180,50 @@ test('message times use relative minutes and hours before switching to date and 
   assert.equal(display.chatTimestamp('invalid', now), '');
 });
 
+test('the member sidebar groups verified presence and keeps offline members available for conversation', t => {
+  const e = setup(t); e.component.toggle();
+  const users = [bob, { id: 'user-c', email: 'c@example.test' }, { id: 'user-d', email: 'd@example.test' }, { id: 'user-e', email: 'e@example.test' }];
+  e.finish('users', { data: users }); e.finish('presence', { data: [
+    { userId: bob.id, status: 'online' }, { userId: 'user-c', status: 'away' }, { userId: 'user-d', status: 'silent' },
+  ] });
+  assert.equal(e.component.memberGroups.map(group => group.label).join(','), 'Online,Away,Silent,Offline');
+  assert.equal(e.component.status(users[3]), 'offline');
+  e.component.select(users[3]); assert.equal(e.component.users.length, 4);
+  assert.equal(e.component.selected.id, 'user-e');
+  assert.equal(e.component.sender(message('1')).id, 'user-e');
+  assert.equal(e.component.photo(e.component.sender(message('2', { senderUserId: 'user-a' }))), '/alice.jpg');
+});
+test('presence invalidations are organization scoped and stale results cannot survive an organization switch', t => {
+  const e = setup(t); e.component.toggle(); e.finish('presence', { data: [{ userId: bob.id, status: 'online' }] });
+  const before = e.requests.length;
+  e.presenceEvents.next({ organizationId: 'org-b' }); assert.equal(e.requests.length, before);
+  e.presenceEvents.next({ organizationId: 'org-a' }); const pending = e.requests.at(-1);
+  e.context('org-b'); pending.stream.next({ data: [{ userId: bob.id, status: 'online' }] });
+  assert.equal(e.component.presenceAvailable, false); assert.equal(e.component.status(bob), 'unknown');
+  e.component.toggleSound(); assert.equal(e.socketService.silent, true);
+  e.component.ngOnDestroy(); assert.equal(e.presenceEvents.observers.length, 0);
+});
+test('reply sends preserve the selected target and retry ID on failure, then clear the quote on success', t => {
+  const e = setup(t); e.component.toggle(); e.component.select(bob);
+  e.component.startReply(message('1')); e.component.draft = 'Answer'; e.component.send();
+  const first = e.requests.filter(req => req.kind === 'send').at(-1);
+  assert.equal(first.args[4], '1');
+  e.component.cancelReply(); assert.equal(e.component.reply.id, '1');
+  first.stream.error({ status: 0 }); assert.equal(e.component.reply.id, '1'); assert.equal(e.component.draft, 'Answer');
+  e.component.send(); const retry = e.requests.filter(req => req.kind === 'send').at(-1);
+  assert.equal(retry.args[3], first.args[3]); assert.equal(retry.args[4], '1');
+  e.finish('send', { data: message('2', { senderUserId: 'user-a', recipientUserId: bob.id, replyToMessageId: '1', replyTo: message('1') }) });
+  assert.equal(e.component.reply, undefined); assert.equal(e.component.messages[0].replyTo.id, '1');
+});
+test('changing or cancelling a reply after a failed send starts a new request; switching conversations clears the reply', t => {
+  const e = setup(t); e.component.toggle(); e.component.select(bob); e.component.startReply(message('1')); e.component.draft = 'Answer';
+  e.component.send(); const first = e.requests.filter(req => req.kind === 'send').at(-1); first.stream.error({ status: 0 });
+  e.component.cancelReply(); e.component.send(); const next = e.requests.filter(req => req.kind === 'send').at(-1);
+  assert.notEqual(next.args[3], first.args[3]); assert.equal(next.args[4], null); next.stream.error({ status: 0 });
+  e.component.startReply(message('1')); e.component.select({ id: 'user-c', email: 'c@example.test' });
+  assert.equal(e.component.reply, undefined); assert.equal(e.component.draft, '');
+});
+
 function soundSetup(options = {}) {
   const listeners = new Map(), storage = new Map(options.muted ? [['teamChatSound', 'off']] : []), tones = [];
   let now = 1000, closed = false, contexts = 0;
@@ -221,4 +265,39 @@ test('persisted mute, unavailable audio and disabled storage keep chat usable', 
   assert.doesNotThrow(() => unsupported.sound.play()); unsupported.sound.ngOnDestroy();
   const blocked = soundSetup({ blockedStorage: true }); assert.doesNotThrow(() => blocked.sound.toggle());
   blocked.sound.ngOnDestroy(); assert.equal(blocked.listeners.size, 0);
+});
+
+function socketSetup() {
+  let now = 1000;
+  const listeners = new Map(), intervals = new Map(), emitted = [], sockets = [];
+  const document = { visibilityState: 'visible', addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
+  const window = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
+  function io() {
+    const handlers = new Map(), socket = { connected: true, on: (name, fn) => handlers.set(name, fn),
+      emit: (name, data) => emitted.push({ name, data }), disconnect() { this.connected = false; }, handlers };
+    sockets.push(socket); return socket;
+  }
+  const { SocketNotificationsService } = loadTypeScript('../src/app/core/socket-notifications.service.ts', {
+    require: name => name === '@angular/core' ? { Injectable: () => () => {} } : name === 'socket.io-client' ? { io } : rx,
+    window, document, Date: class extends Date { static now() { return now; } },
+    setInterval: fn => { const id = intervals.size + 1; intervals.set(id, fn); return id; }, clearInterval: id => intervals.delete(id),
+  });
+  const service = new SocketNotificationsService(); service.connect('token', 'org-a'); sockets[0].handlers.get('connect')();
+  return { service, sockets, emitted, intervals, listeners, document, advance: ms => { now += ms; } };
+}
+test('socket heartbeats report online, idle/hidden away and silent, then clean up on reconnect and destroy', () => {
+  const e = socketSetup(); assert.equal(e.emitted.at(-1).data.status, 'online');
+  assert.deepEqual(Object.keys(e.emitted.at(-1).data), ['status']);
+  e.advance(300000); for (const tick of e.intervals.values()) tick(); assert.equal(e.emitted.at(-1).data.status, 'away');
+  e.listeners.get('pointerdown')(); assert.equal(e.emitted.at(-1).data.status, 'online');
+  e.document.visibilityState = 'hidden'; e.listeners.get('visibilitychange')(); assert.equal(e.emitted.at(-1).data.status, 'away');
+  e.service.setChatSilent(true); assert.equal(e.emitted.at(-1).data.status, 'silent');
+  e.service.connect('another-token', 'org-b'); assert.equal(e.sockets[0].connected, false); assert.equal(e.intervals.size, 1);
+  e.service.ngOnDestroy(); assert.equal(e.intervals.size, 0); assert.equal(e.listeners.size, 0);
+});
+test('presence socket invalidations carry organization metadata without exposing private content', () => {
+  const e = socketSetup(), events = []; const sub = e.service.presenceChanged$.subscribe(event => events.push(event));
+  e.sockets[0].handlers.get('chat.presence.changed')({ organizationId: 'org-a' });
+  e.sockets[0].handlers.get('chat.presence.changed')(null); assert.equal(events.length, 1);
+  assert.equal(events[0].organizationId, 'org-a'); sub.unsubscribe(); e.service.ngOnDestroy();
 });

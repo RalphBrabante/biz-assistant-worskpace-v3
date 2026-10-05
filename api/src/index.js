@@ -50,6 +50,7 @@ const {
   initializeCacheConfig,
 } = require('./services/cache-service');
 const { setSocketServer } = require('./services/socket-service');
+const { registerChatPresence } = require('./services/chat-presence');
 const {
   startLicenseExpiryJob,
   stopLicenseExpiryJob,
@@ -237,6 +238,7 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
+  registerChatPresence(socket);
   const userId = String(socket.data?.auth?.userId || '').trim();
   const organizationId = String(socket.data?.auth?.organizationId || '').trim();
 

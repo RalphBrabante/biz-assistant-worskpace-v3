@@ -17,6 +17,7 @@ const { authenticateSequelize } = require('../../../sequelize');
 const { getModels } = require('../../../sequelize');
 const { setRedisClient, initializeCacheConfig } = require('../../../services/cache-service');
 const { setSocketServer } = require('../../../services/socket-service');
+const { registerChatPresence } = require('../../../services/chat-presence');
 const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('../../../jobs/order-upload-cleanup-job');
 const { startLicenseExpiryJob, stopLicenseExpiryJob } = require('../../../jobs/license-expiry-job');
 
@@ -253,6 +254,7 @@ export class LegacyApiService {
     });
 
     this.io.on('connection', (socket) => {
+      registerChatPresence(socket);
       const userId = String(socket.data?.auth?.userId || '').trim();
       const organizationId = String(socket.data?.auth?.organizationId || '').trim();
 

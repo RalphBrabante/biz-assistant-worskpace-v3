@@ -87,6 +87,7 @@ function initModels(sequelize) {
   // Membership composite foreign keys are defined in the migration.
   ChatMessage.belongsTo(User, { foreignKey: 'senderUserId', as: 'sender', constraints: false });
   ChatMessage.belongsTo(User, { foreignKey: 'recipientUserId', as: 'recipient', constraints: false });
+  ChatMessage.belongsTo(ChatMessage, { foreignKey: 'replyToMessageId', as: 'replyTo', constraints: false });
   User.hasMany(ChatMessage, { foreignKey: 'senderUserId', as: 'sentChatMessages', constraints: false });
   User.hasMany(ChatMessage, { foreignKey: 'recipientUserId', as: 'receivedChatMessages', constraints: false });
   initInvalidLoginAttemptModel(sequelize);

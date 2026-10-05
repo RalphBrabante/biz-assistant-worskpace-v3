@@ -3,7 +3,7 @@ import { Component, ElementRef, HostListener, OnDestroy, ViewChild, effect, inje
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../core/auth.service';
-import { ChatMessage, ChatService, ChatUser } from '../core/chat.service';
+import { ChatMessage, ChatService, ChatUser, ChatReply, ChatPresenceStatus } from '../core/chat.service';
 import { OrganizationContextService } from '../core/organization-context.service';
 import { SocketNotificationsService } from '../core/socket-notifications.service';
 import { ChatSoundService } from '../core/chat-sound.service';
@@ -33,6 +33,7 @@ export class ChatPanelComponent implements OnDestroy {
   @ViewChild('panel') panel?: ElementRef<HTMLElement>;
   private subscriptions = new Subscription();
   private readonly socketSubscription: Subscription;
+  private readonly presenceSubscription: Subscription;
   private readonly pollTimer: ReturnType<typeof setInterval>;
   private searchTimer?: ReturnType<typeof setTimeout>;
   private usersRequest?: Subscription;
@@ -46,7 +47,13 @@ export class ChatPanelComponent implements OnDestroy {
   private messagesPending = false;
   private historyCursor = '';
   private readPending = false;
-  private retry?: { userId: string; body: string; id: string };
+  private presencePending = false;
+  private presenceQueued = false;
+  private nextPresenceCheck = 0;
+  private retry?: { userId: string; body: string; id: string; replyToMessageId: string | null };
+  presenceStatuses: Record<string, ChatPresenceStatus> = {};
+  presenceAvailable = false;
+  reply?: ChatReply;
   open = false;
   users: ChatUser[] = [];
   selected?: ChatUser;
@@ -66,6 +73,7 @@ export class ChatPanelComponent implements OnDestroy {
   hasMoreUsers = false;
 
   constructor() {
+    this.sockets.setChatSilent(!this.sound.enabled);
     effect(() => {
       const org = this.organizations.getActiveOrganizationId();
       const identity = this.auth.isAuthenticated() ? this.auth.currentUser()?.id || '' : '';
@@ -76,10 +84,15 @@ export class ChatPanelComponent implements OnDestroy {
       this.refreshUnread();
       if (this.open && this.selected) this.loadMessages();
     });
+    this.presenceSubscription = this.sockets.presenceChanged$.subscribe(event => {
+      if (event.organizationId === this.organizationId && this.open && this.auth.isAuthenticated()) this.refreshPresence();
+    });
     this.pollTimer = setInterval(() => {
+      this.sockets.setChatSilent(!this.sound.enabled);
       if (!this.auth.isAuthenticated() || !this.organizationId || document.visibilityState === 'hidden') return;
       if (Date.now() >= this.nextUnreadCheck) this.refreshUnread();
       if (this.open && this.selected) this.loadMessages();
+      if (this.open && Date.now() >= this.nextPresenceCheck) this.refreshPresence();
     }, 5000);
   }
   private reset(org: string, identity: string): void {
@@ -89,6 +102,8 @@ export class ChatPanelComponent implements OnDestroy {
     clearTimeout(this.searchTimer);
     this.organizationId = org; this.identity = identity;
     this.open = false; this.selected = undefined; this.users = []; this.messages = [];
+    this.reply = undefined; this.presenceStatuses = {}; this.presenceAvailable = false;
+    this.presencePending = false; this.presenceQueued = false; this.nextPresenceCheck = 0;
     this.draft = ''; this.search = ''; this.error = ''; this.usersError = ''; this.retry = undefined;
     this.unreadTotal = 0; this.unreadCounts = {}; this.unreadPending = false;
     this.incomingInitialized = false; this.latestIncoming = null; this.unreadRefreshQueued = false; this.failedPhotos.clear();
@@ -101,7 +116,7 @@ export class ChatPanelComponent implements OnDestroy {
   toggle(): void {
     if (this.open) { this.close(); return; }
     this.open = true;
-    if (this.organizationId) { this.loadUsers(); this.refreshUnread(); }
+    if (this.organizationId) { this.loadUsers(); this.refreshUnread(); this.refreshPresence(); }
     if (this.selected) this.loadMessages();
     this.focus(this.selected ? 'composer' : 'search');
   }
@@ -119,6 +134,48 @@ export class ChatPanelComponent implements OnDestroy {
     const url = (event.target as HTMLImageElement).getAttribute('src') || this.photo(user);
     if (url) this.failedPhotos.add(url);
   }
+  toggleSound(): void { this.sound.toggle(); this.sockets.setChatSilent(!this.sound.enabled); }
+  get self(): ChatUser {
+    const user = this.auth.currentUser();
+    return { ...user, id: user?.id || '', email: user?.email || 'You' };
+  }
+  sender(message: ChatReply): ChatUser { return message.senderUserId === this.identity ? this.self : this.selected || { id: '', email: 'Member' }; }
+  senderName(message: ChatReply): string { return message.senderUserId === this.identity ? 'You' : this.name(this.sender(message)); }
+  status(user: ChatUser): ChatPresenceStatus { return this.presenceAvailable ? this.presenceStatuses[user.id] || 'offline' : 'unknown'; }
+  statusLabel(user: ChatUser): string {
+    return { online: 'Online', away: 'Away', silent: 'Silent', offline: 'Offline', unknown: 'Status unavailable' }[this.status(user)];
+  }
+  get memberGroups(): { label: string; users: ChatUser[] }[] {
+    return (['online', 'away', 'silent', 'offline', 'unknown'] as ChatPresenceStatus[]).map(status => ({
+      label: { online: 'Online', away: 'Away', silent: 'Silent', offline: 'Offline', unknown: 'Members' }[status],
+      users: this.users.filter(user => this.status(user) === status),
+    })).filter(group => group.users.length > 0);
+  }
+  refreshPresence(): void {
+    if (!this.open || !this.organizationId || !this.identity) return;
+    if (this.presencePending) { this.presenceQueued = true; return; }
+    const context = this.contextVersion;
+    this.presencePending = true; this.nextPresenceCheck = Date.now() + 15000;
+    this.subscriptions.add(this.chat.presence(this.organizationId).subscribe({
+      next: response => {
+        if (context !== this.contextVersion) return;
+        this.presenceStatuses = Object.fromEntries((response.data || []).map(row => [row.userId, row.status]));
+        this.presenceAvailable = true; this.presencePending = false;
+        if (this.presenceQueued) { this.presenceQueued = false; this.refreshPresence(); }
+      },
+      error: error => {
+        if (context !== this.contextVersion) return;
+        this.presencePending = false; this.presenceQueued = false; this.presenceAvailable = false; this.presenceStatuses = {};
+        if (error?.status === 403) { this.users = []; this.selected = undefined; this.messages = []; this.reply = undefined; this.draft = ''; }
+      },
+    }));
+  }
+  startReply(message: ChatMessage): void {
+    if (this.sending) return;
+    this.reply = { id: message.id, senderUserId: message.senderUserId, body: message.body, createdAt: message.createdAt };
+    this.focus('composer');
+  }
+  cancelReply(): void { if (!this.sending) this.reply = undefined; }
   searchChanged(): void {
     clearTimeout(this.searchTimer);
     // Cancel immediately so a response for an old search cannot replace results.
@@ -143,9 +200,10 @@ export class ChatPanelComponent implements OnDestroy {
     this.subscriptions.add(this.usersRequest);
   }
   select(user: ChatUser): void {
-    if (this.sending) return;
+    if (this.sending || user.id === this.selected?.id) return;
     this.messageRequest?.unsubscribe(); this.messagesPending = false;
     this.selected = user; this.messages = []; this.draft = ''; this.error = ''; this.retry = undefined;
+    this.reply = undefined;
     this.historyCursor = '';
     this.hasOlder = false; this.messagesLoading = true; this.olderLoading = false;
     this.loadMessages(); this.focus('composer');
@@ -153,6 +211,7 @@ export class ChatPanelComponent implements OnDestroy {
   back(): void {
     if (this.sending) return;
     this.selected = undefined; this.messages = []; this.draft = ''; this.error = ''; this.retry = undefined;
+    this.reply = undefined;
     this.historyCursor = '';
     this.messageRequest?.unsubscribe(); this.messagesPending = false; this.messagesLoading = false; this.olderLoading = false;
     this.loadUsers(); this.focus('search');
@@ -194,7 +253,7 @@ export class ChatPanelComponent implements OnDestroy {
         if (context !== this.contextVersion || peer !== this.selected?.id) return;
         this.error = this.errorText(error, 'Unable to load messages. Please retry.');
         this.messagesPending = false; this.messagesLoading = false; this.olderLoading = false;
-        if (error?.status === 403) { this.messages = []; this.historyCursor = ''; }
+        if (error?.status === 403) { this.messages = []; this.historyCursor = ''; this.reply = undefined; }
       },
     });
     this.subscriptions.add(this.messageRequest);
@@ -228,21 +287,23 @@ export class ChatPanelComponent implements OnDestroy {
     if (this.sending || !this.selected || !body) return;
     if (body.length > 4000) { this.error = 'Keep your message within 4,000 characters.'; return; }
     const peer = this.selected.id, context = this.contextVersion;
-    if (!this.retry || this.retry.userId !== peer || this.retry.body !== body) this.retry = { userId: peer, body, id: crypto.randomUUID() };
+    const replyToMessageId = this.reply?.id || null;
+    if (!this.retry || this.retry.userId !== peer || this.retry.body !== body || this.retry.replyToMessageId !== replyToMessageId) this.retry = { userId: peer, body, id: crypto.randomUUID(), replyToMessageId };
     this.sending = true; this.error = '';
-    this.subscriptions.add(this.chat.send(this.organizationId, peer, body, this.retry.id).subscribe({
+    this.subscriptions.add(this.chat.send(this.organizationId, peer, body, this.retry.id, replyToMessageId).subscribe({
       next: response => {
         if (context !== this.contextVersion || peer !== this.selected?.id) return;
         this.sending = false;
         if (!response.data) { this.error = 'Message confirmation was missing. Please retry.'; return; }
         this.messages = this.merge(this.messages, [response.data]); this.draft = ''; this.retry = undefined;
+        this.reply = undefined;
         this.focus('composer');
         setTimeout(() => { if (context === this.contextVersion && peer === this.selected?.id && this.messageList) this.messageList.nativeElement.scrollTop = this.messageList.nativeElement.scrollHeight; });
       },
       error: error => {
         if (context !== this.contextVersion || peer !== this.selected?.id) return;
         this.sending = false; this.error = this.errorText(error, 'Message could not be sent. Your draft is saved here; retry to send.');
-        if (error?.status === 403) { this.messages = []; this.historyCursor = ''; }
+        if (error?.status === 403) { this.messages = []; this.historyCursor = ''; this.reply = undefined; }
       },
     }));
   }
@@ -286,6 +347,6 @@ export class ChatPanelComponent implements OnDestroy {
   trackMessage(_index: number, message: ChatMessage): string { return message.id; }
   ngOnDestroy(): void {
     this.contextVersion++; clearInterval(this.pollTimer); clearTimeout(this.searchTimer);
-    this.subscriptions.unsubscribe(); this.socketSubscription.unsubscribe();
+    this.subscriptions.unsubscribe(); this.socketSubscription.unsubscribe(); this.presenceSubscription.unsubscribe();
   }
 }
