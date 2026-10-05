@@ -4,6 +4,7 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
+    "test:chat": "node --test tests/chat.test.js",
     "build": "tsc -p tsconfig.json",
     "test:expenses": "node --test tests/expense-calculation.test.js tests/expenses-controller.test.js tests/expense-transfer.test.js",
     "start": "node dist/main.js",

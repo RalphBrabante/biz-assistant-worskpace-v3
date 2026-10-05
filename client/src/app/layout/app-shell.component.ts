@@ -1,5 +1,6 @@
 import { ModalDirective } from '../shared/modal.directive';
 import { BugReportComponent } from '../shared/bug-report.component';
+import { ChatPanelComponent } from '../shared/chat-panel.component';
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, ViewChild, HostListener, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -37,7 +38,7 @@ interface BeforeInstallPromptEvent extends Event {
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [BugReportComponent, ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink],
+  imports: [ChatPanelComponent, BugReportComponent, ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.css',
 })

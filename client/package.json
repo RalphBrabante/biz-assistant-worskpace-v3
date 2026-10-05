@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "test:chat": "node --test tests/chat-panel.test.cjs",
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",

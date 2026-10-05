@@ -660,7 +660,7 @@ async function getUserById(req, res) {
           model: Organization,
           as: 'organizations',
           attributes: ['id', 'name', 'legalName', 'isActive'],
-          through: { attributes: ['id', 'role', 'isActive', 'isPrimary', 'createdAt', 'updatedAt'] },
+          through: { attributes: ['id', 'role', 'isActive', 'isPrimary', 'createdAt', 'updatedAt'], where: { isActive: true } },
         },
       ],
     });
@@ -947,7 +947,7 @@ async function listUserAssignableOrganizations(req, res) {
           model: Organization,
           as: 'organizations',
           attributes: ['id'],
-          through: { attributes: [] },
+          through: { attributes: [], where: { isActive: true } },
           required: false,
         },
       ],
@@ -1087,58 +1087,16 @@ async function removeOrganizationFromUser(req, res) {
       });
     }
 
-    const models = getUserOrganizationModels();
-    if (!models) {
-      return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
-    }
-    const { User, OrganizationUser } = models;
-
-    const user = await User.findByPk(req.params.id);
-    if (!user) {
-      return res.status(404).json({ ok: false, message: 'User not found.' });
-    }
-
     const organizationId = String(req.params.organizationId || '').trim();
     if (!organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
     }
 
-    const membership = await OrganizationUser.findOne({
-      where: {
-        userId: user.id,
-        organizationId,
-      },
-    });
-    if (!membership) {
-      return res.status(404).json({ ok: false, message: 'User is not assigned to this organization.' });
-    }
-
-    const wasPrimary = Boolean(membership.isPrimary);
-    await membership.destroy();
-
-    if (wasPrimary) {
-      const nextPrimary = await OrganizationUser.findOne({
-        where: {
-          userId: user.id,
-          isActive: true,
-        },
-        order: [['createdAt', 'ASC']],
-      });
-      if (nextPrimary?.organizationId) {
-        await setPrimaryOrganizationMembership(getModels(), user.id, nextPrimary.organizationId);
-      } else {
-        await User.update(
-          { organizationId: null },
-          {
-            where: {
-              id: user.id,
-            },
-          }
-        );
-      }
-    }
-
-    return res.status(200).json({ ok: true, message: 'Organization removed from user.' });
+    // Use the same transaction, session revocation and history-preserving
+    // membership removal as the organization's member-management endpoint.
+    return require('./organizations-controller').removeUserFromOrganization({
+      ...req, params: { ...req.params, id: organizationId, userId: req.params.id },
+    }, res);
   } catch (err) {
     console.error('Remove organization from user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to remove organization from user.' });

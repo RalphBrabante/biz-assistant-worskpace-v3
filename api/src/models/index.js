@@ -62,6 +62,7 @@ const {
 } = require('./quarterly-expense-report');
 const { initAppSettingModel, AppSetting } = require('./app-setting');
 const { initMessageModel, Message } = require('./message');
+const { initChatMessageModel, ChatMessage } = require('./chat-message');
 const { initBugReportModel, BugReport } = require('./bug-report');
 const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-column');
 
@@ -78,6 +79,16 @@ function initModels(sequelize) {
   initUserModel(sequelize);
   initLicenseModel(sequelize);
   initOrganizationUserModel(sequelize);
+  initChatMessageModel(sequelize);
+  OrganizationUser.belongsTo(User, { foreignKey: 'userId', as: 'chatUser' });
+  User.hasMany(OrganizationUser, { foreignKey: 'userId', as: 'chatMemberships' });
+  Organization.hasMany(ChatMessage, { foreignKey: 'organizationId', as: 'chatMessages', onDelete: 'RESTRICT', onUpdate: 'RESTRICT' });
+  ChatMessage.belongsTo(Organization, { foreignKey: 'organizationId', as: 'organization', onDelete: 'RESTRICT', onUpdate: 'RESTRICT' });
+  // Membership composite foreign keys are defined in the migration.
+  ChatMessage.belongsTo(User, { foreignKey: 'senderUserId', as: 'sender', constraints: false });
+  ChatMessage.belongsTo(User, { foreignKey: 'recipientUserId', as: 'recipient', constraints: false });
+  User.hasMany(ChatMessage, { foreignKey: 'senderUserId', as: 'sentChatMessages', constraints: false });
+  User.hasMany(ChatMessage, { foreignKey: 'recipientUserId', as: 'receivedChatMessages', constraints: false });
   initInvalidLoginAttemptModel(sequelize);
   initTokenModel(sequelize);
   initRoleModel(sequelize);
@@ -1446,6 +1457,7 @@ function initModels(sequelize) {
     StorageMigration,
     StorageMigrationItem,
     Message,
+    ChatMessage,
     BugReport,
     BugReportColumn,
   };

@@ -365,6 +365,7 @@ async function listOrganizationUsers(req, res) {
     }
 
     const users = await organization.getUsers({
+      through: { where: { isActive: true } },
       joinTableAttributes: ['id', 'role', 'isActive', 'isPrimary', 'createdAt', 'updatedAt'],
       order: [['createdAt', 'DESC']],
     });
@@ -403,7 +404,7 @@ async function searchAssignableUsers(req, res) {
     const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
 
     const memberships = await OrganizationUser.findAll({
-      where: { organizationId: organization.id },
+      where: { organizationId: organization.id, isActive: true },
       attributes: ['userId'],
     });
     const existingUserIds = memberships.map((row) => row.userId);
@@ -494,7 +495,9 @@ async function removeUserFromOrganization(req, res) {
       const where = {organizationId:organization.id,userId:user.id};
       const membership = await OrganizationUser.findOne({where,transaction});
       if (!membership) throw fail(404, 'User is not a member of this organization.');
-      await OrganizationUser.destroy({where,transaction});
+      // Keep the membership key referenced by retained chat history while
+      // immediately removing access. Reinvitations reactivate this same row.
+      await OrganizationUser.update({isActive:false,isPrimary:false},{where,transaction});
       if (OrganizationUserRole) await OrganizationUserRole.destroy({where,transaction});
       if (Token) {
         const tokens = await Token.findAll({where:{userId:user.id,type:'access',isActive:true},transaction});

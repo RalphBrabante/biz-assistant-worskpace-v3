@@ -317,6 +317,7 @@ app.use('/api/v1/tax-types', taxTypesRoutes);
 app.use('/api/v1/withholding-tax-types', withholdingTaxTypesRoutes);
 app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/messages', messagesRoutes);
+app.use('/api/v1/chat', require('./routes/chat-routes'));
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/bug-reports', bugReportsRoutes);
 app.use('/api/v1/tickets', ticketsRoutes);

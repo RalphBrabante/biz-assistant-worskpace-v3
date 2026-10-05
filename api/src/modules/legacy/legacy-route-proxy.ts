@@ -34,6 +34,7 @@ const { invalidateCacheOnWriteMiddleware } = require('../../middleware/cache');
 const { errorHandler, notFoundHandler } = require('../../middleware/error-handler');
 
 type RouteKey =
+  | 'chat'
   | 'organization-roles'
   | 'vouchers'
   | 'cheques'
@@ -70,6 +71,7 @@ type RouteConfig = {
 };
 
 const ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+  chat: { prefix: '/api/v1/chat', router: require('../../routes/chat-routes'), protected: true },
   'organization-roles': {prefix:'/api/v1/organization-roles',router:organizationRolesRoutes,protected:true},
   vouchers: {prefix: '/api/v1/vouchers', router: vouchersRoutes, protected: true},
   cheques: {prefix: '/api/v1/cheques', router: chequesRoutes, protected: true},

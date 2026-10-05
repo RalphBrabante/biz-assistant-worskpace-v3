@@ -106,6 +106,27 @@ Run migration `20260923040000-order-document-uploads.js` before deploying this U
 
 `POST /api/v1/orders/document-uploads` accepts `document`, `organizationId`, `uploadId` (a client-generated UUID for idempotent retry), and optional `orderId`. Order create/update requests supply up to 10 returned IDs in `uploadIds`; attachment consumption is atomic and checks ownership, expiry, and the target order. `DELETE /api/v1/orders/document-uploads/:uploadId` discards the uploader's temporary file. Existing JSON and single-file multipart create/update requests and dedicated document upload/download endpoints remain supported.
 
+## Organization team chat
+
+The **Team chat** button at the bottom right opens private conversations with other active members of the selected organization. Search members, send text messages (up to 4,000 characters), browse older history, and see unread counts and read receipts. Enter sends a message; Shift+Enter adds a line. Failed sends retain their draft and reuse a request UUID so retries do not duplicate messages. Socket.IO invalidations refresh conversations immediately, with a five-second visible-panel polling fallback and thirty-second unread checks. Chat history is stored in MySQL rather than browser storage.
+
+Incoming messages play a soft notification sound, including while the panel is closed, after your first click or key press in the app. The speaker button in the chat header toggles sound and remembers the preference in this browser. Existing messages and read receipts do not replay sounds. Members display their profile photo or initials alongside their name. Message timestamps show relative minutes/hours for the first 24 hours, then the date and local time; hovering reveals the full date and time.
+
+Apply `20261005000000-create-chat-messages.js` before starting the updated API and client:
+
+```bash
+cd api
+npm run db:migrate
+```
+
+The `chat_messages` table has composite foreign keys from `(organization_id, sender_user_id)` and `(organization_id, recipient_user_id)` to `organization_users (organization_id, user_id)`. These enforce same-organization membership independently of API checks. Every chat request also verifies active memberships and active user status; no role, including superuser, bypasses this requirement. Organization scope and sender identity come from the authenticated session. Only participants can read a conversation or mark their own incoming messages read. Chat has no dependency on directory-management permissions and leaves existing system notifications separate.
+
+Membership removal deactivates the membership row, revokes its sessions and removes its scoped roles while retaining the relationship required by message history. Removed members disappear from active member selectors and cannot access chat; reinviting them reactivates their existing membership. Foreign keys prevent physically deleting users, organizations or memberships referenced by chat history. Use deactivation to retain history. No message-delete or edit API is provided.
+
+Both the Express and NestJS entry points expose `/api/v1/chat/users`, `/api/v1/chat/unread`, and `/api/v1/chat/users/:userId/messages` (GET history and POST send). Sending requires `body` and `clientMessageId` (UUID). History supports exclusive `before` or `after` message UUID cursors, with bounded pages of fifty messages. `POST /api/v1/chat/users/:userId/read` accepts `throughId`; it acknowledges only incoming messages through that displayed boundary. Responses prohibit caching. Socket events contain only an organization ID and are sent to participant user rooms; clients fetch private content through the membership-checked API.
+
+Run `npm run test:chat` in `api` and `client` for security, relationship, retry, pagination and UI regressions. `node api/scripts/verify-chat-mysql.js` additionally verifies the migration and actual controller queries against an empty disposable MySQL database. Set `CHAT_VERIFY_DATABASE` to `chat_verify_<32 hex characters>` and provide `CHAT_VERIFY_USER`, `CHAT_VERIFY_PASSWORD`, and optionally `CHAT_VERIFY_HOST` / `CHAT_VERIFY_PORT`; this verifier refuses the application's database name and any nonempty database. Create and remove the disposable database separately. Deploy with the existing authenticated API and Socket.IO configuration; no new service or production secret is needed.
+
 ## Email tickets
 
 The Email tickets workspace turns Gmail or Hostinger email conversations into organization-scoped tickets with teammate/customer assignment, filtering, priorities, due dates, private notes, and replies. See the [email tickets and Gmail setup guide](docs/email-tickets-setup.md) for deployment, Google OAuth configuration, role permissions, and daily use.

@@ -21,6 +21,8 @@ export class SocketNotificationsService {
   private socket: Socket | null = null;
   private readonly messageCreatedSubject = new Subject<RealtimeMessageEvent>();
   readonly messageCreated$ = this.messageCreatedSubject.asObservable();
+  private readonly chatChangedSubject = new Subject<{ organizationId: string }>();
+  readonly chatChanged$ = this.chatChangedSubject.asObservable();
 
   connect(token: string, organizationId: string): void {
     const authToken = String(token || '').trim();
@@ -42,6 +44,10 @@ export class SocketNotificationsService {
       },
     });
 
+    this.socket.on('chat.changed', (payload: { organizationId: string }) => {
+      if (payload?.organizationId) this.chatChangedSubject.next(payload);
+    });
+
     this.socket.on('message.created', (payload: RealtimeMessageEvent) => {
       if (!payload || !payload.id) {
         return;
@@ -57,4 +63,3 @@ export class SocketNotificationsService {
     }
   }
 }
-
