@@ -39,6 +39,7 @@ import { PrivacyPolicyPageComponent } from './pages/privacy-policy-page/privacy-
 import { TermsOfServicePageComponent } from './pages/terms-of-service-page/terms-of-service-page.component';
 
 export const routes: Routes = [
+  { path: 'pricing', loadComponent: () => import('./pages/pricing-page/pricing-page.component').then(m => m.PricingPageComponent) },
   { path: 'login', component: LoginPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyPageComponent },
   { path: 'terms-of-service', component: TermsOfServicePageComponent },

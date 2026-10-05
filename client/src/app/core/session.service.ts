@@ -78,6 +78,9 @@ export class SessionService {
     clearTimeout(this.expiryTimer);
     this.auth.clearSession();
     this.organization.clearSelectedOrganizationId();
-    void this.router.navigate(['/login'], { replaceUrl: true });
+    // Pricing stays public after expiry/revocation; authenticated content still redirects.
+    if ((this.router.url || '').split(/[?#]/)[0] !== '/pricing') {
+      void this.router.navigate(['/login'], { replaceUrl: true });
+    }
   }
 }

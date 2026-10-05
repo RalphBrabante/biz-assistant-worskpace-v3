@@ -1,0 +1,82 @@
+:host { display:block; }
+.pricing-page { background:var(--bg-main); color:var(--text-main); }
+.pricing-wrap { width:min(1180px, calc(100% - 48px)); margin-inline:auto; }
+.public-header { background:var(--bg-panel); border-bottom:1px solid var(--border-color); }
+.public-nav,.nav-links,.brand-link { display:flex; align-items:center; }
+.public-nav { min-height:82px; justify-content:space-between; gap:16px; }
+.brand-link { gap:10px; color:var(--text-main); font-size:19px; font-weight:600; }
+
+.nav-links { gap:24px; font-size:13px; }
+
+.skip-link { position:fixed; top:-100px; left:16px; z-index:20; padding:12px; background:var(--bg-panel); }
+.skip-link:focus { top:8px; }
+.pricing-hero { max-width:760px; margin:auto; text-align:center; padding:76px 0 36px; }
+.pricing-hero h1 { font-size:clamp(32px,4.3vw,52px); line-height:1.13; margin:20px 0; letter-spacing:-2px; }
+.hero-description { font-size:16px; max-width:590px; margin:0 auto 24px; }
+.preview-notice { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-size:12px; padding:10px 14px; background:var(--brand-soft); border-radius:8px; color:var(--text-main); }
+.tax-note { color:var(--text-soft); font-size:11px; line-height:1.7; margin-top:8px; }
+.billing-section { text-align:center; margin:0 0 45px; }
+.billing-switch { display:inline-flex; background:var(--bg-panel); border:1px solid var(--border-color); border-radius:12px; padding:5px; gap:4px; }
+.billing-switch label { display:flex; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; }
+.billing-switch input { position:absolute; opacity:0; width:1px; height:1px; }
+.billing-switch label:has(:focus-visible) { outline:2px solid var(--brand); outline-offset:2px; }
+.billing-switch .selected { background:var(--brand-soft); color:var(--brand); font-weight:600; }
+.saving-pill { font-size:10px; color:var(--success); background:var(--success-soft); border-radius:4px; padding:3px 6px; }
+.billing-note { margin:12px auto 0; }
+.plan-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+.plan-card { position:relative; padding:30px; }
+.recommended-card { border-color:var(--brand); }
+.plan-badge { position:absolute; top:-14px; left:18px; right:18px; border-radius:6px; background:#5955d9; color:white; text-align:center; padding:5px 8px; font-size:10px; font-weight:500; }
+
+
+.tier-dot.silver { background:#8984dd; }.tier-dot.gold { background:#be9d4e; }
+.plan-card h2 { font-size:25px; }
+.plan-description { min-height:55px; margin:10px 0 22px; }
+.plan-price { font-size:clamp(30px,3vw,40px); font-weight:600; letter-spacing:-1.5px; white-space:nowrap; }
+
+.price-explanation { min-height:38px; }
+.plan-card>.ui-btn { width:100%; margin:24px 0; }
+.capacity-list,.core-features { display:grid; gap:14px; font-size:12px; }
+.capacity-list li,.core-features li { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+.features-label { border-top:1px solid var(--border-color); margin-top:26px; padding-top:22px; color:var(--text-soft); font-size:10px; }
+.core-features { gap:10px; margin-top:12px; }.core-features i,.included { color:var(--success); }
+.proposal-caption { margin:20px auto 0; max-width:850px; text-align:center; }
+.pricing-section { margin-top:80px; scroll-margin-top:24px; }
+.section-heading { display:flex; align-items:end; justify-content:space-between; gap:20px; margin-bottom:24px; }
+.pricing-section h2 { font-size:28px; margin:10px 0; }
+
+.table-scroll { overflow-x:auto; }
+.comparison { width:100%; min-width:660px; border-collapse:collapse; font-size:12px; }
+.comparison th,.comparison td { padding:17px 22px; border-bottom:1px solid var(--border-color); text-align:left; }
+.comparison th { font-weight:500; }.comparison thead th { font-size:14px; font-weight:600; padding-block:23px; }
+.comparison small { display:block; margin-top:6px; color:var(--text-soft); font-size:10px; }
+.comparison .group-row th { padding-block:11px; background:var(--bg-subtle); font-size:10px; font-weight:600; }
+.group-row span { font-weight:400; margin-left:12px; }.included { white-space:nowrap; }
+.footnote { margin-top:16px; }
+.addon-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.addon-card { padding:24px; }
+.addon-card h3 { font-size:14px; }.addon-card p { min-height:38px; margin:10px 0 20px; }
+.addon-price { font-size:23px; font-weight:600; }.addon-price small { display:block; font-size:11px; }
+.estimator { display:grid; grid-template-columns:1.15fr 1fr; overflow:hidden; }
+.inputs,.quote { padding:34px; }.quote { background:var(--bg-subtle); border-left:1px solid var(--border-color); }
+.estimator-selects { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin-top:24px; }
+.quote h3 { font-size:23px; margin:12px 0; }
+.quote-lines { margin:26px 0 20px; display:grid; gap:16px; font-size:12px; }.quote-lines>div { display:flex; justify-content:space-between; gap:14px; }.quote-lines small { display:block; margin-top:4px; }.quote-lines dd { white-space:nowrap; }
+.quote-total { border-top:1px solid var(--border-color); padding-top:22px; display:grid; gap:6px; font-size:11px; }.quote-total strong { font-size:36px; overflow-wrap:anywhere; }
+.quote .ui-btn { white-space:normal; margin-top:22px; text-align:center; width:100%; }.large-note { background:var(--warning-soft); color:var(--text-main); padding:12px; border-radius:8px; margin-top:14px; font-size:12px; }
+.faq-section { display:grid; grid-template-columns:1fr 1.65fr; gap:55px; }.faq-list details { border-bottom:1px solid var(--border-color); }.faq-list summary { display:flex; justify-content:space-between; align-items:center; gap:24px; cursor:pointer; padding:21px 0; font-size:13px; }.faq-list details[open] summary i { transform:rotate(45deg); }.faq-list details p { padding:0 20px 22px 0; }
+.final-cta { text-align:center; background:var(--brand-soft); padding:52px 24px; border-radius:18px; margin:80px 0; }.final-cta h2 { font-size:32px; margin:15px 0; letter-spacing:-1px; }.final-cta p { margin:0 auto 24px; max-width:500px; }
+.footer { display:flex; justify-content:space-between; gap:20px; border-top:1px solid var(--border-color); padding-block:24px; }.footer>div { display:flex; gap:22px; }
+
+.request-dialog { width:min(660px,calc(100% - 24px)); max-height:calc(100dvh - 32px); overflow:auto; background:var(--bg-panel); color:var(--text-main); border:1px solid var(--border-color); border-radius:18px; padding:28px; }
+.dialog-head { display:flex; align-items:start; justify-content:space-between; gap:12px; margin-bottom:20px; }.dialog-head h2 { font-size:25px; margin-top:8px; }.contact-fields { display:grid; gap:16px; margin-bottom:24px; }.marketing-option { display:flex; align-items:start; gap:10px; }
+.dialog-actions { display:flex; justify-content:space-between; gap:12px; margin-top:22px; }.request-subtotal { border-top:1px solid var(--border-color); padding-top:20px; margin-top:20px; font-size:12px; }.confirmation>i { color:var(--success); font-size:36px; }.honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+@media(max-width:1000px) { .plan-card { padding:24px; }.addon-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.plan-price { font-size:32px; }.inputs,.quote { padding:26px; } }
+@media(max-width:760px) { .pricing-wrap { width:calc(100% - 32px); }.public-nav { min-height:72px; }.nav-links { gap:12px; }.brand-link { font-size:16px; }.brand-mark { display:none; }.nav-links>a:first-child { display:none; }.pricing-hero { padding:48px 0 28px; }.pricing-hero h1 { letter-spacing:-1px; }.preview-notice { line-height:1.7; text-align:left; }.plan-grid { grid-template-columns:1fr; gap:30px; max-width:470px; margin:auto; }.plan-description { min-height:0; }.plan-price { font-size:40px; }.price-explanation { min-height:0; }.pricing-section { margin-top:56px; }.section-heading { display:block; }.estimator,.faq-section { grid-template-columns:1fr; }.quote { border-left:0; border-top:1px solid var(--border-color); }.faq-section { gap:20px; }.final-cta { margin:56px 0; }.footer { flex-direction:column; }.request-dialog { padding:22px; }.dialog-actions { flex-wrap:wrap; } }
+@media(max-width:450px) { .addon-grid,.estimator-selects { grid-template-columns:1fr; }.billing-switch label { padding-inline:12px; }.inputs,.quote { padding:22px; }.addon-card p { min-height:0; }.footer>div { flex-wrap:wrap; }.plan-card { padding:26px; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+
+.hero-description,.price-explanation,.marketing-option,.final-cta p,.plan-description,.price-caption,.billing-note,.proposal-caption,.footnote,.section-heading>p,.recommended-note,.addon-card p,.quote-lines small,.faq-list details p,.footer { color:var(--text-soft); font-size:12px; line-height:1.8; }
+
+.hero-description { font-size:16px; }
