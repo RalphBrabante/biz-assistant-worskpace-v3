@@ -1,0 +1,79 @@
+<section class="border rounded-lg p-4 mb-6" *ngIf="preparation as prep">
+  <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+    <h3 class="font-semibold">{{ prep.form ? 'BIR ' + prep.form : 'Quarterly business tax' }} PDF · Q{{ prep.quarter }} {{ prep.year }}</h3>
+    <span class="ui-badge ui-badge-light border">Calendar quarter · PHP</span>
+  </div>
+  <div class="ui-alert ui-alert-warning" *ngIf="!prep.supported">{{ prep.reason }}</div>
+  <ng-container *ngIf="prep.supported">
+    <p class="text-xs text-muted mb-3">Review these details against your BIR Certificate of Registration. Amounts use this quarter's issued invoices and active expenses. Changes apply to this PDF only.</p>
+    <div class="ui-grid grid grid-cols-12 gap-3 mb-4">
+      <div class="col-span-12 md:col-span-6" *ngFor="let field of identityFields">
+        <label class="ui-form-label" [for]="'bir-' + field.key">{{ field.label }}</label>
+        <input class="ui-form-control" [id]="'bir-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+      </div>
+      <div class="col-span-12 md:col-span-6">
+        <label class="ui-form-label" for="bir-amended">Amended return?</label>
+        <select id="bir-amended" class="ui-form-select" [ngModel]="details['amended']" (ngModelChange)="update('amended', $event)"><option [ngValue]="false">No</option><option [ngValue]="true">Yes</option></select>
+      </div>
+      <div class="col-span-12 md:col-span-6" *ngIf="prep.form === '2550Q'">
+        <label class="ui-form-label" for="bir-size">BIR taxpayer size classification</label>
+        <select id="bir-size" class="ui-form-select" [ngModel]="details['taxpayerSize']" (ngModelChange)="update('taxpayerSize', $event)">
+          <option value="">Select registered classification</option><option value="micro">Micro</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
+        </select>
+      </div>
+    </div>
+    <ng-container *ngIf="prep.form === '2551Q'">
+      <p class="text-xs mb-3">General Section 116 percentage tax · ATC PT010 · {{ prep.rate }}% for this quarter. Special industry ATCs require separate preparation.</p>
+      <div class="ui-alert ui-alert-warning" *ngIf="prep.possibleEightPercentElection">The organization is configured for 8% income tax. Verify its annual election in organization settings; an eligible individual who elected 8% is exempt from Section 116 percentage tax.</div>
+      <label class="ui-form-label" for="bir-election" *ngIf="prep.individual">Income tax election for this year</label>
+      <select id="bir-election" class="ui-form-select mb-3" *ngIf="prep.individual" [ngModel]="details['incomeTaxElection']" (ngModelChange)="update('incomeTaxElection', $event)">
+        <option value="unconfirmed">Select the election for this tax year</option><option value="graduated">Graduated income tax rates</option><option value="eight_percent">8% income tax election (percentage tax exemption)</option>
+      </select>
+      <label class="ui-form-label" for="bir-percentage-sales">Quarterly percentage-tax sales base (PHP)</label>
+      <input id="bir-percentage-sales" class="ui-form-control mb-4" type="number" min="0" step="0.01" [ngModel]="details['percentageSales']" (ngModelChange)="update('percentageSales', $event)" />
+    </ng-container>
+    <ng-container *ngIf="prep.form === '2550Q'">
+      <div class="ui-alert ui-alert-warning" *ngIf="prep.unclassifiedSales > 0">PHP {{ prep.unclassifiedSales | number:'1.2-2' }} in sales has no VAT classification. Allocate it between zero-rated, exempt or VATable sales before generating.</div>
+      <p class="text-xs text-muted mb-3">Sales classifications must total PHP {{ recordedSales | number:'1.2-2' }}. Purchases initially appear as domestic; reallocate imports and nonresident services where applicable. Validate supplier invoices and claimable input VAT.</p>
+      <div class="ui-grid grid grid-cols-12 gap-3 mb-4">
+        <div class="col-span-12 md:col-span-6" *ngFor="let field of vatFields">
+          <label class="ui-form-label" [for]="'bir-' + field.key">{{ field.label }} (PHP)</label>
+          <input class="ui-form-control" type="number" min="0" step="0.01" [id]="'bir-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+        </div>
+      </div>
+    </ng-container>
+    <details class="mb-4">
+      <summary class="font-semibold cursor-pointer">Adjustments, credits and penalties</summary>
+      <p class="text-xs text-muted my-3">Enter verified amounts and retain supporting documents. Income-tax withholding is separate from VAT/percentage-tax credits. Complete applicable BIR schedules and relief details before filing.</p>
+      <p class="text-xs text-muted mb-3" *ngIf="prep.form === '2550Q'">Returns with recovered input VAT on settled payables (Item 58) require separate preparation because the official PDF contains an inconsistent Item 59 formula.</p>
+      <div class="ui-grid grid grid-cols-12 gap-3">
+        <ng-container *ngIf="prep.form === '2550Q'">
+          <div class="col-span-12 md:col-span-6" *ngFor="let field of vatAdjustmentFields">
+            <label class="ui-form-label" [for]="'bir-' + field.key">{{ field.label }} (PHP)</label>
+            <input class="ui-form-control" type="number" min="0" step="0.01" [id]="'bir-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+          </div>
+        </ng-container>
+        <div class="col-span-12 md:col-span-6" *ngFor="let field of creditFields">
+          <label class="ui-form-label" [for]="'bir-' + field.key">{{ field.label }} (PHP)</label>
+          <input class="ui-form-control" type="number" min="0" step="0.01" [id]="'bir-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+        </div>
+        <div class="col-span-12">
+          <label class="ui-form-label" for="bir-other-credits">Other credit/payment description</label>
+          <input id="bir-other-credits" class="ui-form-control" [ngModel]="details['otherCreditsDescription']" (ngModelChange)="update('otherCreditsDescription', $event)" />
+        </div>
+      </div>
+    </details>
+    <p class="text-xs text-muted mb-3">The PDF uses the official BIR form and is a draft for review and signature. Generation does not file the return or pay tax. Fiscal-year returns and special schedules need separate preparation.</p>
+    <div class="ui-alert ui-alert-danger" role="alert" *ngIf="error()">{{ error() }}</div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="ui-btn ui-btn-primary" *ngIf="canGenerate" [disabled]="generating() || details['incomeTaxElection'] === 'unconfirmed' || details['incomeTaxElection'] === 'eight_percent'" (click)="generate()"><i class="bi bi-file-earmark-pdf mr-1"></i>{{ generating() ? 'Generating PDF...' : 'Generate ' + prep.form + ' PDF' }}</button>
+      <ng-container *ngIf="preview()">
+        <button type="button" class="ui-btn ui-btn-outline-primary" (click)="download()"><i class="bi bi-download mr-1"></i>Download PDF</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="!loaded()" (click)="print()"><i class="bi bi-printer mr-1"></i>Print</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary" (click)="open()">Open PDF</button>
+      </ng-container>
+    </div>
+    <p class="text-xs text-muted mt-3" *ngIf="prep.individual && details['incomeTaxElection'] === 'eight_percent'">An eligible individual who elected 8% does not owe Section 116 percentage tax. Confirm the election and required income-tax filings.</p>
+    <iframe #pdfFrame *ngIf="preview() as url" [src]="url" title="Populated quarterly BIR return PDF" (load)="loaded.set(true)" class="w-full border rounded-lg mt-4" style="height: 780px"></iframe>
+  </ng-container>
+</section>

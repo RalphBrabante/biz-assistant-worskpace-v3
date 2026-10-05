@@ -58,4 +58,8 @@ export class ApiService {
   download(endpoint: string): Observable<Blob> {
     return this.http.get(endpoint, { responseType: 'blob' });
   }
+
+  generatePdf(endpoint: string, payload: Record<string, unknown>): Observable<Blob> {
+    return this.http.post(endpoint, payload, { responseType: 'blob', headers: this.bypassSwHeaders });
+  }
 }

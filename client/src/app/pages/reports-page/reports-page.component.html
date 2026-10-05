@@ -6,8 +6,8 @@
     <div class="flex flex-wrap justify-between items-end gap-4">
       <div>
         <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Tax Filing</div>
-        <h1 class="text-2xl font-semibold tracking-tight mb-2">Quarterly Reports</h1>
-        <p class="text-muted mb-0">Generate and save quarterly totals for both sales invoices and expenses.</p>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Reports &amp; Tax Documents</h1>
+        <p class="text-muted mb-0">Prepare quarterly returns and supporting reports. Preview, print and download PDFs for the selected period.</p>
       </div>
     </div>
   </div>
@@ -51,9 +51,9 @@
     <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
       <div>
         <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-1">BIR Filing Center</div>
-        <h2 class="text-base font-semibold mb-1">Filing Worksheets</h2>
+        <h2 id="quarter-document-center" class="text-base font-semibold mb-1">Q{{ selectedQuarter() }} {{ selectedYear() }} · Document Center</h2>
         <div class="text-muted text-xs">
-          {{ quarterLabel(selectedQuarter()) }} {{ selectedYear() }} preparation summary based on saved quarterly reports.
+          {{ quarterLabel(selectedQuarter()) }} {{ selectedYear() }} preparation summary based on current quarterly transactions.
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -75,23 +75,34 @@
           [disabled]="generatingFilingReports()"
           (click)="generateSelectedQuarterFilingReports()"
         >
-          <i class="bi bi-file-earmark-spreadsheet mr-1"></i>{{ generatingFilingReports() ? 'Generating...' : 'Generate Filing Reports' }}
+          <i class="bi bi-file-earmark-spreadsheet mr-1"></i>{{ generatingFilingReports() ? 'Saving...' : 'Save Quarter Totals' }}
         </button>
       </div>
     </div>
 
+    <div class="text-sm text-muted mb-4" role="status" *ngIf="loadingFilingSummary()">Loading documents for Q{{ selectedQuarter() }} {{ selectedYear() }}…</div>
+    <div class="ui-alert ui-alert-danger mb-4" role="alert" *ngIf="filingSummaryError()">{{ filingSummaryError() }}</div>
+    <app-bir-report-documents
+      *ngIf="filingSummary()"
+      [documents]="filingSummary()?.documents || []"
+      [businessTax]="filingSummary()?.taxReturn || null"
+      [organizationId]="filingSummary()?.organization?.id || ''"
+      [canGenerate]="canGenerateReports && !isContextLocked"
+      [initialDocumentId]="initialDocumentId()"
+      (exportCsv)="downloadFilingCsv($event)"
+      (exportXlsx)="downloadGimoStatement($event)"
+    />
+
+    <details>
+      <summary class="font-semibold cursor-pointer mb-4">Quarter totals, estimates &amp; CSV/XLSX worksheets</summary>
     <ng-container *ngIf="filingWorksheet() as worksheet">
-      <div class="ui-alert ui-alert-danger flex items-start gap-2 mb-4" *ngIf="filingSummaryError()">
-        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
-        <div>{{ filingSummaryError() }}</div>
-      </div>
 
       <div class="ui-alert ui-alert-info flex items-start gap-2 mb-6">
         <i class="bi bi-info-circle-fill mt-1"></i>
         <div>
           <div class="font-semibold">Worksheet only</div>
           <div>
-            These figures prepare filing review. Generate exact BIR forms only after validating taxpayer type,
+            These figures prepare filing review. Use the PDF preparation above to generate the business-tax return after validating taxpayer type,
             adjustments, credits, prior payments, and BIR form line requirements.
           </div>
         </div>
@@ -434,6 +445,7 @@
         </div>
       </ng-template>
     </ng-container>
+    </details>
   </div>
 </section>
 
@@ -503,6 +515,9 @@
                class="ui-dropdown-item">
                 <i class="bi bi-eye"></i>
                Open Preview</a>
+              <button type="button" class="ui-dropdown-item" *ngIf="canPrepareQuarterPdf(row)" (click)="prepareQuarterPdf(row, 'SALES')" title="Prepare a PDF from this quarter’s current records">
+                <i class="bi bi-file-earmark-pdf"></i> Prepare PDF
+              </button>
               <button
                 *ngIf="canGenerateReports"
 
@@ -610,6 +625,9 @@
                class="ui-dropdown-item">
                 <i class="bi bi-eye"></i>
                Open Preview</a>
+              <button type="button" class="ui-dropdown-item" *ngIf="canPrepareQuarterPdf(row)" (click)="prepareQuarterPdf(row, 'EXPENSES')" title="Prepare a PDF from this quarter’s current records">
+                <i class="bi bi-file-earmark-pdf"></i> Prepare PDF
+              </button>
               <button
                 *ngIf="canGenerateReports"
 

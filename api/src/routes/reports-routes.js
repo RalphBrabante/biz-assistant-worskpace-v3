@@ -11,6 +11,8 @@ const {
   getQuarterlyExpenseReportPreviewById,
   deleteQuarterlyExpenseReport,
   getBirFilingSummary,
+  generateBirTaxReturnPdf,
+  generateBirReportDocumentPdf,
 } = require('../controllers/reports-controller');
 const { authorize } = require('../middleware/authz');
 const { readCacheMiddleware } = require('../middleware/cache');
@@ -27,6 +29,8 @@ router.get('/quarterly-expenses', authorize('reports.read'), readCacheMiddleware
 router.get('/quarterly-expenses/:id', authorize('reports.read'), readCacheMiddleware, getQuarterlyExpenseReportById);
 router.get('/quarterly-expenses/:id/preview', authorize('reports.read'), readCacheMiddleware, getQuarterlyExpenseReportPreviewById);
 router.delete('/quarterly-expenses/:id', authorize('reports.delete'), deleteQuarterlyExpenseReport);
+router.post('/bir-tax-return/pdf', authorize('reports.generate'), generateBirTaxReturnPdf);
+router.post('/bir-document/pdf', authorize('reports.generate'), generateBirReportDocumentPdf);
 router.get('/bir-filing-summary', authorize('reports.read'), readCacheMiddleware, getBirFilingSummary);
 
 module.exports = router;

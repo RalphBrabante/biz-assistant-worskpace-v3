@@ -1,0 +1,95 @@
+<div class="mb-6" *ngIf="businessTax as business">
+  <div class="text-sm font-semibold mb-3">Business tax return</div>
+  <button type="button" class="w-full text-left text-ink border rounded-lg p-4 transition-colors hover:border-brand" [class.border-brand]="selectedId === 'business'" [class.bg-brand-soft]="selectedId === 'business'" [class.bg-surface]="selectedId !== 'business'" [attr.aria-pressed]="selectedId === 'business'" (click)="select('business')">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="font-semibold"><i class="bi bi-file-earmark-pdf mr-2"></i>{{ business.form ? 'BIR ' + business.form : 'Business tax' }}</span>
+      <span class="ui-badge ui-badge-light border">Q{{ business.quarter }} {{ business.year }}</span>
+    </div>
+    <div class="text-xs mt-2" [class.text-brand]="selectedId === 'business'" [class.text-muted]="selectedId !== 'business'">{{ business.form === '2550Q' ? 'Quarterly value-added tax return' : 'Quarterly percentage tax return' }} · Official BIR PDF</div>
+    <div class="text-xs mt-1" *ngIf="!business.supported" [class.text-brand]="selectedId === 'business'" [class.text-muted]="selectedId !== 'business'">{{ business.reason }}</div>
+  </button>
+</div>
+
+<div class="mb-6" *ngFor="let category of categories">
+  <h3 class="text-sm font-semibold mb-3">{{ category }}</h3>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+    <button type="button" class="text-left text-ink border rounded-lg p-4 transition-colors hover:border-brand" *ngFor="let doc of categoryDocuments(category)" [class.border-brand]="selectedId === doc.id" [class.bg-brand-soft]="selectedId === doc.id" [class.bg-surface]="selectedId !== doc.id" [attr.aria-pressed]="selectedId === doc.id" (click)="select(doc.id)">
+      <div class="flex flex-wrap justify-between items-start gap-2">
+        <span class="font-semibold">{{ doc.title }}</span>
+        <span class="ui-badge ui-badge-light border">{{ doc.annual ? 'Annual' : 'Q' + doc.quarter }} {{ doc.year }}</span>
+      </div>
+      <div class="text-xs mt-2" [class.text-brand]="selectedId === doc.id" [class.text-muted]="selectedId !== doc.id">{{ doc.description }}</div>
+      <div class="text-xs mt-2" [class.text-brand]="selectedId === doc.id" [class.text-muted]="!doc.supported && selectedId !== doc.id">{{ doc.supported ? 'Prepare & preview PDF' : 'View applicability' }}<span *ngIf="doc.lineCount !== undefined"> · {{ doc.lineCount }} records</span></div>
+    </button>
+  </div>
+</div>
+
+<details class="border rounded-lg p-4 mb-6">
+  <summary class="font-semibold cursor-pointer">Year-end returns · full taxable year</summary>
+  <p class="text-xs text-muted mt-3 mb-3">Income-tax quarterly returns cover Q1–Q3. Q4 income forms part of the annual return; VAT/percentage tax and withholding returns still cover Q4.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div class="border rounded-lg p-3" *ngFor="let doc of categoryDocuments('Annual returns')">
+      <div class="font-semibold">{{ doc.title }} · Annual {{ doc.year }}</div>
+      <div class="text-xs text-muted mt-2">{{ doc.reason }}</div>
+      <a *ngIf="doc.officialUrl" [href]="doc.officialUrl" target="_blank" rel="noopener noreferrer" class="ui-btn ui-btn-outline-secondary ui-btn-sm mt-3">Official BIR forms</a>
+    </div>
+  </div>
+</details>
+
+<app-bir-tax-return *ngIf="selectedId === 'business'" [preparation]="businessTax" [organizationId]="organizationId" [canGenerate]="canGenerate" />
+
+<section class="border rounded-lg p-4 mb-6" *ngIf="selected as doc">
+  <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+    <div>
+      <h3 class="font-semibold mb-1">{{ doc.title }} · {{ doc.periodLabel }}</h3>
+      <p class="text-xs text-muted">{{ doc.periodStart | date:'MMM d, y' }} – {{ doc.periodEnd | date:'MMM d, y' }} · {{ doc.description }}</p>
+    </div>
+    <span class="ui-badge ui-badge-light border">{{ doc.fields.length ? 'Official BIR form · Draft' : 'Report PDF' }}</span>
+  </div>
+  <div class="ui-alert ui-alert-warning" *ngIf="!doc.supported">{{ doc.reason }}</div>
+  <ng-container *ngIf="doc.supported">
+    <div class="text-xs text-muted mb-3" *ngFor="let warning of doc.warnings">{{ warning }}</div>
+    <p class="text-xs text-muted mb-4" *ngIf="doc.fields.length">Review registered details and applicable amounts. Edits affect this draft. Generating a PDF does not file a return or remit tax.</p>
+    <ng-container *ngFor="let group of groups">
+      <fieldset class="mb-5" *ngIf="fields(group.key).length">
+        <legend class="text-sm font-semibold mb-3">{{ group.label }}</legend>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div *ngFor="let field of fields(group.key)" [ngClass]="{ 'md:col-span-2': field.type === 'checkbox' }">
+            <ng-container *ngIf="field.type !== 'checkbox'; else checkboxField">
+              <label class="ui-form-label" [for]="'report-doc-' + field.key">{{ field.label }}{{ field.type === 'amount' || field.type === 'signedAmount' ? ' (PHP)' : '' }}</label>
+              <select *ngIf="field.type === 'select'; else inputField" class="ui-form-select" [id]="'report-doc-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)">
+                <option *ngFor="let option of field.options" [value]="option.value">{{ option.label }}</option>
+              </select>
+              <ng-template #inputField>
+                <input class="ui-form-control" [id]="'report-doc-' + field.key" [type]="field.type === 'date' ? 'date' : field.type === 'amount' || field.type === 'signedAmount' || field.type === 'year' ? 'number' : 'text'" [attr.min]="field.type === 'amount' ? 0 : null" [attr.step]="field.type === 'year' ? 1 : field.type === 'amount' || field.type === 'signedAmount' ? '0.01' : null" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+              </ng-template>
+            </ng-container>
+            <ng-template #checkboxField>
+              <label class="flex items-start gap-2 text-sm" [for]="'report-doc-' + field.key">
+                <input class="mt-1" type="checkbox" [id]="'report-doc-' + field.key" [ngModel]="details[field.key]" (ngModelChange)="update(field.key, $event)" />
+                <span>{{ field.label }}</span>
+              </label>
+            </ng-template>
+          </div>
+        </div>
+      </fieldset>
+    </ng-container>
+    <div class="ui-alert ui-alert-danger" role="alert" *ngIf="error()">{{ error() }}</div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="ui-btn ui-btn-primary" *ngIf="canGenerate" [disabled]="generating()" (click)="generate()"><i class="bi bi-file-earmark-pdf mr-1"></i>{{ generating() ? 'Generating PDF…' : 'Generate ' + doc.title + ' PDF' }}</button>
+      <button type="button" class="ui-btn ui-btn-outline-secondary" *ngIf="doc.id === 'SAWT'" (click)="exportCsv.emit('sawt')">CSV worksheet</button>
+      <button type="button" class="ui-btn ui-btn-outline-secondary" *ngIf="doc.id === 'QAP'" (click)="exportCsv.emit('qap')">CSV worksheet</button>
+      <button type="button" class="ui-btn ui-btn-outline-secondary" *ngIf="doc.id === 'SLS'" (click)="exportXlsx.emit('sales')">XLSX worksheet</button>
+      <button type="button" class="ui-btn ui-btn-outline-secondary" *ngIf="doc.id === 'SLP'" (click)="exportXlsx.emit('purchases')">XLSX worksheet</button>
+      <ng-container *ngIf="preview()">
+        <button type="button" class="ui-btn ui-btn-outline-primary" (click)="download()">Download PDF</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary" [disabled]="!loaded()" (click)="print()">Print</button>
+        <button type="button" class="ui-btn ui-btn-outline-secondary" (click)="open()">Open PDF</button>
+      </ng-container>
+    </div>
+    <div class="mt-4" *ngIf="preview() as url">
+      <div class="text-sm font-semibold mb-2">Preview · {{ doc.title }} · {{ doc.periodLabel }}</div>
+      <iframe #pdfFrame [src]="url" [title]="doc.title + ' PDF ' + doc.periodLabel" (load)="loaded.set(true)" class="w-full border rounded-lg" style="height: 780px"></iframe>
+    </div>
+  </ng-container>
+</section>

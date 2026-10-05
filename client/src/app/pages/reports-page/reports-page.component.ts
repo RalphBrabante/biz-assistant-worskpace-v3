@@ -1,3 +1,5 @@
+import { TaxReturnPreparation } from '../../shared/bir-tax-return.component';
+import { BirReportDocumentsComponent, ReportDocumentPreparation } from '../../shared/bir-report-documents.component';
 import {RowActionsComponent} from '../../shared/row-actions.component';
 import { Subscription } from 'rxjs';
 import { OrganizationRequiredComponent } from '../../shared/organization-required.component';
@@ -84,6 +86,8 @@ interface WithholdingPayeeSummary {
 }
 
 interface BirFilingSummary {
+  taxReturn?: TaxReturnPreparation;
+  documents?: ReportDocumentPreparation[];
   organization?: OrganizationTaxInfo & {
     name?: string;
     legalName?: string;
@@ -239,7 +243,7 @@ interface BirFilingSummary {
 @Component({
   selector: 'app-reports-page',
   standalone: true,
-  imports: [RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [BirReportDocumentsComponent, RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './reports-page.component.html',
   styleUrl: '../../shared/report-tables.css',
 })
@@ -250,6 +254,7 @@ export class ReportsPageComponent {
   private readonly organizationContext: OrganizationContextService;
   private salesRequest?: Subscription;
   private expenseRequest?: Subscription;
+  private filingSummaryRequest?: Subscription;
 
   constructor(api: ApiService, auth: AuthService, confirmDialog: ConfirmDialogService, organizationContext: OrganizationContextService) {
     this.api = api;
@@ -286,6 +291,7 @@ export class ReportsPageComponent {
   readonly loadingFilingSummary = signal(false);
   readonly filingSummaryError = signal('');
   readonly generatingFilingReports = signal(false);
+  readonly initialDocumentId = signal('business');
 
   salesPage = 1;
   salesPageSize = 20;
@@ -394,7 +400,7 @@ export class ReportsPageComponent {
   }
 
   get businessTaxFormLabel(): string {
-    return this.isPercentageTaxOrganization ? 'BIR 2551Q' : 'BIR 2550Q';
+    return this.filingSummary()?.businessTax.form ? `BIR ${this.filingSummary()?.businessTax.form}` : 'Tax type not set';
   }
 
   get businessTaxWorksheetTitle(): string {
@@ -472,6 +478,8 @@ export class ReportsPageComponent {
   }
 
   loadBirFilingSummary(): void {
+    this.filingSummaryRequest?.unsubscribe();
+    this.filingSummary.set(null);
     if (this.isContextLocked) {
       this.loadingFilingSummary.set(false);
       this.filingSummary.set(null);
@@ -494,7 +502,7 @@ export class ReportsPageComponent {
       quarter: String(this.selectedQuarter()),
     });
 
-    this.api.get<BirFilingSummary>(`/api/v1/reports/bir-filing-summary?${params.toString()}`).subscribe({
+    this.filingSummaryRequest = this.api.getFresh<BirFilingSummary>(`/api/v1/reports/bir-filing-summary?${params.toString()}`).subscribe({
       next: (response) => {
         this.loadingFilingSummary.set(false);
         const summary = response.data || null;
@@ -516,6 +524,23 @@ export class ReportsPageComponent {
         this.filingSummaryError.set(err?.error?.message || 'Unable to load BIR filing summary.');
       },
     });
+  }
+
+  canPrepareQuarterPdf(row: { organizationId: string }): boolean {
+    return this.canGenerateReports && !this.isContextLocked && row.organizationId === this.orgParamValue;
+  }
+
+  prepareQuarterPdf(row: { organizationId: string; year: number; quarter: number }, documentId: 'SALES' | 'EXPENSES'): void {
+    if (!this.canPrepareQuarterPdf(row)) return;
+    this.selectedYear.set(row.year);
+    this.selectedQuarter.set(row.quarter);
+    this.initialDocumentId.set(documentId);
+    this.salesPage = 1;
+    this.expensePage = 1;
+    this.loadSalesReports();
+    this.loadExpenseReports();
+    this.loadBirFilingSummary();
+    document.getElementById('quarter-document-center')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   organizationLabelById(organizationId: string): string {
@@ -924,6 +949,7 @@ export class ReportsPageComponent {
   }
 
   ngOnDestroy(): void {
+    this.filingSummaryRequest?.unsubscribe();
     this.salesRequest?.unsubscribe();
     this.expenseRequest?.unsubscribe();
   }

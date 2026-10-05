@@ -18,6 +18,7 @@ function setup() {
   }).outputText;
   vm.runInNewContext(source, {
     module, exports: module.exports, URLSearchParams,
+    document: { getElementById: () => ({ scrollIntoView() {} }) },
     require(name) {
       if (name === '@angular/core') return {
         Component: () => value => value, computed: fn => fn,
@@ -27,7 +28,7 @@ function setup() {
     },
   });
   const page = new module.exports.ReportsPageComponent(api,
-    { currentUser: () => ({ roleCodes: [], organizationId: 'org-a' }) }, {},
+    { currentUser: () => ({ roleCodes: [], organizationId: 'org-a' }), hasPermission: () => true }, {},
     { getActiveOrganizationId: () => 'org-a' });
   page.persistTablePreferences = () => {};
   page.loadOrganizationTaxInfo = () => {};
@@ -36,6 +37,23 @@ function setup() {
   page.selectedQuarter.set(2);
   return { page, requests };
 }
+
+test('filing summaries cancel earlier quarter requests and discard stale PDF preparation', () => {
+  const { page, requests } = setup();
+  delete page.loadBirFilingSummary;
+  page.api.getFresh = url => {
+    const stream = new Subject(); requests.push({ url, stream }); return stream;
+  };
+  page.loadBirFilingSummary();
+  page.selectedQuarter.set(3); page.loadBirFilingSummary();
+  assert.equal(requests[0].stream.observed, false);
+  requests[0].stream.next({ data: { year: 2026, quarter: 2, taxReturn: { form: '2551Q' } } });
+  assert.equal(page.filingSummary(), null);
+  requests[1].stream.next({ data: { year: 2026, quarter: 3, taxReturn: { form: '2550Q' } } });
+  assert.equal(page.filingSummary().quarter, 3);
+  page.loadBirFilingSummary(); assert.equal(page.filingSummary(), null);
+  page.ngOnDestroy(); assert.equal(requests[2].stream.observed, false);
+});
 
 for (const [type, load, rows, latest, loading] of [
   ['sales', 'loadSalesReports', 'salesRows', 'latestSalesReport', 'loadingSales'],
@@ -111,5 +129,24 @@ test('year changes reset both pages and pagination keeps the selected year', () 
     assert.equal(params.get('page'), '2');
     assert.equal(params.get('year'), '2025');
   }
+  page.ngOnDestroy();
+});
+
+test('saved-report PDF actions prepare the exact quarter in the selected organization', () => {
+  const { page, requests } = setup();
+  let summaries = 0;
+  page.loadBirFilingSummary = () => { summaries++; };
+  page.prepareQuarterPdf({ organizationId: 'org-a', year: 2025, quarter: 4 }, 'EXPENSES');
+  assert.equal(page.selectedYear(), 2025);
+  assert.equal(page.selectedQuarter(), 4);
+  assert.equal(page.initialDocumentId(), 'EXPENSES');
+  assert.equal(summaries, 1);
+  assert.equal(requests.length, 2);
+  page.prepareQuarterPdf({ organizationId: 'org-b', year: 2026, quarter: 2 }, 'SALES');
+  assert.equal(page.selectedYear(), 2025);
+  assert.equal(page.initialDocumentId(), 'EXPENSES');
+  assert.equal(summaries, 1);
+  page.auth.hasPermission = () => false;
+  assert.equal(page.canPrepareQuarterPdf({ organizationId: 'org-a' }), false);
   page.ngOnDestroy();
 });

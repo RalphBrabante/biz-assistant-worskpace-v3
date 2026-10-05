@@ -24,7 +24,7 @@ fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 for (const file of [
   'server.js', 'scripts/runtime-config.cjs', 'scripts/migrate.cjs',
-  'api/dist', 'api/package.json', 'api/package-lock.json',
+  'api/dist', 'api/assets', 'api/package.json', 'api/package-lock.json',
   'client/dist/angular-client/browser',
 ]) copy(file);
 fs.writeFileSync(path.join(output, 'package.json'), JSON.stringify({

@@ -1,3 +1,7 @@
+const { TaxReturnError, prepareTaxReturn, computeTaxReturn, section116Rate } = require('../services/bir-tax-return');
+const { renderTaxReturnPdf } = require('../services/bir-tax-return-pdf');
+const { prepareReportDocuments, computeReportDocument } = require('../services/bir-report-documents');
+const { renderReportDocumentPdf } = require('../services/bir-report-documents-pdf');
 const { quarterlyExpenseTotals } = require('../services/quarterly-expense-totals');
 const { Op, fn, col } = require('sequelize');
 const { getModels } = require('../sequelize');
@@ -969,7 +973,7 @@ async function deleteQuarterlyExpenseReport(req, res, next) {
   }
 }
 
-async function getBirFilingSummary(req, res, next) {
+async function respondBirFilingSummary(req, res, next, pdf = false) {
   try {
     const models = getModels();
     if (
@@ -1041,7 +1045,8 @@ async function getBirFilingSummary(req, res, next) {
     const { periodStart, periodEnd } = getQuarterDates(year, quarter);
     const taxType = organization.taxType || null;
     const taxTypeCode = String(taxType?.code || '').toUpperCase();
-    const taxRate = toNumber(taxType?.percentage);
+    const taxRate = isPercentageTaxType(taxType || {}) && toNumber(taxType?.percentage) === 3
+      ? section116Rate(year, quarter) : toNumber(taxType?.percentage);
 
     const salesAggregates = await SalesInvoice.findOne({
       where: {
@@ -1050,7 +1055,7 @@ async function getBirFilingSummary(req, res, next) {
           [Op.between]: [periodStart, periodEnd],
         },
         status: {
-          [Op.ne]: 'void',
+          [Op.notIn]: ['void', 'draft'],
         },
       },
       attributes: [
@@ -1176,7 +1181,7 @@ async function getBirFilingSummary(req, res, next) {
           [Op.between]: [periodStart, periodEnd],
         },
         status: {
-          [Op.ne]: 'void',
+          [Op.notIn]: ['void', 'draft'],
         },
       },
       attributes: [
@@ -1220,10 +1225,10 @@ async function getBirFilingSummary(req, res, next) {
       ],
     });
 
-    const grossReceipts = roundCurrency(toNumber(salesAggregates?.subtotalAmount));
-    const outputVat = isVatTaxType(taxType) ? roundCurrency(toNumber(salesAggregates?.taxAmount)) : 0;
-    const inputVat = isVatTaxType(taxType) ? roundCurrency(toNumber(expenseAggregates?.taxAmount)) : 0;
-    const percentageTaxDue = isPercentageTaxType(taxType)
+    const grossReceipts = roundCurrency(salesInvoiceDetails.reduce((sum, row) => sum + toNumber(row.toJSON().taxableAmount), 0));
+    const outputVat = isVatTaxType(taxType || {}) ? roundCurrency(toNumber(salesAggregates?.taxAmount)) : 0;
+    const inputVat = isVatTaxType(taxType || {}) ? roundCurrency(toNumber(expenseAggregates?.taxAmount)) : 0;
+    const percentageTaxDue = isPercentageTaxType(taxType || {})
       ? roundCurrency(grossReceipts * (taxRate / 100))
       : 0;
     const deductibleExpenses = roundCurrency(toNumber(expenseAggregates?.totalAmount));
@@ -1340,9 +1345,9 @@ async function getBirFilingSummary(req, res, next) {
         referenceNumber: json.invoiceNumber || json.id,
         customerName: safeName(customer.legalName, customer.name, 'Unclassified customer'),
         customerTin: safeName(customer.taxId),
-        grossSales: roundCurrency(toNumber(json.totalAmount)),
-        taxableSales: roundCurrency(toNumber(json.subtotalAmount)),
-        outputVat: isVatTaxType(taxType) ? roundCurrency(toNumber(json.taxAmount)) : 0,
+        grossSales: roundCurrency(toNumber(json.taxableAmount) + toNumber(json.taxAmount)),
+        taxableSales: roundCurrency(toNumber(json.taxableAmount)),
+        outputVat: isVatTaxType(taxType || {}) ? roundCurrency(toNumber(json.taxAmount)) : 0,
         withholdingTaxTypeId: json.withholdingTaxTypeId || '',
         atcCode: json.withholdingTaxType?.code || '',
         withholdingTypeName: json.withholdingTaxType?.name || '',
@@ -1359,9 +1364,9 @@ async function getBirFilingSummary(req, res, next) {
         referenceNumber: json.expenseNumber || json.id,
         vendorName: safeName(vendor.legalName, vendor.name, 'Unclassified vendor'),
         vendorTin: safeName(vendor.taxId, json.vendorTaxId),
-        grossPurchases: roundCurrency(toNumber(json.totalAmount || json.amount)),
-        taxablePurchases: roundCurrency(toNumber(json.taxableAmount || json.amount)),
-        inputVat: isVatTaxType(taxType) ? roundCurrency(toNumber(json.taxAmount)) : 0,
+        grossPurchases: roundCurrency(toNumber(json.amount)),
+        taxablePurchases: roundCurrency(toNumber(json.amount) - toNumber(json.receiptVatAmount ?? json.taxAmount)),
+        inputVat: isVatTaxType(taxType || {}) ? roundCurrency(toNumber(json.taxAmount)) : 0,
         withholdingTaxTypeId: json.withholdingTaxTypeId || '',
         atcCode: json.withholdingTaxType?.code || '',
         withholdingTypeName: json.withholdingTaxType?.name || '',
@@ -1370,10 +1375,10 @@ async function getBirFilingSummary(req, res, next) {
       };
     });
 
-    return res.status(200).json({
-      code: 'SUCCESS',
-      message: 'BIR filing summary computed successfully.',
-      data: {
+    const taxReturn = prepareTaxReturn(organization.toJSON ? organization.toJSON() : organization,
+      salesInvoiceDetails.map(row => row.toJSON()), expenseDetails.map(row => row.toJSON()), year, quarter);
+    const data = {
+        taxReturn,
         organization: {
           id: organization.id,
           name: organization.name,
@@ -1415,7 +1420,7 @@ async function getBirFilingSummary(req, res, next) {
           amountWithheld: roundCurrency(toNumber(expenseAggregates?.withHoldingTaxAmount)),
         },
         businessTax: {
-          form: isPercentageTaxType(taxType) ? '2551Q' : '2550Q',
+          form: isPercentageTaxType(taxType || {}) ? '2551Q' : isVatTaxType(taxType || {}) ? '2550Q' : '',
           taxTypeCode,
           taxTypeName: taxType?.name || '',
           rate: taxRate,
@@ -1469,18 +1474,73 @@ async function getBirFilingSummary(req, res, next) {
             lines: qapLines,
           },
           slsp: {
-            supported: isVatTaxType(taxType),
+            supported: isVatTaxType(taxType || {}),
             salesLineCount: slspSalesLines.length,
             purchaseLineCount: slspPurchaseLines.length,
             sales: slspSalesLines,
             purchases: slspPurchaseLines,
           },
         },
-      },
-    });
+    };
+    if (pdf !== true) {
+      const partyAttributes = ['id', 'name', 'legalName', 'taxId', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'];
+      const [yearInvoices, yearExpenses] = await Promise.all([
+        SalesInvoice.findAll({ where: { organizationId, issueDate: { [Op.between]: [`${year}-01-01`, `${year}-12-31`] }, status: { [Op.notIn]: ['void', 'draft'] } },
+          include: [{ model: Order, as: 'order', required: false, include: [{ model: Customer, as: 'customer', attributes: partyAttributes, required: false }] },
+            { model: WithholdingTaxType, as: 'withholdingTaxType', required: false }], order: [['issueDate', 'ASC'], ['id', 'ASC']] }),
+        Expense.findAll({ where: { organizationId, expenseDate: { [Op.between]: [`${year}-01-01`, `${year}-12-31`] }, status: { [Op.ne]: 'cancelled' } },
+          include: [{ model: Vendor, as: 'vendor', attributes: partyAttributes, required: false },
+            { model: WithholdingTaxType, as: 'withholdingTaxType', required: false }], order: [['expenseDate', 'ASC'], ['id', 'ASC']] }),
+      ]);
+      data.documents = prepareReportDocuments(organization, yearInvoices, yearExpenses, year, quarter);
+      if (pdf === 'document') {
+        const prep = data.documents.find(document => document.id === req.body?.documentId);
+        if (!prep) throw new TaxReturnError('Select a supported report document.');
+        if (req.body?.sourceRevision !== prep.sourceRevision) throw new TaxReturnError('Records or organization settings changed. Refresh the report center and review the updated figures before generating.');
+        const prepared = computeReportDocument(prep, req.body?.details, yearInvoices, yearExpenses);
+        const bytes = await renderReportDocumentPdf(prepared);
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="bir-${prep.id}-${year}-${prep.annual ? 'annual' : `q${quarter}`}.pdf"`);
+        res.set('Cache-Control', 'private, no-store');
+        res.set('X-Content-Type-Options', 'nosniff');
+        return res.status(200).send(bytes);
+      }
+    }
+    if (pdf === true) {
+      if (req.body?.sourceRevision !== taxReturn.sourceRevision) throw new TaxReturnError('Quarterly records or organization settings changed. Refresh the filing summary and review the updated amounts before generating.');
+      const prepared = computeTaxReturn(taxReturn, req.body?.details);
+      const bytes = await renderTaxReturnPdf({ ...prepared, periodStart, periodEnd });
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', `inline; filename="bir-${prepared.form}-${year}-q${quarter}.pdf"`);
+      res.set('Cache-Control', 'private, no-store');
+      res.set('X-Content-Type-Options', 'nosniff');
+      return res.status(200).send(bytes);
+    }
+    return res.status(200).json({ code: 'SUCCESS', message: 'BIR filing summary computed successfully.', data });
   } catch (err) {
+    if (err instanceof TaxReturnError) return res.status(400).json({ code: 'BAD_REQUEST', message: err.message });
     return next(err);
   }
+}
+
+async function getBirFilingSummary(req, res, next) {
+  return respondBirFilingSummary(req, res, next);
+}
+
+async function generateBirTaxReturnPdf(req, res, next) {
+  if (req.body?.year === undefined || parseYear(req.body.year) === null || parseQuarter(req.body?.quarter) === null) {
+    return res.status(400).json({ code: 'BAD_REQUEST', message: 'A valid year and quarter (1 to 4) are required.' });
+  }
+  req.query = { ...req.query, year: req.body?.year, quarter: req.body?.quarter };
+  return respondBirFilingSummary(req, res, next, true);
+}
+
+async function generateBirReportDocumentPdf(req, res, next) {
+  if (req.body?.year === undefined || parseYear(req.body.year) === null || parseQuarter(req.body?.quarter) === null) {
+    return res.status(400).json({ code: 'BAD_REQUEST', message: 'A valid year and quarter (1 to 4) are required.' });
+  }
+  req.query = { ...req.query, year: req.body.year, quarter: req.body.quarter };
+  return respondBirFilingSummary(req, res, next, 'document');
 }
 
 module.exports = {
@@ -1495,4 +1555,6 @@ module.exports = {
   getQuarterlyExpenseReportPreviewById,
   deleteQuarterlyExpenseReport,
   getBirFilingSummary,
+  generateBirTaxReturnPdf,
+  generateBirReportDocumentPdf,
 };
