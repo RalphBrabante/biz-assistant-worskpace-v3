@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const rx = require('rxjs');
 
-function setup() {
+function setup(url = '/reports') {
   let token = 'token-a', verified = false;
   const pending = [], redirects = [], timers = [], events = {};
   const sessionVerified = () => verified;
@@ -17,7 +17,7 @@ function setup() {
     updateCurrentUser(user) { this.user = user; },
   };
   const deps = { auth, http: { get() { const stream = new rx.Subject(); pending.push(stream); return stream; } },
-    router: { navigate: (...args) => redirects.push(args) }, organization: { clearSelectedOrganizationId() {} } };
+    router: { url, navigate: (...args) => redirects.push(args) }, organization: { clearSelectedOrganizationId() {} } };
   const mocks = {
     '@angular/core': { Injectable: () => value => value, inject: key => deps[key] },
     '@angular/common/http': { HttpClient: 'http' }, '@angular/router': { Router: 'router' },
@@ -68,6 +68,17 @@ test('tab focus revalidates in the background without hiding the shell; revocati
   e.events.focus(); assert.equal(e.verified(), true);
   e.events.visibilitychange(); assert.equal(e.pending.length, 2);
   e.pending[1].error({ status: 401 }); assert.equal(e.auth.token(), ''); assert.equal(e.redirects.length, 1);
+});
+test('pricing remains public after expiry or revalidation failure while protected pages redirect', () => {
+  for (const url of ['/pricing', '/pricing#compare', '/pricing?capacity=7']) {
+    const e = setup(url); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+    e.timers.at(-1)(); assert.equal(e.auth.token(), ''); assert.equal(e.verified(), false); assert.equal(e.redirects.length, 0);
+    const rejected = setup(url); rejected.service.validate().subscribe(); rejected.pending[0].error({ status: 401 });
+    assert.equal(rejected.auth.token(), ''); assert.equal(rejected.redirects.length, 0);
+  }
+  for (const url of ['/reports', '/orders', '/pricing-private']) {
+    const e = setup(url); e.service.validate().subscribe(); e.pending[0].error({ status: 401 }); assert.equal(e.redirects[0][0][0], '/login');
+  }
 });
 
 test('repeated navigation reuses server verification even during a background check', () => {

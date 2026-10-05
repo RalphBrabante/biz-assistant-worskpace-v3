@@ -7,6 +7,11 @@ import { AuthService } from './auth.service';
 import { OrganizationContextService } from './organization-context.service';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  // Public pricing is independent of login, license, and active organization.
+  const pathname = req.url.split('?')[0];
+  if ((req.method === 'GET' && pathname === '/api/v1/pricing/catalogue')
+    || (req.method === 'POST' && pathname === '/api/v1/pricing/requests')) return next(req);
+
   const auth = inject(AuthService);
   const router = inject(Router);
   const organizationContext = inject(OrganizationContextService);

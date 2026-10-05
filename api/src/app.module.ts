@@ -1,3 +1,4 @@
+import { PricingModule } from './modules/pricing/pricing.module';
 import {VouchersModule} from './modules/vouchers/vouchers.module';
 import {ChequesModule} from './modules/cheques/cheques.module';
 import {OrganizationRolesModule} from './modules/organization-roles/organization-roles.module';
@@ -31,6 +32,7 @@ import { DevModule } from './modules/dev/dev.module';
 
 @Module({
   imports: [
+    PricingModule,
     OrganizationRolesModule,
     BanksModule,
     ChequesModule,

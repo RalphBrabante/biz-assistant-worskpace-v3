@@ -1,0 +1,89 @@
+<div class="pricing-page">
+  <a class="skip-link" href="/pricing#pricing-main">Skip to pricing</a>
+  <header class="public-header">
+    <nav class="pricing-wrap public-nav" aria-label="Public navigation">
+      <a routerLink="/pricing" class="brand-link" aria-label="GIMO Biz Assistant pricing"><span class="brand-mark"><i class="bi bi-grid" aria-hidden="true"></i></span><span>biz assistant<span class="text-brand">.</span></span></a>
+      <div class="nav-links"><a href="/pricing#compare">Compare plans</a><button type="button" class="topbar-icon" (click)="theme.toggle()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-sun]="theme.isDark()" [class.bi-moon-stars]="!theme.isDark()" aria-hidden="true"></i></button><a routerLink="/login" class="ui-btn ui-btn-outline-secondary">Log in <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></div>
+    </nav>
+  </header>
+  <main id="pricing-main" tabindex="-1" class="pricing-wrap">
+    <section class="pricing-hero" aria-labelledby="pricing-title">
+      <span class="section-eyebrow">GIMO BIZ ASSISTANT · LAUNCH PLANS</span>
+      <h1 id="pricing-title">One workspace for your team and client organizations.</h1>
+      <p class="hero-description">Choose the capacity your practice needs, with flexible add-ons as you grow.</p>
+      <p class="preview-notice"><i class="bi bi-info-circle" aria-hidden="true"></i> Launch pricing preview. No payment is collected through this page.</p>
+      <p class="tax-note">Tax treatment will be confirmed before purchase.</p>
+    </section>
+    <div *ngIf="loading" class="p-12 text-center" role="status">Loading the pricing catalogue…</div>
+    <div *ngIf="loadError" class="ui-alert ui-alert-danger p-12 text-center" role="alert">{{ loadError }} <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="loadCatalogue()">Retry</button></div>
+    <ng-container *ngIf="catalogue as catalog">
+      <section aria-label="Choose a billing cycle" class="billing-section">
+        <fieldset class="billing-switch"><legend class="sr-only">Billing cycle</legend><label [class.selected]="cycle === 'monthly'"><input type="radio" name="billing-cycle" value="monthly" [ngModel]="cycle" (ngModelChange)="setCycle($event)" />Monthly</label><label [class.selected]="cycle === 'annual'"><input type="radio" name="billing-cycle" value="annual" [ngModel]="cycle" (ngModelChange)="setCycle($event)" />Annual <span class="saving-pill">2 months free</span></label></fieldset>
+        <p class="billing-note">2 months free with annual billing. <span *ngIf="cycle === 'annual'">Annual totals are payable upfront for 12 months; monthly equivalents are explanatory, not installments.</span><span *ngIf="cycle === 'monthly'">Pay monthly, or choose the proposed annual upfront price.</span></p>
+      </section>
+      <section class="plan-grid" aria-label="Workspace plans">
+        <article *ngFor="let plan of catalog.plans" class="ui-card plan-card" [class.recommended-card]="plan.id === 'silver'" [attr.data-plan]="plan.id">
+          <div class="plan-badge" *ngIf="plan.badge">{{ plan.badge }}</div>
+          <div class="flex items-center gap-2 mb-3"><span class="tier-dot" [class]="'w-2 h-2 rounded-full bg-[#b68361] tier-dot ' + plan.id"></span><span class="section-eyebrow">{{ plan.descriptor }}</span></div>
+          <h2>{{ plan.name }}</h2><p class="plan-description">{{ plan.description }}</p>
+          <div class="plan-price">{{ money(price(plan)) }}</div><p class="price-caption">per billing workspace / {{ cycle === 'monthly' ? 'month' : 'year' }}</p>
+          <p class="price-explanation" *ngIf="cycle === 'annual'">{{ money(plan.annualAmountMinor / 12) }} monthly equivalent · billed upfront</p>
+          <p class="price-explanation" *ngIf="cycle === 'monthly'">{{ money(plan.annualAmountMinor) }} / year with annual billing</p>
+          <p class="tax-note">Tax treatment will be confirmed before purchase.</p>
+          <button class="ui-btn ui-btn-lg" [class.ui-btn-primary]="plan.id === 'silver'" [class.ui-btn-outline-secondary]="plan.id !== 'silver'" type="button" (click)="openRequest(plan.id)">Request {{ plan.name }} <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+          <ul class="capacity-list"><li><i class="bi bi-buildings" aria-hidden="true"></i><strong>{{ plan.includedOrganizations }}</strong> {{ plan.includedOrganizations === 1 ? 'organization' : 'organizations' }}</li><li><i class="bi bi-people" aria-hidden="true"></i><strong>{{ plan.includedUsers }}</strong> full-access users</li><li><i class="bi bi-cloud" aria-hidden="true"></i><strong>{{ plan.includedStorageGB }} GB</strong> hosted storage</li><li><i class="bi bi-envelope" aria-hidden="true"></i><strong>{{ plan.includedMailboxes }}</strong> {{ plan.includedMailboxes === 1 ? 'connected mailbox' : 'connected mailboxes' }}</li></ul>
+          <p class="features-label">Same core tools on every plan</p><ul class="core-features"><li *ngFor="let feature of cardFeatures(plan)"><i class="bi bi-check2" aria-hidden="true"></i>{{ feature.label }}</li></ul>
+        </article>
+      </section>
+      <p class="proposal-caption">Proposed workspace allowances. Current organization access stays governed by its permissions; this page does not apply new usage restrictions.</p>
+      <section id="compare" class="pricing-section" aria-labelledby="compare-title">
+        <div class="section-heading"><div><span class="section-eyebrow">THE DETAILS, SIDE BY SIDE</span><h2 id="compare-title">Compare plans</h2></div><p>Choose capacity. Keep your core tools.</p></div>
+        <div class="ui-card table-scroll" tabindex="0" role="region" aria-label="Plan comparison, horizontally scrollable on small screens">
+          <table class="comparison"><caption class="sr-only">Proposed capacity and verified feature availability for Bronze, Silver, and Gold</caption><colgroup><col style="width:43%" /><col span="3" style="width:19%" /></colgroup><thead><tr><th scope="col">Workspace allowance / feature</th><th *ngFor="let plan of catalog.plans" scope="col">{{ plan.name }}</th></tr></thead><tbody>
+            <tr class="group-row"><th scope="rowgroup" colspan="4">Capacity <span>Proposed, pooled per billing workspace</span></th></tr>
+            <tr><th scope="row">Active organizations</th><td *ngFor="let plan of catalog.plans">{{ plan.includedOrganizations }}</td></tr><tr><th scope="row">Full-access users, including owner</th><td *ngFor="let plan of catalog.plans">{{ plan.includedUsers }}</td></tr><tr><th scope="row">Hosted storage (decimal GB)</th><td *ngFor="let plan of catalog.plans">{{ plan.includedStorageGB }} GB</td></tr><tr><th scope="row">Connected mailbox integrations</th><td *ngFor="let plan of catalog.plans">{{ plan.includedMailboxes }}</td></tr>
+            </tbody><tbody *ngFor="let group of featureGroups"><tr class="group-row"><th scope="rowgroup" colspan="4">{{ group }}</th></tr><ng-container *ngFor="let feature of catalog.features"><tr *ngIf="feature.group === group"><th scope="row">{{ feature.label }}<small *ngIf="feature.detail">{{ feature.detail }}</small></th><td *ngFor="let plan of catalog.plans"><span *ngIf="feature.availability === 'available' && plan.includedFeatureIds.includes(feature.id)" class="included"><i class="bi bi-check2" aria-hidden="true"></i> Included</span><span *ngIf="feature.availability !== 'available' || !plan.includedFeatureIds.includes(feature.id)">{{ feature.availability === 'unverified' ? 'Unconfirmed' : feature.availability === 'planned' ? 'Planned — not included' : 'Not included' }}</span></td></tr></ng-container>
+          </tbody></table>
+        </div>
+        <p class="footnote">Tax outputs support preparation and review before official filing. Mailbox integrations require a separately supplied provider account. No support response-time guarantee is offered in this preview.</p>
+      </section>
+      <section class="pricing-section" aria-labelledby="addons-title">
+        <div class="section-heading"><div><span class="section-eyebrow">ROOM TO GROW</span><h2 id="addons-title">Add capacity as you need it</h2></div><p>Recurring add-ons proposed for all three plans.</p></div>
+        <div class="addon-grid"><article class="ui-card addon-card" *ngFor="let addon of catalog.addons"><h3>{{ addon.name }}</h3><p>{{ addon.unit }}</p><div class="addon-price">{{ money(cycle === 'monthly' ? addon.monthlyAmountMinor : addon.annualAmountMinor) }}<small>/ {{ cycle === 'monthly' ? 'month' : 'year' }}</small></div><span class="tax-note">{{ cycle === 'annual' ? 'Annual upfront price for 12 months.' : money(addon.annualAmountMinor) + ' / year with annual billing.' }}</span></article></div>
+        <p class="footnote">Storage and mailboxes are pooled across the proposed workspace. External storage integrations do not expand app-hosted allowances. Tax treatment will be confirmed before purchase.</p>
+      </section>
+      <section id="estimate" class="ui-card pricing-section estimator" aria-labelledby="estimate-title">
+        <div class="inputs"><span class="section-eyebrow">A LITTLE PLANNING GOES A LONG WAY</span><h2 id="estimate-title">Estimate your plan</h2><p class="text-muted mb-6">Tell us the total capacity you need. We’ll compare the base plans plus add-ons.</p>
+          <app-pricing-capacity-fields [group]="capacityForm" />
+          <div class="estimator-selects"><div><label class="ui-form-label" for="estimate-cycle">Billing cycle</label><select class="ui-form-select" id="estimate-cycle" [ngModel]="cycle" (ngModelChange)="setCycle($event)"><option value="monthly">Monthly</option><option value="annual">Annual — upfront</option></select></div><div><label class="ui-form-label" for="estimate-plan">Plan to estimate</label><select class="ui-form-select" id="estimate-plan" [(ngModel)]="selectedPlanId"><option value="">Cheapest eligible plan</option><option *ngFor="let plan of catalog.plans" [value]="plan.id">{{ plan.name }}</option></select></div></div>
+        </div>
+        <div class="quote" aria-live="polite" aria-atomic="true"><ng-container *ngIf="estimate as quote; else invalidEstimate"><span class="section-eyebrow">YOUR CAPACITY ESTIMATE</span><h3>{{ planName(quote.planId) }} + your add-ons</h3><p class="recommended-note" *ngIf="recommended as best">Lowest-cost eligible configuration: {{ planName(best.planId) }} at {{ money(best.subtotalMinor) }} / {{ cycle === 'monthly' ? 'month' : 'year' }}.</p>
+            <dl class="quote-lines"><div><dt>{{ planName(quote.planId) }} base plan</dt><dd>{{ money(quote.baseAmountMinor) }}</dd></div><div *ngFor="let line of quote.lines"><dt>{{ line.name }} × {{ line.quantity }}<small>{{ line.unit }}</small></dt><dd>{{ money(line.amountMinor) }}</dd></div></dl>
+            <div class="quote-total"><span>Subscription subtotal</span><strong>{{ money(quote.subtotalMinor) }}</strong><span>/ {{ cycle === 'monthly' ? 'month' : 'year, payable upfront' }}</span></div><p class="tax-note">Estimate before applicable taxes. Tax treatment will be confirmed before purchase. This is not a binding offer.</p>
+            <p *ngIf="quote.largeConfiguration" class="large-note">Talk to us about a larger Gold configuration.</p>
+            <button type="button" class="ui-btn ui-btn-primary ui-btn-lg" (click)="openEstimateRequest()">Request {{ planName(quote.planId) }} with this capacity <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+          </ng-container><ng-template #invalidEstimate><p role="status">Enter valid quantities to see your estimate. Organizations and users need whole numbers of at least one; mailboxes need a whole number of zero or more.</p></ng-template></div>
+      </section>
+      <section class="pricing-section faq-section" aria-labelledby="faq-title"><div><span class="section-eyebrow">BEFORE YOU CHOOSE</span><h2 id="faq-title">A few useful answers</h2><p class="text-muted">Clear definitions for your team and your clients.</p></div><div class="faq-list"><details *ngFor="let faq of faqs"><summary>{{ faq.question }}<i class="bi bi-plus-lg" aria-hidden="true"></i></summary><p>{{ faq.answer }}</p></details></div></section>
+      <section class="final-cta"><span class="section-eyebrow">LET’S FIND THE RIGHT CAPACITY</span><h2>Make room for your next chapter.</h2><p>Share your workspace needs. We’ll confirm the proposal and tax treatment before purchase.</p><a class="ui-btn ui-btn-primary ui-btn-lg" href="/pricing#estimate">Estimate your plan <i class="bi bi-arrow-right" aria-hidden="true"></i></a></section>
+    </ng-container>
+  </main>
+  <footer class="pricing-wrap footer"><span>GIMO Biz Assistant · Your business, organized.</span><div><a routerLink="/privacy-policy">Privacy Policy</a><a routerLink="/terms-of-service">Terms of Service</a><a routerLink="/login">Log in</a></div></footer>
+</div>
+
+<dialog #requestDialog class="request-dialog" aria-labelledby="request-title" (cancel)="cancelRequest($event)">
+  <div class="dialog-head"><div><span class="section-eyebrow">LAUNCH PRICING PREVIEW</span><h2 id="request-title">Request {{ planName(requestPlanId) }}</h2></div><button class="ui-btn-close" type="button" aria-label="Close plan request" (click)="closeRequest()" [disabled]="submitting"></button></div>
+  <div *ngIf="requestSuccess" class="confirmation text-center p-6" role="status"><i class="bi bi-check-circle" aria-hidden="true"></i><p class="my-5">{{ requestSuccess }}</p><button #requestDone type="button" class="ui-btn ui-btn-primary" (click)="closeRequest()">Done</button></div>
+  <form *ngIf="!requestSuccess" (ngSubmit)="submitRequest()" [attr.aria-busy]="submitting">
+    <p class="text-muted mb-5">We use your contact details to respond to this request. No payment or subscription activation takes place here.</p>
+    <div [formGroup]="contactForm" class="contact-fields"><div *ngFor="let field of ['name', 'email', 'firmName']"><label class="ui-form-label" [for]="'request-' + field">{{ field === 'name' ? 'Name' : field === 'email' ? 'Work email' : 'Firm name (optional)' }}</label><div class="relative"><input class="ui-form-control pr-10" [id]="'request-' + field" [formControlName]="field" [type]="field === 'email' ? 'email' : 'text'" [attr.autocomplete]="field === 'name' ? 'name' : field === 'email' ? 'email' : 'organization'" [attr.maxlength]="field === 'name' ? 120 : field === 'email' ? 254 : 160" [attr.required]="field !== 'firmName' ? '' : null" [class.is-invalid]="invalidContact($any(field))" [attr.aria-invalid]="invalidContact($any(field))" [attr.aria-describedby]="invalidContact($any(field)) ? 'request-' + field + '-error' : null" /><span *ngIf="invalidContact($any(field))" appTooltip tabindex="0" class="field-validation-icon" title="Enter valid contact details." aria-label="Show contact error"><i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i></span></div><span *ngIf="invalidContact($any(field))" class="sr-only" [id]="'request-' + field + '-error'">{{ field === 'email' ? 'Enter a valid work email.' : 'Enter valid contact details within the character limit.' }}</span></div><label class="marketing-option"><input type="checkbox" formControlName="marketingConsent" />I also agree to receive product news by email (optional).</label></div>
+    <fieldset [disabled]="submitting"><legend class="sr-only">Plan and capacity</legend><div class="estimator-selects mb-5"><div><label class="ui-form-label" for="request-plan">Requested plan</label><select class="ui-form-select" id="request-plan" name="request-plan" [(ngModel)]="requestPlanId"><option *ngFor="let plan of catalogue?.plans" [value]="plan.id">{{ plan.name }}</option></select></div><div><label class="ui-form-label" for="request-cycle">Billing cycle</label><select class="ui-form-select" id="request-cycle" name="request-cycle" [(ngModel)]="requestCycle"><option value="monthly">Monthly</option><option value="annual">Annual — upfront</option></select></div></div><app-pricing-capacity-fields [group]="requestCapacityForm" prefix="request-" /></fieldset>
+    <div class="honeypot" aria-hidden="true"><label for="request-website">Leave this field empty</label><input id="request-website" name="website" [(ngModel)]="website" tabindex="-1" autocomplete="off" /></div>
+    <p *ngIf="requestEstimate as quote" class="request-subtotal">Estimate: <strong>{{ money(quote.subtotalMinor) }}</strong> / {{ requestCycle === 'monthly' ? 'month' : 'year, upfront' }} before applicable taxes.<span *ngIf="quote.largeConfiguration" class="block">Talk to us about a larger Gold configuration.</span></p>
+    <p class="tax-note">Tax treatment will be confirmed before purchase. This estimate is not a binding offer.</p>
+    <p *ngIf="requestError" class="ui-alert ui-alert-danger mt-4" role="alert">{{ requestError }}</p>
+    <p *ngIf="refreshingChallenge" class="ui-form-text" role="status">Preparing the request form…</p>
+    <div class="dialog-actions"><button class="ui-btn ui-btn-outline-secondary" type="button" (click)="refreshChallenge()" [disabled]="submitting || refreshingChallenge">Refresh form</button><button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" [disabled]="submitting || refreshingChallenge">{{ submitting ? 'Submitting request…' : 'Submit plan request' }}</button></div>
+    <p class="ui-form-text">By submitting, you ask us to respond about this plan. <a routerLink="/privacy-policy" (click)="closeRequest()">Privacy Policy</a></p>
+  </form>
+</dialog>

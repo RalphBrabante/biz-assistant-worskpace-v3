@@ -1,3 +1,4 @@
+const { PricingRequest, PricingRequestLimit, initPricingRequestModels } = require('./pricing-request');
 const {Voucher,initVoucherModel}=require('./voucher');
 const {Cheque,initChequeModel}=require('./cheque');
 const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,initOrganizationRoleModels}=require('./organization-role');
@@ -64,6 +65,7 @@ const { initBugReportModel, BugReport } = require('./bug-report');
 const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-column');
 
 function initModels(sequelize) {
+  initPricingRequestModels(sequelize);
   initEmailTicketModels(sequelize);
   initDebtModels(sequelize);
   initOrganizationRoleModels(sequelize);
@@ -1405,6 +1407,8 @@ function initModels(sequelize) {
   OrganizationRole.belongsToMany(User,{through:OrganizationUserRole,foreignKey:'roleId',otherKey:'userId',as:'members'});
   OrganizationUserRole.belongsTo(OrganizationRole,{foreignKey:'roleId',as:'role'});
   return {
+    PricingRequest,
+    PricingRequestLimit,
     OrganizationRole,OrganizationRolePermission,OrganizationUserRole,
     BankAccount, BankOperation, BankEntry, Cheque, Voucher,
     Debt, DebtPayment,

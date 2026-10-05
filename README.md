@@ -111,3 +111,7 @@ Run migration `20260923040000-order-document-uploads.js` before deploying this U
 The Email tickets workspace turns Gmail or Hostinger email conversations into organization-scoped tickets with teammate/customer assignment, filtering, priorities, due dates, private notes, and replies. See the [email tickets and Gmail setup guide](docs/email-tickets-setup.md) for deployment, Google OAuth configuration, role permissions, and daily use.
 
 Hostinger and Titan mailboxes are configured per organization in the frontend. See the [Hostinger mailbox setup guide](docs/hostinger-email-setup.md).
+
+## Public launch pricing preview
+
+`/pricing` is a lazy-loaded public page with proposed workspace capacity, annual upfront prices, add-ons, and an exact centavo estimator. Plan requests are saved privately by the NestJS pricing module; no payment or subscription is activated. Read [the pricing implementation and launch checklist](docs/public-pricing.md) for migration, secret, proxy, feature evidence, and verification details.
