@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { ThemeService } from './core/theme.service';
+import { NavigationLoadingService } from './core/navigation-loading.service';
 
 @Component({
   selector: 'app-root',
@@ -9,7 +10,7 @@ import { ThemeService } from './core/theme.service';
   template: '<router-outlet></router-outlet>',
 })
 export class AppComponent {
-  constructor(theme: ThemeService) {
+  constructor(theme: ThemeService, _navigation: NavigationLoadingService) {
     theme.init();
   }
 }

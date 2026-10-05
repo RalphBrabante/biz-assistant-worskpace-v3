@@ -21,7 +21,9 @@
         <div class="nav-section-title">{{ section.title }}</div>
         <a *ngFor="let item of section.items; trackBy: trackByNavItem" class="ui-nav-link"
           [routerLink]="item.path" [attr.title]="sidebarCollapsed ? item.label : null"
-          routerLinkActive="active" ariaCurrentWhenActive="page" (click)="closeSidebarAfterNav()">
+          [class.active]="navigation.isActive(item.path)"
+          [attr.aria-current]="navigation.isActive(item.path) && !navigation.navigating() ? 'page' : null"
+          (click)="closeSidebarAfterNav()">
           <i [ngClass]="['bi', item.icon]" aria-hidden="true"></i><span class="nav-label">{{ item.label }}</span>
           <span *ngIf="item.path === '/messages' && unreadMessageCount > 0" class="nav-label ml-auto rounded bg-[#ffffff10] px-1.5 text-[10px]">{{ unreadMessageCount > 99 ? '99+' : unreadMessageCount }}</span>
         </a>
@@ -53,7 +55,13 @@
         <button type="button" (click)="goToProfile()" aria-label="Your profile" class="ml-1"><img *ngIf="userProfileImageUrl" [src]="userProfileImageUrl" class="avatar border" alt="" /><span *ngIf="!userProfileImageUrl" class="avatar bg-brand-soft text-brand">{{ userInitials }}</span></button>
       </div>
     </header>
-    <main id="workspace-content" class="workspace-content" tabindex="-1"><router-outlet></router-outlet></main>
+    <main id="workspace-content" class="workspace-content" tabindex="-1">
+      <div class="page-loading" *ngIf="navigation.loading()" role="status" aria-live="polite">
+        <span class="page-loading-spinner" aria-hidden="true"></span>
+        {{ navigation.navigating() ? 'Opening page…' : 'Loading data…' }}
+      </div>
+      <div [attr.aria-busy]="navigation.loading()"><router-outlet></router-outlet></div>
+    </main>
   </div>
 </div>
 

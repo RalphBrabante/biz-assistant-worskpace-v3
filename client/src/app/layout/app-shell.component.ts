@@ -3,7 +3,7 @@ import { BugReportComponent } from '../shared/bug-report.component';
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, ViewChild, HostListener, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { EMPTY, Subscription, expand, reduce } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
@@ -13,6 +13,7 @@ import { RealtimeMessageEvent, SocketNotificationsService } from '../core/socket
 import { ThemeService } from '../core/theme.service';
 import { OrganizationMessage as SidebarMessage, messageTarget } from '../core/organization-message';
 import { OrganizationMessagesService } from '../core/organization-messages.service';
+import { NavigationLoadingService } from '../core/navigation-loading.service';
 
 interface NavItem {
   label: string;
@@ -36,7 +37,7 @@ interface BeforeInstallPromptEvent extends Event {
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [BugReportComponent, ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [BugReportComponent, ModalDirective, CommonModule, FormsModule, RouterOutlet, RouterLink],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.css',
 })
@@ -52,6 +53,7 @@ export class AppShellComponent {
   readonly organizationContext = inject(OrganizationContextService);
   private readonly socketNotifications = inject(SocketNotificationsService);
   readonly theme = inject(ThemeService);
+  readonly navigation = inject(NavigationLoadingService);
   private readonly router = inject(Router);
 
   readonly navSections: NavSection[] = [

@@ -8,9 +8,11 @@ const rx = require('rxjs');
 function setup() {
   let token = 'token-a', verified = false;
   const pending = [], redirects = [], timers = [], events = {};
+  const sessionVerified = () => verified;
+  sessionVerified.set = value => { verified = value; };
   const auth = {
     token: () => token,
-    sessionVerified: { set: value => { verified = value; } },
+    sessionVerified,
     clearSession() { token = ''; verified = false; },
     updateCurrentUser(user) { this.user = user; },
   };
@@ -61,10 +63,57 @@ test('a late validation response cannot restore a logged-out or replaced session
   assert.equal(e.verified(), false); assert.equal(e.auth.token(), 'new-token');
 });
 
-test('tab focus hides content until revalidation completes and revocation clears session', () => {
+test('tab focus revalidates in the background without hiding the shell; revocation clears session', () => {
   const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
-  e.events.focus(); assert.equal(e.verified(), false);
+  e.events.focus(); assert.equal(e.verified(), true);
+  e.events.visibilitychange(); assert.equal(e.pending.length, 2);
   e.pending[1].error({ status: 401 }); assert.equal(e.auth.token(), ''); assert.equal(e.redirects.length, 1);
+});
+
+test('repeated navigation reuses server verification even during a background check', () => {
+  const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+  e.events.poll();
+  for (let i = 0; i < 20; i++) {
+    let allowed;
+    e.service.validate().subscribe(value => allowed = value);
+    assert.equal(allowed, true);
+  }
+  assert.equal(e.pending.length, 2);
+  assert.equal(e.verified(), true);
+  e.pending[1].next(valid()); e.pending[1].complete();
+});
+
+test('temporary background outages preserve verified access but cold startup still fails closed', () => {
+  for (const error of [{ status: 503 }, { status: 0 }, { name: 'TimeoutError' }]) {
+    const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+    e.events.poll(); e.pending[1].error(error);
+    assert.equal(e.verified(), true); assert.equal(e.auth.token(), 'token-a'); assert.equal(e.redirects.length, 0);
+    const cold = setup(); let allowed;
+    cold.service.validate().subscribe(value => allowed = value); cold.pending[0].error(error);
+    assert.equal(allowed, false); assert.equal(cold.verified(), false);
+  }
+});
+
+test('a replaced or cleared session must be server verified again', () => {
+  const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+  e.setToken('token-b'); let allowed;
+  e.service.validate().subscribe(value => allowed = value);
+  assert.equal(allowed, undefined); assert.equal(e.pending.length, 2);
+  e.pending[1].next(valid()); e.pending[1].complete(); assert.equal(allowed, true);
+  e.auth.clearSession(); e.service.validate().subscribe(value => allowed = value); assert.equal(allowed, false);
+});
+
+test('navigation checks the absolute server expiry even if the expiry timer has been delayed', () => {
+  const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+  e.service.verifiedSession.expiresAt = Date.now() - 1;
+  let allowed; e.service.validate().subscribe(value => allowed = value);
+  assert.equal(allowed, false); assert.equal(e.verified(), false); assert.equal(e.pending.length, 1);
+});
+
+test('server permission updates are applied by background validation', () => {
+  const e = setup(); e.service.validate().subscribe(); e.pending[0].next(valid()); e.pending[0].complete();
+  e.events.poll(); e.pending[1].next({ ...valid(), data: { ...valid().data, user: { id: 'user-a', permissionCodes: [] } } });
+  e.pending[1].complete(); assert.deepEqual(e.auth.user.permissionCodes, []);
 });
 
 function intercept({ status, url = '/api/v1/orders', currentToken = 'token-a', code } = {}) {

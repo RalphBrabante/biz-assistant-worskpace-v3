@@ -1,0 +1,11 @@
+# Responsive navigation
+
+Protected navigation used to await `/api/v1/auth/session` on every child route. Browser focus and visibility checks also cleared `sessionVerified` before checking, hiding the entire application while waiting for the server.
+
+`SessionService` now reuses server verification held in memory for the current token until the server's absolute expiry. Reloading or replacing the session still requires server verification. Route permission guards remain in place. Background validation continues every 60 seconds and on focus/visibility changes, updates current permissions, and shares concurrent checks. A background network failure or timeout preserves an already verified, unexpired session; a cold session fails closed. Expiry, server rejection, authenticated API 401 responses and inactive-license responses still clear the session.
+
+`NavigationLoadingService` starts with the root component, highlights the pending destination immediately, and exposes loading feedback inside the content area without shifting the layout or blocking the menu. It captures API GET requests started during navigation and the first render; the indicator lasts until those requests complete, fail or unsubscribe. Auth checks, unread-count polling, writes and later background reads do not start the indicator. Existing page-specific loading and error states remain available. Navigation cancellation/error restores the current menu, and older requests cannot change a later navigation's loading state. The indicator uses a live status, content `aria-busy`, and reduced-motion styling.
+
+Focused verification: `node --test client/tests/session.test.cjs client/tests/navigation-loading.test.cjs client/tests/ui-interactions.test.cjs`. The session test exercises 20 consecutive navigations with no extra session request, including while a background check is pending. Production compilation: `npm run build --prefix client` (Node 22).
+
+Browser verification uses the compiled application on localhost with a synthetic session and held vendor/expense/invoice responses. This verifies frontend behavior independently of production credentials and server latency; it does not measure production API performance.

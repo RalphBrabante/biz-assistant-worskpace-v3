@@ -13,13 +13,14 @@ export class SessionService {
   private readonly organization = inject(OrganizationContextService);
   private pending?: { token: string; request: Observable<boolean> };
   private expiryTimer?: ReturnType<typeof setTimeout>;
+  private verifiedSession?: { token: string; expiresAt: number };
 
   constructor() {
     // Check server-side revocations even while the user stays on one page.
     setInterval(() => this.recheck(), 60000);
-    window.addEventListener('focus', () => this.recheck(true));
+    window.addEventListener('focus', () => this.recheck());
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.recheck(true);
+      if (document.visibilityState === 'visible') this.recheck();
     });
     window.addEventListener('storage', event => {
       if ((event.key === 'accessToken' || event.key === null) &&
@@ -29,13 +30,22 @@ export class SessionService {
     });
   }
 
-  validate(): Observable<boolean> {
+  validate(forceRefresh = false): Observable<boolean> {
     const token = this.auth.token();
     if (!token) {
+      this.verifiedSession = undefined;
       this.auth.clearSession();
       this.organization.clearSelectedOrganizationId();
       return of(false);
     }
+    // Trust only this tab's server verification, never a persisted token/user alone.
+    // Page navigation stays synchronous while background checks detect revocation.
+    const verified = this.verifiedSession;
+    if (verified?.token === token && verified.expiresAt <= Date.now()) {
+      this.endSession();
+      return of(false);
+    }
+    if (!forceRefresh && verified?.token === token && this.auth.sessionVerified()) return of(true);
     if (this.pending?.token === token) return this.pending.request;
     const request = this.http.get<{ data?: { user?: CurrentUser; expiresAt?: string } }>(
       '/api/v1/auth/session', { headers: { 'ngsw-bypass': 'true', 'Cache-Control': 'no-cache' } }
@@ -50,6 +60,7 @@ export class SessionService {
           return false;
         }
         this.auth.updateCurrentUser(user);
+        this.verifiedSession = { token, expiresAt };
         this.auth.sessionVerified.set(true);
         clearTimeout(this.expiryTimer);
         this.expiryTimer = setTimeout(() => {
@@ -57,7 +68,12 @@ export class SessionService {
         }, Math.min(expiresAt - Date.now(), 2147483647));
         return true;
       }),
-      catchError(() => {
+      catchError(error => {
+        // A temporary background outage must not blank an otherwise valid session.
+        // API 401/license failures still clear it immediately through the interceptor.
+        if (this.auth.token() === token && this.verifiedSession?.token === token &&
+            this.verifiedSession.expiresAt > Date.now() && this.auth.sessionVerified() &&
+            error?.status !== 401 && error?.status !== 403) return of(true);
         if (this.auth.token() === token) this.endSession();
         return of(false);
       }),
@@ -68,14 +84,14 @@ export class SessionService {
     return request;
   }
 
-  private recheck(hideUntilValidated = false): void {
+  private recheck(): void {
     if (!this.auth.token()) return;
-    if (hideUntilValidated) this.auth.sessionVerified.set(false);
-    this.validate().subscribe();
+    this.validate(true).subscribe();
   }
 
   private endSession(): void {
     clearTimeout(this.expiryTimer);
+    this.verifiedSession = undefined;
     this.auth.clearSession();
     this.organization.clearSelectedOrganizationId();
     void this.router.navigate(['/login'], { replaceUrl: true });

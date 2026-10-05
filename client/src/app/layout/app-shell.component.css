@@ -32,3 +32,10 @@
   .notifications-panel { max-height: calc(100dvh - 24px); }
   .notification-viewport { max-height: min(380px, calc(100dvh - 11rem)); }
 }
+.workspace-content { position: relative; }
+.page-loading { position: absolute; top: 2px; right: 34px; z-index: 25; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-panel); color: var(--text-soft); font-size: 12px; line-height: 16px; pointer-events: none; box-shadow: 0 2px 8px #0000000a; }
+.page-loading-spinner { width: 14px; height: 14px; border: 2px solid var(--border-color); border-top-color: var(--brand); border-radius: 50%; animation: page-loading-spin .7s linear infinite; }
+@keyframes page-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .page-loading-spinner { animation: none; } }
+@media (max-width: 1023px) { .page-loading { top: 0; right: 16px; padding-block: 2px; } }
+@media print { .page-loading { display: none; } }
