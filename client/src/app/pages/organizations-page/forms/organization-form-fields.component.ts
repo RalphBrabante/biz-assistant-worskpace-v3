@@ -46,6 +46,7 @@ export class OrganizationFormFieldsComponent {
     if (!c || !this.hasError(name)) return '';
     if (c.hasError('required')) return 'This field is required.';
     if (c.hasError('email')) return 'Enter a valid email address.';
+    if (name === 'rdoCode' && c.hasError('pattern')) return 'Enter exactly three digits, including any leading zero.';
     if (c.hasError('maxlength')) return 'Value is too long.';
     if (c.hasError('min')) return 'Value must be 0 or greater.';
     return 'Invalid value.';

@@ -103,6 +103,7 @@ function controllerFixture(privileged = false) {
   const f = fixture();
   const queried = [];
   const models = {
+    ReportDocument: { create: async payload => { queried.push({ archived: payload }); return { id: 'saved-pdf' }; } },
     Organization: { findByPk: async id => { queried.push({ organization: id }); return f.organization; } },
     TaxType: {}, WithholdingTaxType: {}, Vendor: {}, Order: {}, Customer: {},
     SalesInvoice: { findOne: async options => { queried.push(options); return {}; }, findAll: async options => { queried.push(options); return f.invoices.map(row => ({ toJSON: () => row })); } },
@@ -120,7 +121,7 @@ function controllerFixture(privileged = false) {
     auth: { user: { id: 'user-a', organizationId: 'org-a' }, roleCodes: privileged ? ['superuser'] : [] } };
   const res = { headers: {}, statusCode: 200, status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; }, send(body) { this.body = body; return this; }, set(key, value) { this.headers[key] = value; return this; } };
-  return { controller: module.exports, req, res, queried };
+  return { controller: module.exports, req, res, queried, models };
 }
 test('PDF endpoint ignores organization spoofing by a normal user and uses current quarter records', async () => {
   const { controller, req, res, queried } = controllerFixture();
@@ -138,6 +139,9 @@ test('PDF endpoint ignores organization spoofing by a normal user and uses curre
   assert.equal(res.headers['Cache-Control'], 'private, no-store');
   assert.equal(res.headers['Content-Disposition'], 'inline; filename="bir-2550Q-2026-q3.pdf"');
   assert.ok(Buffer.isBuffer(res.body));
+  const saved = queried.find(query => query.archived).archived;
+  assert.equal(saved.organizationId, 'org-a'); assert.equal(saved.documentCode, '2550Q');
+  assert.deepEqual(saved.pdfContent, res.body);
 });
 
 test('PDF endpoint requires quarter/year and converts taxpayer errors to 400', async () => {
@@ -159,4 +163,10 @@ test('PDF endpoint rejects stale quarterly records instead of silently using an 
   const f = controllerFixture(); f.req.body.sourceRevision = 'older-revision';
   await f.controller.generateBirTaxReturnPdf(f.req, f.res, error => { throw error; });
   assert.equal(f.res.statusCode, 400); assert.match(f.res.body.message, /changed/);
+});
+
+test('generation does not return a PDF preview unless its durable copy was saved', async () => {
+  const f = controllerFixture(); f.models.ReportDocument.create = async () => { throw { name: 'SequelizeDatabaseError', original: { code: 'ER_NO_SUCH_TABLE' } }; };
+  await f.controller.generateBirTaxReturnPdf(f.req, f.res, error => { throw error; });
+  assert.equal(f.res.statusCode, 503); assert.match(f.res.body.message, /Unable to save/); assert.equal(f.res.headers['Content-Type'], undefined);
 });

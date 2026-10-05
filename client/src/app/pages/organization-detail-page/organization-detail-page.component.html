@@ -22,7 +22,7 @@
 <section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="organization">
   <div class="ui-card-body p-6">
     <div class="ui-grid grid grid-cols-12 gap-4">
-      <div class="col-span-12 md:col-span-4"><strong>ID:</strong> <span class="text-xs">{{ organization.id }}</span></div>
+      <div class="col-span-12 md:col-span-3"><strong>ID:</strong> <span class="text-xs">{{ organization.id }}</span></div>
       <div class="col-span-12 md:col-span-4"><strong>Legal Name:</strong> {{ organization.legalName || '-' }}</div>
       <div class="col-span-12 md:col-span-4"><strong>Tax ID:</strong> {{ organization.taxId || '-' }}</div>
       <div class="col-span-12 md:col-span-4"><strong>Email:</strong> {{ organization.contactEmail || '-' }}</div>
@@ -32,9 +32,36 @@
   </div>
 </section>
 
-<section class="ui-card shadow-panel rounded-xl mb-6">
+<section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="canManageMembers">
   <div class="ui-card-body p-6">
-    <h2 class="text-base font-semibold mb-4">Add User To Organization</h2>
+    <h2 class="text-base font-semibold mb-4">Invite user to this organization</h2>
+    <p class="text-muted text-sm mb-3">Choose the user’s role for this organization. They can also belong to other organizations, each with its own access.</p>
+    <p *ngIf="isAccountantInvitation" class="text-muted text-sm mb-4">Accountants can review expenses, sales invoices, vendors, customers, and taxes, and generate or export reports for this organization. They cannot change records or access cheque management.</p>
+    <form class="ui-grid grid grid-cols-12 gap-4 items-end mb-6" (ngSubmit)="inviteUser()">
+      <div class="col-span-12 md:col-span-2">
+        <label for="invite-first-name" class="ui-form-label">First name</label>
+        <input id="invite-first-name" name="inviteFirstName" class="ui-form-control" [(ngModel)]="inviteFirstName" maxlength="100" autocomplete="given-name" />
+      </div>
+      <div class="col-span-12 md:col-span-2">
+        <label for="invite-last-name" class="ui-form-label">Last name</label>
+        <input id="invite-last-name" name="inviteLastName" class="ui-form-control" [(ngModel)]="inviteLastName" maxlength="100" autocomplete="family-name" />
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label for="invite-email" class="ui-form-label">Email</label>
+        <input id="invite-email" name="inviteEmail" class="ui-form-control" type="email" [(ngModel)]="inviteEmail" maxlength="255" required autocomplete="email" />
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label for="invite-role" class="ui-form-label">Organization role</label>
+        <select id="invite-role" name="selectedInviteRoleId" class="ui-form-select" [(ngModel)]="selectedInviteRoleId" required>
+          <option *ngFor="let role of roleOptions; trackBy: trackByRoleOptionId" [value]="role.id">{{ roleLabel(role) }}</option>
+        </select>
+      </div>
+      <div class="col-span-12 md:col-span-2">
+        <button class="ui-btn ui-btn-primary" type="submit" [disabled]="invitingUser || !inviteEmail.trim() || !selectedInviteRoleId">{{ invitingUser ? 'Inviting...' : 'Send invitation' }}</button>
+      </div>
+      <p class="col-span-12 ui-form-text mb-0">Names are required for a new account. Existing users keep their password and can select this organization when signing in.</p>
+    </form>
+    <h2 class="text-base font-semibold mb-4">Add existing user</h2>
 
     <div class="ui-grid grid grid-cols-12 gap-4 items-start">
       <div class="col-span-12 lg:col-span-6">
@@ -102,6 +129,7 @@
               <button
 
                 type="button"
+                *ngIf="canManageMembers"
                 [disabled]="removingUserId === member.id"
                 (click)="removeMember(member.id)"
                class="ui-dropdown-item text-danger">

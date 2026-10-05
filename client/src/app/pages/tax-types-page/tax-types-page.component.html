@@ -10,10 +10,10 @@
         <button class="ui-btn ui-btn-outline-dark" (click)="loadAll()" [disabled]="loading()">
           {{ loading() ? 'Refreshing...' : 'Refresh' }}
         </button>
-        <button class="ui-btn ui-btn-primary" (click)="openTaxCreateModal()" [disabled]="!canManageGlobalTaxes">
+        <button *ngIf="canManageGlobalTaxes" class="ui-btn ui-btn-primary" (click)="openTaxCreateModal()" [disabled]="!canManageGlobalTaxes">
           <i class="bi bi-plus-lg mr-1"></i>Create Tax Type
         </button>
-        <button class="ui-btn ui-btn-outline-primary" (click)="openWithholdingCreateModal()" [disabled]="!canManageWithholding">
+        <button *ngIf="canManageWithholding" class="ui-btn ui-btn-outline-primary" (click)="openWithholdingCreateModal()" [disabled]="!canManageWithholding">
           <i class="bi bi-plus-lg mr-1"></i>Create Withholding Type
         </button>
       </div>
@@ -57,7 +57,7 @@
         </div>
       </div>
     </div>
-    <div *ngIf="!canManageWithholding" class="ui-alert ui-alert-warning mt-4 mb-0 py-2">
+    <div *ngIf="!activeOrganizationId" class="ui-alert ui-alert-warning mt-4 mb-0 py-2">
       Select a specific organization to manage withholding tax types.
     </div>
     <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
@@ -88,12 +88,12 @@
         </tr>
         <tr *ngFor="let row of filteredTaxRows(); trackBy: trackById">
           <ng-container *ngIf="editingTaxId !== row.id; else taxEditRow">
-            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+            <td class="row-actions-cell"><app-row-actions *ngIf="canManageGlobalTaxes" label="Tax types actions">
               <div class="row-action-items">
-                <button type="button" (click)="startTaxEdit(row)" title="Edit" class="ui-dropdown-item">
+                <button *ngIf="canManageGlobalTaxes" type="button" (click)="startTaxEdit(row)" title="Edit" class="ui-dropdown-item">
                   <i class="bi bi-pencil-square"></i>
                  Edit</button>
-                <button
+                <button *ngIf="canManageGlobalTaxes"
 
                   type="button"
                   [disabled]="deletingId() === row.id || !canManageGlobalTaxes"
@@ -164,12 +164,12 @@
         </tr>
         <tr *ngFor="let row of filteredWithholdingRows(); trackBy: trackById">
           <ng-container *ngIf="editingWithholdingId !== row.id; else withholdingEditRow">
-            <td class="row-actions-cell"><app-row-actions label="Tax types actions">
+            <td class="row-actions-cell"><app-row-actions *ngIf="canManageWithholding" label="Tax types actions">
               <div class="row-action-items">
-                <button type="button" (click)="startWithholdingEdit(row)" title="Edit" class="ui-dropdown-item">
+                <button *ngIf="canManageWithholding" type="button" (click)="startWithholdingEdit(row)" title="Edit" class="ui-dropdown-item">
                   <i class="bi bi-pencil-square"></i>
                  Edit</button>
-                <button
+                <button *ngIf="canManageWithholding"
 
                   type="button"
                   [disabled]="deletingId() === row.id || !canManageWithholding"

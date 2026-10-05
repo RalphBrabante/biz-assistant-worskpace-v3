@@ -4,6 +4,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
 import { ApiResponse } from '../../core/types';
 
@@ -59,6 +60,8 @@ interface RoleOption {
 export class OrganizationDetailPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  get canManageMembers(): boolean { return this.auth.isPrivileged(); }
   private readonly confirmDialog = inject(ConfirmDialogService);
 
   organizationId = '';
@@ -70,6 +73,12 @@ export class OrganizationDetailPageComponent {
   selectedUserId = '';
   roleOptions: RoleOption[] = [];
   selectedRoleId = '';
+  selectedInviteRoleId = '';
+  get isAccountantInvitation(): boolean { return this.roleOptions.find(role => role.id === this.selectedInviteRoleId)?.code === 'accountant'; }
+  inviteFirstName = '';
+  inviteLastName = '';
+  inviteEmail = '';
+  invitingUser = false;
 
   loading = false;
   memberLoading = false;
@@ -93,7 +102,7 @@ export class OrganizationDetailPageComponent {
   loadAll(): void {
     this.loadOrganization();
     this.loadMembers();
-    this.loadAssignableRoles();
+    if (this.canManageMembers) this.loadAssignableRoles();
   }
 
   loadOrganization(): void {
@@ -148,6 +157,7 @@ export class OrganizationDetailPageComponent {
     this.api.list<RoleOption>(`/api/v1/organizations/${this.organizationId}/assignable-roles`).subscribe({
       next: (response: ApiResponse<RoleOption[]>) => {
         this.roleOptions = response.data || [];
+        if (!this.selectedInviteRoleId) this.selectedInviteRoleId = this.roleOptions.find(role => role.code === 'accountant')?.id || this.roleOptions.find(role => role.code === 'enduser')?.id || this.roleOptions[0]?.id || '';
         if (!this.selectedRoleId && this.roleOptions.length > 0) {
           this.selectedRoleId = this.roleOptions[0].id;
         }
@@ -170,15 +180,16 @@ export class OrganizationDetailPageComponent {
     this.message = '';
 
     this.api
-      .create(`/api/v1/organizations/${this.organizationId}/users`, {
+      .create<{inviteEmail?: {sent: boolean; message?: string}}>(`/api/v1/organizations/${this.organizationId}/users`, {
         userId,
         roleId: this.selectedRoleId || undefined,
         isActive: true,
       })
       .subscribe({
-        next: () => {
+        next: response => {
           this.assigningUser = false;
-          this.message = 'User added to organization.';
+          if (response.data?.inviteEmail?.sent === false) this.error = response.data.inviteEmail.message || 'User added, but the invitation email could not be sent.';
+          else this.message = 'User added to organization.';
           this.selectedUserId = '';
           this.userOptions = [];
           this.userSearchQuery = '';
@@ -189,6 +200,34 @@ export class OrganizationDetailPageComponent {
           this.error = err?.error?.message || 'Unable to add user to organization.';
         },
       });
+  }
+
+  inviteUser(): void {
+    if (!this.inviteEmail.trim()) {
+      this.error = 'Enter the user’s email address.';
+      return;
+    }
+    this.invitingUser = true;
+    this.error = '';
+    this.message = '';
+    this.api.create<{inviteEmail?: {sent: boolean; message?: string}}>(`/api/v1/organizations/${this.organizationId}/invitations`, {
+      roleId: this.selectedInviteRoleId, email: this.inviteEmail.trim(), firstName: this.inviteFirstName.trim(), lastName: this.inviteLastName.trim(),
+    }).subscribe({
+      next: response => {
+        this.invitingUser = false;
+        if (response.data?.inviteEmail?.sent === false) {
+          this.error = response.data.inviteEmail.message || 'Access added, but the email could not be sent. Retry the invitation.';
+        } else {
+          this.message = 'Invitation sent. Their role applies only to this organization.';
+          this.inviteEmail = this.inviteFirstName = this.inviteLastName = '';
+        }
+        this.loadMembers();
+      },
+      error: err => {
+        this.invitingUser = false;
+        this.error = err?.error?.message || 'Unable to invite user.';
+      },
+    });
   }
 
   async removeMember(userId: string): Promise<void> {
@@ -236,7 +275,8 @@ export class OrganizationDetailPageComponent {
   }
 
   roleLabel(role: RoleOption): string {
-    return role.name ? `${role.name} (${role.code})` : role.code;
+    const labels: Record<string, string> = {administrator: 'Administrator', enduser: 'Standard user', accountant: 'Accountant', inventorymanager: 'Inventory manager'};
+    return labels[role.code] || role.name || role.code;
   }
 
   trackByUserOptionId(index: number, row: UserOption): string {

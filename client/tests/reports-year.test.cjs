@@ -150,3 +150,8 @@ test('saved-report PDF actions prepare the exact quarter in the selected organiz
   assert.equal(page.canPrepareQuarterPdf({ organizationId: 'org-a' }), false);
   page.ngOnDestroy();
 });
+
+test('PDF generation refreshes the saved download table without changing the selected period', () => {
+  const { page } = setup(); page.onPdfSaved(); page.onPdfSaved();
+  assert.equal(page.pdfArchiveRefresh(), 2); assert.equal(page.selectedYear(), 2026); assert.equal(page.selectedQuarter(), 2);
+});

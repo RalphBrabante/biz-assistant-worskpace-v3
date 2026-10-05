@@ -62,6 +62,16 @@ function initOrganizationModel(sequelize) {
         type: DataTypes.STRING(40),
         allowNull: true,
       },
+      rdoCode: {
+        type: DataTypes.STRING(3),
+        allowNull: true,
+        validate: { is: /^\d{3}$/ },
+      },
+      taxpayerSize: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+        validate: { isIn: [['micro', 'small', 'medium', 'large']] },
+      },
       deductionMethod: {
         type: DataTypes.STRING(30),
         allowNull: false,

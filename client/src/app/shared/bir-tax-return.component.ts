@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, Input, OnChanges, OnDestroy, ViewChild, signal } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs';
@@ -27,6 +27,7 @@ export class BirTaxReturnComponent implements OnChanges, OnDestroy {
   @Input() preparation: TaxReturnPreparation | null = null;
   @Input() organizationId = '';
   @Input() canGenerate = false;
+  @Output() pdfSaved = new EventEmitter<void>();
   @ViewChild('pdfFrame') pdfFrame?: ElementRef<HTMLIFrameElement>;
   readonly generating = signal(false);
   readonly error = signal('');
@@ -101,10 +102,12 @@ export class BirTaxReturnComponent implements OnChanges, OnDestroy {
       year: prep.year, quarter: prep.quarter, sourceRevision: prep.sourceRevision, details: { ...this.details },
     }).subscribe({
       next: blob => {
+        if (revision !== this.revision) return;
         this.generating.set(false);
         this.objectUrl = URL.createObjectURL(blob);
         // Only a local URL created from the authenticated PDF response is trusted.
         this.preview.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl));
+        this.pdfSaved.emit();
       },
       error: async err => {
         let message = 'Unable to generate the BIR PDF.';

@@ -1,0 +1,5 @@
+:host { display: block; min-width: 0; }
+.pdf-archive-scroll { max-width: 100%; }
+.pdf-archive-scroll .ui-table { min-width: 48rem; }
+.pdf-report-title { min-width: 12rem; max-width: 20rem; white-space: normal; }
+.pdf-filename { max-width: 19rem; overflow-wrap: anywhere; }

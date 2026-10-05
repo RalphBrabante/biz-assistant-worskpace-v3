@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
+const { effectiveRoleAccess, activeMember } = require('../services/role-access');
 const {
   sendPasswordResetEmail,
   sendEmailVerificationEmail,
@@ -105,7 +106,7 @@ async function listUserActiveOrganizations(models, user) {
     }
   }
 
-  if (user.organizationId) {
+  if (user.organizationId && await activeMember(models, user.id, user.organizationId)) {
     organizationIds.add(user.organizationId);
   }
 
@@ -255,10 +256,8 @@ async function login(req, res) {
       });
     }
 
-    const roleCodes = (user.roles || []).map((role) =>
-      String(role.code || '').toLowerCase()
-    );
-    const isSuperuser = roleCodes.includes('superuser');
+    const globalAccess = await effectiveRoleAccess(models, user, null);
+    const isSuperuser = globalAccess.roleCodes.includes('superuser');
 
     let effectiveOrganizationId = null;
     let organizationName = '';
@@ -382,15 +381,8 @@ async function login(req, res) {
       lastLoginAt: new Date(),
     });
 
-    const permissionCodes = [];
-    for (const role of user.roles || []) {
-      for (const permission of role.permissions || []) {
-        const code = String(permission.code || '').toLowerCase();
-        if (code && !permissionCodes.includes(code)) {
-          permissionCodes.push(code);
-        }
-      }
-    }
+    const {roleCodes, permissions} = await effectiveRoleAccess(models, user, effectiveOrganizationId);
+    const permissionCodes = Array.from(permissions);
 
     return res.status(200).json({
       ok: true,

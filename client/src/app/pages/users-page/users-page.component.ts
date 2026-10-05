@@ -185,6 +185,7 @@ export class UsersPageComponent {
   }
 
   createUser(): void {
+    if (this.submitting()) return;
     if (this.createUserForm.invalid) {
       this.createUserForm.markAllAsTouched();
       this.createModalError.set('Please complete all required user fields.');
@@ -221,17 +222,10 @@ export class UsersPageComponent {
         const inviteEmail = response.data?.inviteEmail;
         const inviteSent = inviteEmail?.sent !== false;
 
-        if (!inviteSent) {
-          this.createModalError.set(
-            inviteEmail?.message || 'User was created, but invite email could not be sent.'
-          );
-          this.message.set(response.message || 'User created successfully.');
-          this.load();
-          return;
-        }
-
         this.isCreateModalOpen.set(false);
-        this.message.set(response.message || 'User created successfully.');
+        this.message.set(inviteSent
+          ? response.message || 'User created successfully.'
+          : inviteEmail?.message || 'User was created, but invite email could not be sent.');
         this.load();
       },
       error: (err) => {
@@ -452,17 +446,17 @@ export class UsersPageComponent {
     const defaults = this.newUserForm(true);
     return this.fb.group({
       organizationId: [defaults['organizationId']],
-      firstName: [defaults['firstName'], [Validators.required, Validators.maxLength(120)]],
-      lastName: [defaults['lastName'], [Validators.required, Validators.maxLength(120)]],
-      email: [defaults['email'], [Validators.required, Validators.email]],
+      firstName: [defaults['firstName'], [Validators.required, Validators.maxLength(100)]],
+      lastName: [defaults['lastName'], [Validators.required, Validators.maxLength(100)]],
+      email: [defaults['email'], [Validators.required, Validators.email, Validators.maxLength(255)]],
       password: [defaults['password'], [Validators.required, Validators.minLength(8)]],
-      phone: [defaults['phone'], [Validators.maxLength(40)]],
+      phone: [defaults['phone'], [Validators.maxLength(30)]],
       addressLine1: [defaults['addressLine1'], [Validators.maxLength(255)]],
       addressLine2: [defaults['addressLine2'], [Validators.maxLength(255)]],
-      city: [defaults['city'], [Validators.maxLength(120)]],
-      state: [defaults['state'], [Validators.maxLength(120)]],
+      city: [defaults['city'], [Validators.maxLength(100)]],
+      state: [defaults['state'], [Validators.maxLength(100)]],
       postalCode: [defaults['postalCode'], [Validators.maxLength(20)]],
-      country: [defaults['country']],
+      country: [defaults['country'], [Validators.maxLength(100)]],
       role: [defaults['role']],
       status: [defaults['status'], [Validators.required]],
       isEmailVerified: [defaults['isEmailVerified']],

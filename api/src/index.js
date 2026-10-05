@@ -1,3 +1,5 @@
+const { isAccountant } = require('./services/accountant-access');
+const { effectiveRoleAccess, resolveTokenOrganizationId } = require('./services/role-access');
 const vouchersRoutes = require('./routes/vouchers-routes');
 const chequesRoutes = require('./routes/cheques-routes');
 const organizationRolesRoutes=require('./routes/organization-roles-routes');
@@ -148,6 +150,7 @@ io.use(async (socket, next) => {
     const tokenRecord = await models.Token.findOne({
       where: {
         tokenHash,
+        type: 'access',
         isActive: true,
         revokedAt: null,
       },
@@ -183,13 +186,15 @@ io.use(async (socket, next) => {
     }
 
     const user = tokenRecord.user;
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.status !== 'active') {
       return next(new Error('User is inactive or unavailable.'));
     }
 
-    const roleCodes = (user.roles || []).map((role) => String(role.code || '').toLowerCase());
-    const isSuperuser = hasSuperuserRole(roleCodes);
-    const effectiveOrganizationId = await resolveEffectiveOrganizationId(models, user);
+    const globalAccess = await effectiveRoleAccess(models, user, null);
+    const isSuperuser = globalAccess.roleCodes.includes('superuser');
+    const fallbackOrganizationId = await resolveEffectiveOrganizationId(models, user);
+    const effectiveOrganizationId = isSuperuser ? fallbackOrganizationId : await resolveTokenOrganizationId(models, user, tokenRecord, fallbackOrganizationId);
+    const {roleCodes} = await effectiveRoleAccess(models, user, effectiveOrganizationId);
 
     if (!isSuperuser) {
       if (!effectiveOrganizationId) {
@@ -239,7 +244,7 @@ io.on('connection', (socket) => {
     socket.join(`user:${userId}`);
   }
   if (organizationId) {
-    socket.join(`org:${organizationId}`);
+    socket.join(`${isAccountant(socket.data?.auth?.roleCodes) ? 'accounting' : 'org'}:${organizationId}`);
   }
 });
 

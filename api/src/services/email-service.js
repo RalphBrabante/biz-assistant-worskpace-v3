@@ -136,14 +136,18 @@ async function sendOrganizationUserInviteEmail({
   toEmail,
   toName,
   organizationName,
+  roleName,
   setPasswordUrl,
+  loginUrl,
   expiresInMinutes = 30,
 }) {
   const template = buildOrganizationUserInviteTemplate({
     brandName: String(process.env.APP_NAME || 'Biz Assistant').trim(),
     recipientName: toName,
     organizationName,
+    roleName,
     setPasswordUrl,
+    loginUrl,
     expiresInMinutes,
   });
 

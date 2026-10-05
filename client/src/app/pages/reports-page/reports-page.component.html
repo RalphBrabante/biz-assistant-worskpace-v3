@@ -46,6 +46,8 @@
   </div>
 </section>
 
+<app-generated-pdf-archive *ngIf="canReadReports" [organizationId]="archiveOrganizationId" [year]="selectedYear()" [refreshVersion]="pdfArchiveRefresh()" />
+
 <section class="ui-card shadow-panel rounded-xl mb-6">
   <div class="ui-card-body p-6">
     <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
@@ -91,6 +93,7 @@
       [initialDocumentId]="initialDocumentId()"
       (exportCsv)="downloadFilingCsv($event)"
       (exportXlsx)="downloadGimoStatement($event)"
+      (pdfSaved)="onPdfSaved()"
     />
 
     <details>

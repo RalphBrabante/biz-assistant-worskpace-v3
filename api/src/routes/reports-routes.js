@@ -16,8 +16,12 @@ const {
 } = require('../controllers/reports-controller');
 const { authorize } = require('../middleware/authz');
 const { readCacheMiddleware } = require('../middleware/cache');
+const { listReportDocuments, downloadReportDocument } = require('../controllers/report-documents-controller');
 
 const router = express.Router();
+
+router.get('/documents', authorize('reports.read'), listReportDocuments);
+router.get('/documents/:id/pdf', authorize('reports.read'), downloadReportDocument);
 
 router.post('/quarterly-sales', authorize('reports.generate'), computeQuarterlySalesInvoiceReport);
 router.get('/quarterly-sales', authorize('reports.read'), readCacheMiddleware, listQuarterlySalesReports);

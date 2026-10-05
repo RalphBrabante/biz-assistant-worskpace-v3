@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
+const { effectiveRoleAccess, resolveTokenOrganizationId } = require('../services/role-access');
 
 function extractBearerToken(req) {
   const authHeader = req.get('authorization') || '';
@@ -68,21 +69,6 @@ async function resolveEffectiveOrganizationId(models, user) {
   return fallbackMembership?.organizationId || null;
 }
 
-async function userHasActiveOrganizationMembership(models, userId, organizationId) {
-  if (!models?.OrganizationUser || !userId || !organizationId) {
-    return false;
-  }
-  const membership = await models.OrganizationUser.findOne({
-    where: {
-      userId,
-      organizationId,
-      isActive: true,
-    },
-    attributes: ['id'],
-  });
-  return Boolean(membership);
-}
-
 async function authenticateRequest(req, res, next) {
   try {
     if (isPublicApiPath(req)) {
@@ -110,6 +96,7 @@ async function authenticateRequest(req, res, next) {
     const tokenRecord = await models.Token.findOne({
       where: {
         tokenHash,
+        type: 'access',
         isActive: true,
         revokedAt: null,
       },
@@ -152,31 +139,28 @@ async function authenticateRequest(req, res, next) {
     }
 
     const user = tokenRecord.user;
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.status !== 'active') {
       return res.status(401).json({
         code: 'UNAUTHORIZED',
         message: 'User is inactive or unavailable.',
       });
     }
 
-    const roles = (user.roles || []).map((role) => role.code);
-    const isSuperuser = hasSuperuserRole(roles);
+    const globalAccess = await effectiveRoleAccess(models, user, null);
+    const isSuperuser = hasSuperuserRole(globalAccess.roleCodes);
     const tokenOrganizationId = String(tokenRecord?.metadata?.organizationId || '').trim();
     let effectiveOrganizationId = tokenOrganizationId || (await resolveEffectiveOrganizationId(models, user));
 
-    if (!isSuperuser && tokenOrganizationId) {
-      const hasMembership = await userHasActiveOrganizationMembership(
-        models,
-        user.id,
-        tokenOrganizationId
-      );
-      if (!hasMembership && user.organizationId !== tokenOrganizationId) {
+    if (!isSuperuser) {
+      try {
+        effectiveOrganizationId = await resolveTokenOrganizationId(models, user, tokenRecord, effectiveOrganizationId);
+      } catch (err) {
+        if (err.status !== 401) throw err;
         return res.status(401).json({
           code: 'UNAUTHORIZED',
           message: 'Token organization scope is no longer valid for this user.',
         });
       }
-      effectiveOrganizationId = tokenOrganizationId;
     }
 
     // Enforce organization license access for all non-superuser users.
@@ -209,12 +193,7 @@ async function authenticateRequest(req, res, next) {
       }
     }
 
-    const permissions = new Set();
-    for (const role of user.roles || []) {
-      for (const permission of role.permissions || []) {
-        permissions.add(String(permission.code || '').toLowerCase());
-      }
-    }
+    const {roleCodes: roles, permissions} = await effectiveRoleAccess(models, user, effectiveOrganizationId);
 
     req.auth = {
       tokenId: tokenRecord.id,

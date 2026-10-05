@@ -6,7 +6,7 @@ const ts = require('typescript');
 const { Subject } = require('rxjs');
 
 function setup() {
-  const requests = [], revoked = [], downloads = [], opened = [];
+  const requests = [], revoked = [], downloads = [], opened = [], saved = [];
   const module = { exports: {} };
   const source = ts.transpileModule(fs.readFileSync(require.resolve('../src/app/shared/bir-report-documents.component.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, experimentalDecorators: true },
@@ -18,7 +18,7 @@ function setup() {
     window: { open: (...args) => opened.push(args) },
     require(name) {
       if (name === '@angular/core') return {
-        Component: () => value => value, Input: () => () => {}, Output: () => () => {}, ViewChild: () => () => {}, EventEmitter: class { emit() {} },
+        Component: () => value => value, Input: () => () => {}, Output: () => () => {}, ViewChild: () => () => {}, EventEmitter: class { emit() { saved.push(true); } },
         signal(value) { const read = () => value; read.set = next => { value = next; }; return read; },
       };
       return new Proxy({}, { get: (_target, key) => key });
@@ -29,16 +29,17 @@ function setup() {
   const document = { id: '1702Q', supported: true, year: 2026, quarter: 3, annual: false, category: 'Income tax returns', sourceRevision: 'r1', fields: [{ key: 'reviewedAmounts', type: 'checkbox' }], defaults: { sales: 100000, reviewedAmounts: false } };
   page.documents = [document, { ...document, id: 'SAWT', category: 'Supporting schedules', fields: [], defaults: {} }, { ...document, id: '1701Q', supported: false }];
   page.organizationId = 'org-a'; page.canGenerate = true; page.ngOnChanges(); page.select('1702Q');
-  return { page, requests, revoked, downloads, opened };
+  return { page, requests, revoked, downloads, opened, saved };
 }
 
 test('selected document generates an authenticated PDF with the selected quarter and source revision', () => {
-  const { page, requests, downloads } = setup(); page.generate();
+  const { page, requests, downloads, saved } = setup(); page.generate();
   assert.equal(requests[0].payload.documentId, '1702Q'); assert.equal(requests[0].payload.quarter, 3);
   assert.equal(requests[0].payload.sourceRevision, 'r1');
   assert.equal(new URL(requests[0].url, 'http://test').searchParams.get('organizationId'), 'org-a');
   requests[0].stream.next(new Blob(['%PDF-'])); requests[0].stream.complete();
   assert.equal(page.preview(), 'blob:report'); page.download(); assert.equal(downloads[0].download, 'bir-1702Q-2026-q3.pdf');
+  assert.equal(saved.length, 1);
 });
 
 test('a saved report can open its matching document when the workspace is recreated', () => {

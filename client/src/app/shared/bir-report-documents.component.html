@@ -36,7 +36,7 @@
   </div>
 </details>
 
-<app-bir-tax-return *ngIf="selectedId === 'business'" [preparation]="businessTax" [organizationId]="organizationId" [canGenerate]="canGenerate" />
+<app-bir-tax-return *ngIf="selectedId === 'business'" [preparation]="businessTax" [organizationId]="organizationId" [canGenerate]="canGenerate" (pdfSaved)="pdfSaved.emit()" />
 
 <section class="border rounded-lg p-4 mb-6" *ngIf="selected as doc">
   <div class="flex flex-wrap justify-between items-start gap-3 mb-4">

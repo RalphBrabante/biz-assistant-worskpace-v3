@@ -1,4 +1,12 @@
 const { Op } = require('sequelize');
+const { isAccountant, ACCOUNTANT_MESSAGE_TYPES } = require('../services/accountant-access');
+function scopeAccountantMessages(where, req) {
+  if (isAccountant(req.auth?.roleCodes)) {
+    const requested = where.entityType;
+    where.entityType = {[Op.in]: requested ? ACCOUNTANT_MESSAGE_TYPES.filter(type => type === requested) : ACCOUNTANT_MESSAGE_TYPES};
+  }
+}
+
 const { getModels } = require('../sequelize');
 const { applyOrganizationWhereScope } = require('../services/request-scope');
 
@@ -43,6 +51,7 @@ async function getUnreadMessageCount(req, res) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId is required for this user.' });
     }
 
+    scopeAccountantMessages(where, req);
     const unreadCount = await Message.count({ where });
 
     return res.status(200).json({
@@ -93,6 +102,7 @@ async function listMessages(req, res) {
       ];
     }
 
+    scopeAccountantMessages(where, req);
     const { rows, count } = await Message.findAndCountAll({
       where,
       include: [
@@ -144,6 +154,7 @@ async function markMessageRead(req, res) {
       return res.status(404).json({ code: 'NOT_FOUND', message: 'Message not found.' });
     }
 
+    scopeAccountantMessages(where, req);
     const message = await Message.findOne({ where });
     if (!message) {
       return res.status(404).json({ code: 'NOT_FOUND', message: 'Message not found.' });
@@ -184,6 +195,7 @@ async function markAllMessagesRead(req, res) {
       return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId is required for this user.' });
     }
 
+    scopeAccountantMessages(where, req);
     const [updatedCount] = await Message.update(
       { isRead: true, readAt: new Date() },
       { where }

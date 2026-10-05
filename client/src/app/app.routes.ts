@@ -75,7 +75,7 @@ export const routes: Routes = [
       { path: 'orders', component: OrdersPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
       { path: 'orders/create', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.create'] } },
       { path: 'orders/:id', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
-      { path: 'customers', component: CustomersPageComponent, canActivate: [permissionGuard], data: { permissions: ['organizations.read'] } },
+      { path: 'customers', component: CustomersPageComponent, canActivate: [permissionGuard], data: { permissions: ['customers.read', 'organizations.read'] } },
       { path: 'expenses/:id', component: ExpenseDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },
       { path: 'expenses', component: ExpensesPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },
       { path: 'taxes', component: TaxTypesPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },

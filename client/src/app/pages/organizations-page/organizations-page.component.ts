@@ -28,6 +28,8 @@ interface OrganizationRow {
   currency?: string;
   taxTypeId?: string;
   taxpayerClassification?: string;
+  rdoCode?: string;
+  taxpayerSize?: string;
   deductionMethod?: string;
   incomeTaxRate?: number;
   isIncomeTaxExempt?: boolean;
@@ -95,6 +97,8 @@ export class OrganizationsPageComponent {
     currency: 'Currency',
     taxTypeId: 'Tax Type',
     taxpayerClassification: 'Taxpayer Classification',
+    rdoCode: 'RDO Code',
+    taxpayerSize: 'Business Size',
     deductionMethod: 'Deduction Method',
     incomeTaxRate: 'Income Tax Rate',
     contactName: 'Contact Name',
@@ -328,6 +332,8 @@ export class OrganizationsPageComponent {
       currency: row.currency || this.currentOrganizationCurrency,
       taxTypeId: row.taxTypeId || row.taxType?.id || '',
       taxpayerClassification: row.taxpayerClassification || '',
+      rdoCode: row.rdoCode || '',
+      taxpayerSize: row.taxpayerSize || '',
       deductionMethod: row.deductionMethod || 'itemized',
       incomeTaxRate: row.incomeTaxRate ?? null,
       isIncomeTaxExempt: row.isIncomeTaxExempt === true,
@@ -522,6 +528,8 @@ export class OrganizationsPageComponent {
       currency: this.currentOrganizationCurrency,
       taxTypeId: '',
       taxpayerClassification: '',
+      rdoCode: '',
+      taxpayerSize: '',
       deductionMethod: 'itemized',
       incomeTaxRate: null,
       isIncomeTaxExempt: false,
@@ -585,6 +593,8 @@ export class OrganizationsPageComponent {
       currency: [defaults['currency'], [Validators.required]],
       taxTypeId: [defaults['taxTypeId'], [Validators.required]],
       taxpayerClassification: [defaults['taxpayerClassification']],
+      rdoCode: [defaults['rdoCode'], [Validators.pattern(/^\d{3}$/)]],
+      taxpayerSize: [defaults['taxpayerSize']],
       deductionMethod: [defaults['deductionMethod']],
       incomeTaxRate: [defaults['incomeTaxRate'], [Validators.min(0)]],
       isIncomeTaxExempt: [defaults['isIncomeTaxExempt']],
@@ -613,6 +623,8 @@ export class OrganizationsPageComponent {
       currency: this.optionalString(form['currency']),
       taxTypeId: this.asString(form['taxTypeId']),
       taxpayerClassification: this.optionalString(form['taxpayerClassification']),
+      rdoCode: this.optionalString(form['rdoCode']) ?? null,
+      taxpayerSize: this.optionalString(form['taxpayerSize']) ?? null,
       deductionMethod: this.optionalString(form['deductionMethod']),
       incomeTaxRate: this.optionalNumber(form['incomeTaxRate']),
       isIncomeTaxExempt: Boolean(form['isIncomeTaxExempt']),

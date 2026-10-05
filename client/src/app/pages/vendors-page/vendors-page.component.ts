@@ -120,6 +120,10 @@ export class VendorsPageComponent {
     return this.isSuperuser && !this.currentOrganizationId;
   }
 
+  get canCreateRecords(): boolean { return this.auth.hasPermission('vendors.create'); }
+  get canEditRecords(): boolean { return this.auth.hasPermission('vendors.update'); }
+  get canDeleteRecords(): boolean { return this.auth.hasPermission('vendors.delete'); }
+
   ngOnInit(): void {
     this.restoreTablePreferences();
     this.loadOrganizations();

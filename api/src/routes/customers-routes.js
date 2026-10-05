@@ -16,9 +16,9 @@ const router = express.Router();
 
 router.post('/', authorize('organizations.update'), createCustomer);
 router.post('/import', authorize('organizations.update'), uploadImportCsv, importCustomers);
-router.get('/export', authorize('organizations.read'), exportCustomers);
-router.get('/', authorize('organizations.read'), readCacheMiddleware, listCustomers);
-router.get('/:id', authorize('organizations.read'), readCacheMiddleware, getCustomerById);
+router.get('/export', authorize(['customers.read', 'organizations.read']), exportCustomers);
+router.get('/', authorize(['customers.read', 'organizations.read']), readCacheMiddleware, listCustomers);
+router.get('/:id', authorize(['customers.read', 'organizations.read']), readCacheMiddleware, getCustomerById);
 router.put('/:id', authorize('organizations.update'), updateCustomer);
 router.patch('/:id', authorize('organizations.update'), updateCustomer);
 router.delete('/:id', authorize('organizations.update'), deleteCustomer);

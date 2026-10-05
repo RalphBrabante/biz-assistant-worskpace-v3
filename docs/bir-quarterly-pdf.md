@@ -4,6 +4,10 @@ Research checked on 5 October 2026 against the Bureau of Internal Revenue (BIR),
 
 ## Official templates
 
+Organizations can save an optional **RDO Code** (three digits, including leading zeros) and **Business Size** (Micro, Small, Medium, or Large) in the BIR Tax Filing Profile when creating or editing an organization. Tax return preparation inherits these values; the RDO code also prefills supported income-tax and withholding returns. Reviewers can still override report details. Blank profile values remain blank in report preparation, and required return fields must be completed before PDF generation.
+
+Run migration `20261005010000-add-organization-tax-registration.js` before starting the updated API. Existing organizations receive nullable fields without assigned RDO codes or size classifications.
+
 | Organization business tax | Return | Bundled official PDF |
 | --- | --- | --- |
 | VAT | 2550Q, Quarterly Value-Added Tax Return | [April 2024 ENCS](https://bir-cdn.bir.gov.ph/BIR/pdf/2550Q%20%20April%202024%20ENCS_Final.pdf) |
@@ -55,10 +59,14 @@ Other relevant forms include monthly 0619-E remittances, payroll 1601-C, annual 
 2. Choose a document in Business tax, Income tax, Withholding, Supporting schedules or Transaction reports. Business tax automatically selects 2550Q or 2551Q using the organization's tax type; other cards explain their applicability. Every card, editor and preview identifies the quarter/year and the editor shows exact dates.
 3. Review the prefilled registered details and amounts. Official returns require an RDO code; VAT returns also require the BIR taxpayer size classification (Micro/Small/Medium/Large), distinct from individual/corporation classification.
 4. For business tax, classify unallocated sales/purchases and verify credits/adjustments. For income tax, confirm the annual election/deduction method, filed prior-quarter income, verified 2307 credits and payments. Corporate filers also confirm calendar-year scope, the applicable rate, commencement year and each MCIT gross-income amount. For 2307, choose the supplier.
-5. Choose Generate PDF. The populated PDF appears inline with Download PDF, Print and Open PDF controls. Changes to details, organization, document or quarter clear the previous preview and cancel pending requests.
+5. Choose Generate PDF. The API saves the exact PDF before returning it, and the Generated PDFs table refreshes automatically. The populated PDF also appears inline with Download PDF, Print and Open PDF controls. Changes to details, organization, document or quarter clear the previous preview and cancel pending requests; saved copies remain available.
 6. Saved sales/expense report actions include Prepare PDF, which opens the corresponding quarter's current transaction report in the document center. Saved totals remain separately managed; PDFs describe current records, rather than claiming to be immutable snapshots of saved totals.
 
-PDF details apply only to that generation and are not saved to the organization or a filing-history table. Refreshing the summary resets the draft. Existing totals/estimates and CSV/XLSX worksheets are available in a collapsed section. Year-end references have their own section. Saved sales/expense reports remain available below the document center.
+To retrieve an earlier PDF, open **Reports → select organization and year → Generated PDFs → Download PDF**. The table sits below the period selectors and lists all quarters within the selected year, newest generation first. It shows the report name, period, generation date, filename and size, with pagination and a refresh control. Every generation creates a separate saved copy; generating the same form again does not replace its earlier bytes. Reloading the page or changing the source records does not change a saved PDF.
+
+Reviewed details apply only to that generation and do not update the organization's profile. Refreshing the summary resets the editor draft. Saved PDFs are preparation drafts, not evidence of filing or payment. PDFs generated before this archive was enabled were never retained on the server and must be regenerated to appear; their original bytes cannot be recovered by this feature. Existing totals/estimates and CSV/XLSX worksheets are available in a collapsed section and remain separate from the PDF archive. Year-end references have their own section. Saved sales/expense reports remain available below the document center.
+
+Run migration `20261005040000-create-report-documents.js` before starting the updated API. Private PDF bytes are stored in the `report_documents` MySQL table, together with organization, form, period, generation time, source revision and SHA-256 metadata. Database backups therefore include these documents. The archive accepts generated PDFs up to 16 MiB; storage failure returns an error instead of presenting an unsaved PDF as a successful generation. It creates no public file URLs.
 
 ## Data and scope
 
@@ -74,8 +82,17 @@ PDF details apply only to that generation and are not saved to the organization 
 - `POST /api/v1/reports/bir-tax-return/pdf?organizationId=...` requires `reports.generate`, year, quarter, the summary's `sourceRevision`, and reviewed `details`. It returns `application/pdf` with `private, no-store`. Existing organization access rules apply; normal users cannot override organization scope. A source revision mismatch requires refreshing the summary.
 - `POST /api/v1/reports/bir-document/pdf?organizationId=...` has the same permissions/cache/scope rules and additionally accepts `documentId`. Its source revision includes the records relevant to that document and period.
 - `GET /api/v1/reports/bir-filing-summary` supplies business-tax preparation under `taxReturn` and the document catalog/defaults/availability reasons under `documents`. It requires `reports.read` and uses a fresh client request.
+- `GET /api/v1/reports/documents?year=2026&organizationId=...&page=1&limit=20` returns saved-PDF metadata for the selected organization and year, excluding PDF bytes. `GET /api/v1/reports/documents/:id/pdf?organizationId=...` downloads the stored bytes as an attachment. Both require `reports.read` and use `private, no-store`. Normal users inherit their authenticated organization; superusers must select an organization explicitly. Accountants with report access can retrieve their organization's saved PDFs. A document outside the selected organization returns 404.
 - Templates are packaged with Docker builds and the combined Hostinger release; PDF generation does not download templates at runtime.
 
 ## Validation
 
 API regression tests cover tax bases, historical percentage rates, individual brackets/8%/OSD, corporate 20%/25% thresholds and MCIT, credit direction, monthly certificate bases, whole-peso rounding, required taxpayer details, template sizes/page counts, exact TIN centers/grid preservation, organization scoping, cumulative source selection and stale-source rejection. Client tests cover document selection, saved-report quarter routing, preview invalidation, downloads, print, delayed blob errors and cancellation. Sample PDFs were rendered and visually checked against the original layouts, including TIN cells, decimal/whole-peso columns and footer visibility. No live BIR submission or production deployment was performed.
+
+Archive tests cover exact-byte preservation, distinct generations, year filtering, pagination, organization isolation, permissions, storage failure, authenticated downloads and cancellation when organization/year changes. The opt-in real MySQL test applies and reverses the migration in a temporary isolated schema, generates multiple 2550Q PDFs, changes source details, and checks that the original PDF still downloads byte-for-byte:
+
+```sh
+RUN_REPORT_ARCHIVE_MYSQL_INTEGRATION=1 node --test api/tests/report-document-archive-mysql.integration.cjs
+```
+
+The browser check uses synthetic organization/transaction data and isolated MySQL storage. It verifies automatic table refresh after generating 2550Q and quarterly-sales PDFs, persistence after reload, and download from the table; it does not use production records.

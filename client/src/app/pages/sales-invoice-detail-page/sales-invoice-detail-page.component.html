@@ -19,7 +19,7 @@
 <div *ngIf="message()" class="ui-alert ui-alert-success no-print">{{ message() }}</div>
 <div *ngIf="error()" class="ui-alert ui-alert-danger no-print">{{ error() }}</div>
 
-<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="invoice() && !isPaid && !isManaged">
+<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="canEdit && invoice() && !isPaid && !isManaged">
   <div class="ui-card-body p-6">
     <h2 class="text-base font-semibold mb-4">Status Update</h2>
     <div class="ui-grid grid grid-cols-12 gap-4">
@@ -41,7 +41,7 @@
   </div>
 </section>
 
-<p *ngIf="invoice()?.orderId" class="no-print mb-4"><a class="ui-btn ui-btn-outline-dark" [routerLink]="['/orders', invoice()!.orderId]">Back to order</a><span *ngIf="isManaged" class="text-muted ml-3">Manage payments and voiding from the order workspace.</span></p>
+<p *ngIf="canViewOrder && invoice()?.orderId" class="no-print mb-4"><a class="ui-btn ui-btn-outline-dark" [routerLink]="['/orders', invoice()!.orderId]">Back to order</a><span *ngIf="isManaged" class="text-muted ml-3">Manage payments and voiding from the order workspace.</span></p>
 <p *ngIf="loading()" class="no-print">Loading invoice…</p>
 <app-sales-invoice-sheet *ngIf="invoice()?.invoiceDocument" [invoice]="invoice()!"></app-sales-invoice-sheet>
 <ng-container *ngIf="!invoice()?.invoiceDocument">

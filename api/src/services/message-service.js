@@ -1,5 +1,6 @@
 const { getModels } = require('../sequelize');
 const { getSocketServer } = require('./socket-service');
+const { ACCOUNTANT_MESSAGE_TYPES } = require('./accountant-access');
 
 function getActorDisplayName(actor, fallback = 'A user') {
   const firstName = String(actor?.firstName || '').trim();
@@ -54,9 +55,9 @@ async function createOrganizationMessage({
     if (io) {
       const actorUserId = String(created.createdBy || '').trim();
       const orgRoom = `org:${organizationId}`;
-      const emitTarget = actorUserId
-        ? io.to(orgRoom).except(`user:${actorUserId}`)
-        : io.to(orgRoom);
+      let rooms = io.to(orgRoom);
+      if (ACCOUNTANT_MESSAGE_TYPES.includes(entityType)) rooms = rooms.to(`accounting:${organizationId}`);
+      const emitTarget = actorUserId ? rooms.except(`user:${actorUserId}`) : rooms;
 
       emitTarget.emit('message.created', {
         id: created.id,

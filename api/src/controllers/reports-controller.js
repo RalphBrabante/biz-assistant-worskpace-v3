@@ -2,6 +2,7 @@ const { TaxReturnError, prepareTaxReturn, computeTaxReturn, section116Rate } = r
 const { renderTaxReturnPdf } = require('../services/bir-tax-return-pdf');
 const { prepareReportDocuments, computeReportDocument } = require('../services/bir-report-documents');
 const { renderReportDocumentPdf } = require('../services/bir-report-documents-pdf');
+const { archiveReportPdf, ReportArchiveError } = require('../services/report-document-archive');
 const { quarterlyExpenseTotals } = require('../services/quarterly-expense-totals');
 const { Op, fn, col } = require('sequelize');
 const { getModels } = require('../sequelize');
@@ -1394,6 +1395,8 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
             : null,
           taxpayerClassification,
           taxpayerClassificationLabel: taxpayerClassificationLabel(taxpayerClassification),
+          rdoCode: organization.rdoCode || null,
+          taxpayerSize: organization.taxpayerSize || null,
           deductionMethod: organization.deductionMethod || 'itemized',
           incomeTaxRate,
           isIncomeTaxExempt,
@@ -1499,6 +1502,9 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
         if (req.body?.sourceRevision !== prep.sourceRevision) throw new TaxReturnError('Records or organization settings changed. Refresh the report center and review the updated figures before generating.');
         const prepared = computeReportDocument(prep, req.body?.details, yearInvoices, yearExpenses);
         const bytes = await renderReportDocumentPdf(prepared);
+        await archiveReportPdf(models, { organizationId, code: prep.id, title: prep.title, year,
+          quarter: prep.annual ? null : quarter, sourceRevision: prep.sourceRevision, bytes,
+          generatedBy: req.auth?.userId || req.auth?.user?.id });
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `inline; filename="bir-${prep.id}-${year}-${prep.annual ? 'annual' : `q${quarter}`}.pdf"`);
         res.set('Cache-Control', 'private, no-store');
@@ -1510,6 +1516,8 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
       if (req.body?.sourceRevision !== taxReturn.sourceRevision) throw new TaxReturnError('Quarterly records or organization settings changed. Refresh the filing summary and review the updated amounts before generating.');
       const prepared = computeTaxReturn(taxReturn, req.body?.details);
       const bytes = await renderTaxReturnPdf({ ...prepared, periodStart, periodEnd });
+      await archiveReportPdf(models, { organizationId, code: prepared.form, title: `BIR ${prepared.form}`, year,
+        quarter, sourceRevision: taxReturn.sourceRevision, bytes, generatedBy: req.auth?.userId || req.auth?.user?.id });
       res.set('Content-Type', 'application/pdf');
       res.set('Content-Disposition', `inline; filename="bir-${prepared.form}-${year}-q${quarter}.pdf"`);
       res.set('Cache-Control', 'private, no-store');
@@ -1519,6 +1527,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
     return res.status(200).json({ code: 'SUCCESS', message: 'BIR filing summary computed successfully.', data });
   } catch (err) {
     if (err instanceof TaxReturnError) return res.status(400).json({ code: 'BAD_REQUEST', message: err.message });
+    if (err instanceof ReportArchiveError) return res.status(err.status).json({ message: err.message });
     return next(err);
   }
 }

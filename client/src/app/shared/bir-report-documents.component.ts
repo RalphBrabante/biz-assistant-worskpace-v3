@@ -49,6 +49,7 @@ export class BirReportDocumentsComponent implements OnChanges, OnDestroy {
   @Input() initialDocumentId = 'business';
   @Output() exportCsv = new EventEmitter<'sawt' | 'qap'>();
   @Output() exportXlsx = new EventEmitter<'sales' | 'purchases'>();
+  @Output() pdfSaved = new EventEmitter<void>();
   @ViewChild('pdfFrame') pdfFrame?: ElementRef<HTMLIFrameElement>;
   selectedId = 'business';
   readonly categories = ['Income tax returns', 'Withholding documents', 'Supporting schedules', 'Transaction reports'];
@@ -122,6 +123,7 @@ export class BirReportDocumentsComponent implements OnChanges, OnDestroy {
         this.generating.set(false);
         this.objectUrl = URL.createObjectURL(blob);
         this.preview.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl));
+        this.pdfSaved.emit();
       },
       error: async err => {
         let message = 'Unable to generate the report PDF.';

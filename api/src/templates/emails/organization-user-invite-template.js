@@ -11,12 +11,18 @@ function buildOrganizationUserInviteTemplate({
   brandName = 'Biz Assistant',
   recipientName,
   organizationName,
+  roleName,
   setPasswordUrl,
+  loginUrl,
   expiresInMinutes = 30,
 }) {
   const safeName = escapeHtml(recipientName || 'there');
   const safeOrganizationName = escapeHtml(organizationName || 'your organization');
-  const safeUrl = escapeHtml(setPasswordUrl);
+  const safeUrl = escapeHtml(loginUrl || setPasswordUrl);
+  const actionLabel = loginUrl ? 'Sign In' : 'Set Password';
+  const instructions = loginUrl
+    ? 'Sign in with your existing account and select this organization. Your password has not changed.'
+    : `Please set your password using the button below. This link will expire in ${expiresInMinutes} minutes.`;
   const subject = `${brandName} Organization Access Invitation`;
 
   const html = `
@@ -42,16 +48,15 @@ function buildOrganizationUserInviteTemplate({
               <td style="padding:28px;">
                 <p style="margin:0 0 12px;font-size:15px;">Hi ${safeName},</p>
                 <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#334155;">
-                  You were added to <strong>${safeOrganizationName}</strong> in ${escapeHtml(brandName)}.
-                  Please set your password using the button below. This link will expire in
-                  <strong>${escapeHtml(expiresInMinutes)}</strong> minutes.
+                  You were added to <strong>${safeOrganizationName}</strong> in ${escapeHtml(brandName)}${roleName ? ` as ${escapeHtml(roleName)}` : ''}.
+                  ${escapeHtml(instructions)}
                 </p>
 
                 <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 20px;">
                   <tr>
                     <td align="center" style="border-radius:10px;background:#2563eb;">
                       <a href="${safeUrl}" style="display:inline-block;padding:12px 22px;color:#fff;text-decoration:none;font-size:15px;font-weight:600;">
-                        Set Password
+                        ${actionLabel}
                       </a>
                     </td>
                   </tr>
@@ -78,9 +83,9 @@ function buildOrganizationUserInviteTemplate({
     '',
     `Hi ${recipientName || 'there'},`,
     '',
-    `You were added to ${organizationName || 'your organization'} in ${brandName}.`,
-    `Set your password using this link (expires in ${expiresInMinutes} minutes):`,
-    setPasswordUrl,
+    `You were added to ${organizationName || 'your organization'} in ${brandName}${roleName ? ` as ${roleName}` : ''}.`,
+    instructions,
+    loginUrl || setPasswordUrl,
     '',
     'If you were not expecting this invitation, contact your administrator.',
   ].join('\n');

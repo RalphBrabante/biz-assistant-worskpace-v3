@@ -32,7 +32,7 @@ function prepareTaxReturn(organization, invoices, expenses, year, quarter) {
     tin: String(organization.taxId || ''), registeredName: organization.legalName || organization.name || '',
     registeredAddress: ['addressLine1', 'addressLine2', 'city', 'state', 'country'].map(key => organization[key]).filter(Boolean).join(', '),
     zipCode: organization.postalCode || '', phone: organization.phone || '', email: organization.contactEmail || '',
-    rdoCode: '', taxpayerSize: '', amended: false,
+    rdoCode: organization.rdoCode || '', taxpayerSize: organization.taxpayerSize || '', amended: false,
     incomeTaxElection: pt && String(organization.taxpayerClassification) === 'individual' ? 'unconfirmed' : 'graduated',
     otherCreditsDescription: '',
   });

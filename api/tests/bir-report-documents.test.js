@@ -179,6 +179,7 @@ function controllerFixture(privileged = false) {
   const f = fixture('corporation'); const queries = [];
   const records = (rows, key, options) => rows.filter(row => row[key] >= options.where[key][Op.between][0] && row[key] <= options.where[key][Op.between][1]).map(row => ({ toJSON: () => row }));
   const models = {
+    ReportDocument: { create: async payload => { queries.push({ archived: payload }); return { id: 'saved-pdf' }; } },
     Organization: { findByPk: async id => { queries.push({ organization: id }); return f.organization; } },
     TaxType: {}, WithholdingTaxType: {}, Vendor: {}, Order: {}, Customer: {},
     SalesInvoice: { findOne: async options => { queries.push(options); return {}; }, findAll: async options => { queries.push(options); return records(f.invoices, 'issueDate', options); } },
@@ -198,6 +199,9 @@ test('new PDF endpoint keeps tenant scope, loads prior-quarter records and rejec
   assert.equal(f.res.statusCode, 200); assert.equal(f.queries[0].organization, 'org-a');
   assert.equal(f.res.headers['Content-Type'], 'application/pdf'); assert.equal(f.res.headers['Cache-Control'], 'private, no-store');
   assert.match(f.res.headers['Content-Disposition'], /1702Q-2026-q3/);
+  const saved = f.queries.find(query => query.archived).archived;
+  assert.equal(saved.organizationId, 'org-a'); assert.equal(saved.documentCode, '1702Q');
+  assert.deepEqual(saved.pdfContent, f.res.body);
   assert.ok(f.queries.some(query => query.where?.issueDate?.[Op.between]?.[0] === '2026-01-01'));
   for (const query of f.queries.filter(query => query.where)) assert.equal(query.where.organizationId, 'org-a');
   const stale = controllerFixture(); stale.req.body.sourceRevision = 'old';

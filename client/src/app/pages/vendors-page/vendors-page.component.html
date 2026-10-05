@@ -35,14 +35,14 @@
               </button>
             </li>
             <li>
-              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()" [disabled]="isContextLocked">
+              <button *ngIf="canCreateRecords" class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()" [disabled]="isContextLocked">
                 <i class="bi bi-upload"></i>
                 <span>Import CSV</span>
               </button>
             </li>
           </ul>
         </div>
-        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()" [disabled]="isContextLocked"><i class="bi bi-plus-lg mr-1"></i>Create Vendor</button>
+        <button *ngIf="canCreateRecords" class="ui-btn ui-btn-primary" (click)="openCreateModal()" [disabled]="isContextLocked"><i class="bi bi-plus-lg mr-1"></i>Create Vendor</button>
       </div>
     </div>
   </div>
@@ -137,10 +137,10 @@
         <tr *ngFor="let row of rows(); trackBy: trackById">
           <td class="row-actions-cell card-actions-cell" data-label="Actions"><app-row-actions [label]="'Actions for ' + row.name">
             <div class="row-action-items">
-              <button type="button" (click)="openEditModal(row)" title="Edit" [disabled]="isContextLocked" class="ui-dropdown-item">
+              <button *ngIf="canEditRecords" type="button" (click)="openEditModal(row)" title="Edit" [disabled]="isContextLocked" class="ui-dropdown-item">
                 <i class="bi bi-pencil-square"></i>
                Edit</button>
-              <button
+              <button *ngIf="canDeleteRecords"
 
                 type="button"
                 [disabled]="deletingId() === row.id || isContextLocked"

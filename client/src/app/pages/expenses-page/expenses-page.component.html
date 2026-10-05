@@ -37,14 +37,14 @@
               </button>
             </li>
             <li>
-              <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()">
+              <button *ngIf="canCreateRecords" class="ui-dropdown-item flex items-center gap-2" type="button" (click)="openImportModal()">
                 <i class="bi bi-upload"></i>
                 <span>Import CSV</span>
               </button>
             </li>
           </ul>
         </div>
-        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create Expense</button>
+        <button *ngIf="canCreateRecords" class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create Expense</button>
       </div>
     </div>
   </div>
@@ -215,19 +215,19 @@
                   </a>
                 </li>
                 <li>
-                  <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="startEdit(row)">
+                  <button *ngIf="canEditRecords" class="ui-dropdown-item flex items-center gap-2" type="button" (click)="startEdit(row)">
                     <i class="bi bi-pencil-square"></i> Edit
                   </button>
                 </li>
                 <li>
-                  <button class="ui-dropdown-item flex items-center gap-2" type="button"
+                  <button *ngIf="canEditRecords" class="ui-dropdown-item flex items-center gap-2" type="button"
                     [disabled]="transferringId() === row.id" (click)="openTransferModal(row)">
                     <i class="bi bi-arrow-left-right"></i> {{ transferringId() === row.id ? 'Transferring...' : 'Transfer' }}
                   </button>
                 </li>
                 <li><hr class="ui-dropdown-divider" /></li>
                 <li>
-                  <button class="ui-dropdown-item flex items-center gap-2 text-danger" type="button"
+                  <button *ngIf="canDeleteRecords" class="ui-dropdown-item flex items-center gap-2 text-danger" type="button"
                     [disabled]="deletingId() === row.id" (click)="removeExpense(row.id)">
                     <i class="bi bi-trash3"></i> {{ deletingId() === row.id ? 'Deleting...' : 'Delete' }}
                   </button>

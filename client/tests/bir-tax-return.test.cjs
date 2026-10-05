@@ -6,7 +6,7 @@ const ts = require('typescript');
 const { Subject } = require('rxjs');
 
 function setup() {
-  const requests = [], revoked = [], downloads = [], opened = [];
+  const requests = [], revoked = [], downloads = [], opened = [], saved = [];
   const module = { exports: {} };
   const source = ts.transpileModule(fs.readFileSync(require.resolve('../src/app/shared/bir-tax-return.component.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, experimentalDecorators: true },
@@ -18,7 +18,7 @@ function setup() {
     window: { open: (...args) => opened.push(args) },
     require(name) {
       if (name === '@angular/core') return {
-        Component: () => value => value, Input: () => () => {}, ViewChild: () => () => {},
+        Component: () => value => value, Input: () => () => {}, Output: () => () => {}, ViewChild: () => () => {}, EventEmitter: class { emit() { saved.push(true); } },
         signal(value) { const read = () => value; read.set = next => { value = next; }; return read; },
       };
       return new Proxy({}, { get: (_target, key) => key });
@@ -28,11 +28,11 @@ function setup() {
   const page = new module.exports.BirTaxReturnComponent(api, { bypassSecurityTrustResourceUrl: value => value });
   page.preparation = { supported: true, form: '2551Q', year: 2026, quarter: 3, sourceRevision: 'revision-a', defaults: { rdoCode: '039', percentageSales: 100000 } };
   page.organizationId = 'org-a'; page.canGenerate = true; page.ngOnChanges();
-  return { page, requests, revoked, downloads, opened };
+  return { page, requests, revoked, downloads, opened, saved };
 }
 
 test('generation previews an authenticated PDF and downloads the selected form and quarter', () => {
-  const { page, requests, downloads } = setup();
+  const { page, requests, downloads, saved } = setup();
   page.generate();
   assert.equal(page.generating(), true);
   assert.equal(requests[0].payload.quarter, 3);
@@ -40,6 +40,7 @@ test('generation previews an authenticated PDF and downloads the selected form a
   assert.equal(new URL(requests[0].url, 'http://test').searchParams.get('organizationId'), 'org-a');
   requests[0].stream.next(new Blob(['%PDF-'])); requests[0].stream.complete();
   assert.equal(page.generating(), false); assert.equal(page.preview(), 'blob:generated-pdf');
+  assert.equal(saved.length, 1);
   page.download(); assert.equal(downloads[0].download, 'bir-2551Q-2026-q3.pdf');
 });
 

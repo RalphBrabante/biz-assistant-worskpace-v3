@@ -1,3 +1,4 @@
+const { ACCOUNTANT_PERMISSIONS } = require('../services/accountant-access');
 'use strict';
 
 /** @type {import('sequelize-cli').Seeder} */
@@ -27,7 +28,7 @@ module.exports = {
         {
           code: 'accountant',
           name: 'ACCOUNTANT',
-          description: 'Accounting and finance access',
+          description: 'Organization-scoped record review and report preparation',
         },
         {
           code: 'inventorymanager',
@@ -37,6 +38,7 @@ module.exports = {
       ];
 
       const permissions = [
+        { code: 'customers.read', name: 'Read Customers', resource: 'customers', action: 'read' },
         { code: 'users.read', name: 'Read Users', resource: 'users', action: 'read' },
         { code: 'users.create', name: 'Create Users', resource: 'users', action: 'create' },
         { code: 'users.update', name: 'Update Users', resource: 'users', action: 'update' },
@@ -177,28 +179,7 @@ module.exports = {
         administrator: permissions.map((permission) => permission.code),
         superuser: permissions.map((permission) => permission.code),
         enduser: ['items.read', 'orders.read', 'orders.create', 'sales_invoices.read', 'profile.manage'],
-        accountant: [
-          'organizations.read',
-          'vendors.read',
-          'expenses.read',
-          'expenses.create',
-          'expenses.update',
-          'expenses.delete',
-          'expenses.approve',
-          'expenses.pay',
-          'sales_invoices.read',
-          'sales_invoices.create',
-          'sales_invoices.update',
-          'sales_invoices.pay',
-          'licenses.read',
-          'withholding_tax_types.read',
-          'withholding_tax_types.create',
-          'withholding_tax_types.update',
-          'reports.read',
-          'reports.generate',
-          'reports.delete',
-          'profile.manage',
-        ],
+        accountant: ACCOUNTANT_PERMISSIONS,
         inventorymanager: [
           'items.read',
           'items.create',

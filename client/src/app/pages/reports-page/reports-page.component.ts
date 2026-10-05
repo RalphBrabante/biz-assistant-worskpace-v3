@@ -1,4 +1,5 @@
 import { TaxReturnPreparation } from '../../shared/bir-tax-return.component';
+import { GeneratedPdfArchiveComponent } from '../../shared/generated-pdf-archive.component';
 import { BirReportDocumentsComponent, ReportDocumentPreparation } from '../../shared/bir-report-documents.component';
 import {RowActionsComponent} from '../../shared/row-actions.component';
 import { Subscription } from 'rxjs';
@@ -92,6 +93,8 @@ interface BirFilingSummary {
     name?: string;
     legalName?: string;
     taxpayerClassification?: string;
+    rdoCode?: string | null;
+    taxpayerSize?: string | null;
     taxpayerClassificationLabel?: string;
     deductionMethod?: string;
     incomeTaxRate?: number;
@@ -243,7 +246,7 @@ interface BirFilingSummary {
 @Component({
   selector: 'app-reports-page',
   standalone: true,
-  imports: [BirReportDocumentsComponent, RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
+  imports: [GeneratedPdfArchiveComponent, BirReportDocumentsComponent, RowActionsComponent, OrganizationRequiredComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './reports-page.component.html',
   styleUrl: '../../shared/report-tables.css',
 })
@@ -292,6 +295,10 @@ export class ReportsPageComponent {
   readonly filingSummaryError = signal('');
   readonly generatingFilingReports = signal(false);
   readonly initialDocumentId = signal('business');
+  readonly pdfArchiveRefresh = signal(0);
+  onPdfSaved(): void { this.pdfArchiveRefresh.set(this.pdfArchiveRefresh() + 1); }
+  get archiveOrganizationId(): string { return this.orgParamValue; }
+  get canReadReports(): boolean { return this.auth.hasPermission('reports.read'); }
 
   salesPage = 1;
   salesPageSize = 20;

@@ -137,7 +137,7 @@ function sanitizeUser(user) {
   return json;
 }
 
-async function setPrimaryOrganizationMembership(models, userId, organizationId) {
+async function setPrimaryOrganizationMembership(models, userId, organizationId, transaction) {
   if (!models?.OrganizationUser || !userId || !organizationId) {
     return;
   }
@@ -145,6 +145,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
   await models.OrganizationUser.update(
     { isPrimary: false },
     {
+      transaction,
       where: {
         userId,
         isPrimary: true,
@@ -155,6 +156,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
   await models.OrganizationUser.update(
     { isPrimary: true, isActive: true },
     {
+      transaction,
       where: {
         userId,
         organizationId,
@@ -166,6 +168,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
     await models.User.update(
       { organizationId },
       {
+        transaction,
         where: {
           id: userId,
         },
@@ -276,6 +279,9 @@ async function createUser(req, res) {
     if (payload.email) {
       payload.email = String(payload.email).toLowerCase().trim();
     }
+    for (const field of ['firstName', 'lastName']) {
+      if (typeof payload[field] === 'string') payload[field] = payload[field].trim();
+    }
 
     if (!payload.firstName) {
       return res.status(400).json({ ok: false, message: 'firstName is required.' });
@@ -292,8 +298,25 @@ async function createUser(req, res) {
     if (!payload.organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
     }
+    const fieldLimits = {
+      firstName: 100, lastName: 100, email: 255, phone: 30,
+      addressLine1: 255, addressLine2: 255, city: 100, state: 100,
+      postalCode: 20, country: 100,
+    };
+    for (const [field, maximum] of Object.entries(fieldLimits)) {
+      if (payload[field] !== undefined && payload[field] !== null &&
+          (typeof payload[field] !== 'string' || payload[field].length > maximum)) {
+        return res.status(400).json({ ok: false, message: `${field} must be text with at most ${maximum} characters.` });
+      }
+    }
+    if (typeof payload.password !== 'string') {
+      return res.status(400).json({ ok: false, message: 'password must be text.' });
+    }
     if (!await Organization.findByPk(payload.organizationId, { attributes: ['id'] })) {
       return res.status(400).json({ ok: false, message: 'organizationId does not reference an existing organization.' });
+    }
+    if (await User.findOne({ where: { email: payload.email }, attributes: ['id'] })) {
+      return res.status(409).json({ ok: false, message: 'A user with this email already exists.' });
     }
 
     const requestedRoleIds = parseRoleIds(req.body?.roleIds);
@@ -349,31 +372,32 @@ async function createUser(req, res) {
         .trim();
     }
 
-    const user = await User.create(payload);
-    if (OrganizationUser && user.organizationId) {
-      await OrganizationUser.findOrCreate({
-        where: {
-          organizationId: user.organizationId,
-          userId: user.id,
-        },
-        defaults: {
-          role: String(payload.role || 'member').toLowerCase(),
-          isActive: user.isActive !== false,
-          isPrimary: true,
-        },
-      });
-      await setPrimaryOrganizationMembership(models, user.id, user.organizationId);
-    }
-    if (resolvedRoles.length > 0) {
+    // Commit the account and its access together. A later failure must not leave
+    // an orphan account that makes every retry fail on the unique email index.
+    const user = await User.sequelize.transaction(async transaction => {
+      const created = await User.create(payload, { transaction });
+      if (OrganizationUser && created.organizationId) {
+        await OrganizationUser.findOrCreate({
+          where: { organizationId: created.organizationId, userId: created.id },
+          defaults: {
+            role: String(payload.role || 'member').toLowerCase(),
+            isActive: created.isActive !== false,
+            isPrimary: true,
+          },
+          transaction,
+        });
+        await setPrimaryOrganizationMembership(models, created.id, created.organizationId, transaction);
+      }
       await UserRole.bulkCreate(
         resolvedRoles.map((role) => ({
-          userId: user.id,
+          userId: created.id,
           roleId: role.id,
           assignedByUserId: req.auth?.userId || null,
         })),
-        { ignoreDuplicates: true }
+        { transaction }
       );
-    }
+      return created;
+    });
 
     let inviteEmail = { sent: false, message: 'Invite email was not sent.' };
     let adminNotification = { sent: false, attempted: 0, failed: 0 };
@@ -517,7 +541,19 @@ async function createUser(req, res) {
       },
     });
   } catch (err) {
-    console.error('Create user error:', err);
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      // MySQL/Sequelize may report the index name instead of the attribute.
+      const constraintFields = [...Object.keys(err.fields || {}), ...(err.errors || []).map(error => error.path)];
+      const emailConflict = constraintFields.some(field => ['email', 'users_email'].includes(String(field || '').split('.').pop()));
+      return res.status(409).json({ ok: false, message: emailConflict
+        ? 'A user with this email already exists.'
+        : 'A conflicting user record already exists. Reload before trying again.' });
+    }
+    if (err.name === 'SequelizeValidationError') {
+      return res.status(400).json({ ok: false, message: 'Invalid user details. Check the email address and required fields.' });
+    }
+    // Do not log SQL, bound values or a submitted password.
+    console.error('Create user error:', { name: err.name, code: err.original?.code || err.parent?.code });
     return res.status(500).json({ ok: false, message: 'Unable to create user.' });
   }
 }

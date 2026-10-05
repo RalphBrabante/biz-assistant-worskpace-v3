@@ -95,7 +95,7 @@ export class TaxTypesPageComponent {
     if (this.organizationContext.isAllOrganizationsSelected()) {
       return false;
     }
-    return Boolean(this.activeOrganizationId);
+    return Boolean(this.activeOrganizationId) && this.auth.hasPermission('expenses.update');
   }
 
   get canManageGlobalTaxes(): boolean {

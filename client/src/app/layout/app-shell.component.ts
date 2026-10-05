@@ -70,7 +70,7 @@ export class AppShellComponent {
       title: 'Sales',
       items: [
         { label: 'Items', path: '/items', icon: 'bi-box-seam', permissions: ['items.read'] },
-        { label: 'Customers', path: '/customers', icon: 'bi-person-vcard', permissions: ['organizations.read'] },
+        { label: 'Customers', path: '/customers', icon: 'bi-person-vcard', permissions: ['customers.read', 'organizations.read'] },
         { label: 'Orders', path: '/orders', icon: 'bi-receipt', permissions: ['orders.read'] },
         { label: 'Sales Invoices', path: '/sales-invoices', icon: 'bi-file-earmark-text', permissions: ['sales_invoices.read'] },
       ],

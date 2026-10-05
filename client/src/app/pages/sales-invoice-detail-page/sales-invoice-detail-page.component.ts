@@ -1,9 +1,10 @@
 import { SalesInvoiceSheetComponent, InvoiceDocument } from '../../shared/sales-invoice-sheet/sales-invoice-sheet.component';
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
 import { ApiResponse } from '../../core/types';
 
@@ -61,6 +62,9 @@ interface SnapshotRow {
   templateUrl: './sales-invoice-detail-page.component.html',
 })
 export class SalesInvoiceDetailPageComponent {
+  private readonly auth = inject(AuthService);
+  get canEdit(): boolean { return this.auth.hasPermission('sales_invoices.update'); }
+  get canViewOrder(): boolean { return this.auth.hasPermission('orders.read'); }
   readonly loading = signal(false);
   readonly submitting = signal(false);
   readonly error = signal('');

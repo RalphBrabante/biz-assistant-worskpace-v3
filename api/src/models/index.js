@@ -1,5 +1,6 @@
 const { PricingRequest, PricingRequestLimit, initPricingRequestModels } = require('./pricing-request');
 const {Voucher,initVoucherModel}=require('./voucher');
+const { ReportDocument, initReportDocumentModel } = require('./report-document');
 const {Cheque,initChequeModel}=require('./cheque');
 const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,initOrganizationRoleModels}=require('./organization-role');
 const {BankAccount,BankOperation,BankEntry,initBankModels} = require('./bank');
@@ -66,6 +67,7 @@ const { initBugReportColumnModel, BugReportColumn } = require('./bug-report-colu
 
 function initModels(sequelize) {
   initPricingRequestModels(sequelize);
+  initReportDocumentModel(sequelize);
   initEmailTicketModels(sequelize);
   initDebtModels(sequelize);
   initOrganizationRoleModels(sequelize);
@@ -1409,6 +1411,7 @@ function initModels(sequelize) {
   return {
     PricingRequest,
     PricingRequestLimit,
+    ReportDocument,
     OrganizationRole,OrganizationRolePermission,OrganizationUserRole,
     BankAccount, BankOperation, BankEntry, Cheque, Voucher,
     Debt, DebtPayment,

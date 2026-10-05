@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
+const { fail } = require('../services/debt-amounts');
+const { ORGANIZATION_PRESET_ROLES } = require('../services/accountant-access');
+const { getSocketServer } = require('../services/socket-service');
 const { sendOrganizationUserInviteEmail } = require('../services/email-service');
 const {
   isPrivilegedRequest,
@@ -31,6 +34,7 @@ function getOrganizationMembershipModels() {
     Role: models.Role || null,
     UserRole: models.UserRole || null,
     Token: models.Token || null,
+    OrganizationUserRole: models.OrganizationUserRole || null,
   };
 }
 
@@ -48,6 +52,8 @@ function pickOrganizationPayload(body = {}) {
     currency: body.currency,
     taxTypeId: body.taxTypeId,
     taxpayerClassification: body.taxpayerClassification,
+    rdoCode: body.rdoCode,
+    taxpayerSize: body.taxpayerSize,
     deductionMethod: body.deductionMethod,
     incomeTaxRate: body.incomeTaxRate,
     isIncomeTaxExempt: body.isIncomeTaxExempt,
@@ -95,6 +101,22 @@ function normalizeTaxpayerProfile(payload = {}) {
   }
 }
 
+function normalizeTaxRegistration(payload) {
+  if (payload.rdoCode !== undefined) {
+    const code = String(payload.rdoCode ?? '').trim();
+    if (code && !/^\d{3}$/.test(code)) return 'RDO code must contain exactly three digits.';
+    payload.rdoCode = code || null;
+  }
+  if (payload.taxpayerSize !== undefined) {
+    const size = String(payload.taxpayerSize ?? '').trim().toLowerCase();
+    if (size && !['micro', 'small', 'medium', 'large'].includes(size)) {
+      return 'Business size must be Micro, Small, Medium, or Large.';
+    }
+    payload.taxpayerSize = size || null;
+  }
+  return null;
+}
+
 function cleanUndefined(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined)
@@ -109,11 +131,6 @@ function parseBoolean(value) {
     return false;
   }
   return undefined;
-}
-
-function isRequesterSuperuser(req) {
-  const roleCodes = req.auth?.roleCodes || [];
-  return roleCodes.some((code) => String(code || '').toLowerCase() === 'superuser');
 }
 
 function buildSetPasswordUrl(rawToken) {
@@ -132,7 +149,7 @@ function sanitizeUser(user) {
   return json;
 }
 
-async function setPrimaryOrganizationMembership(models, userId, organizationId) {
+async function setPrimaryOrganizationMembership(models, userId, organizationId, transaction) {
   if (!models?.OrganizationUser || !models?.User || !userId || !organizationId) {
     return;
   }
@@ -140,6 +157,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
   await models.OrganizationUser.update(
     { isPrimary: false },
     {
+      transaction,
       where: {
         userId,
         isPrimary: true,
@@ -150,6 +168,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
   await models.OrganizationUser.update(
     { isPrimary: true, isActive: true },
     {
+      transaction,
       where: {
         userId,
         organizationId,
@@ -160,6 +179,7 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId) 
   await models.User.update(
     { organizationId },
     {
+      transaction,
       where: {
         id: userId,
       },
@@ -177,6 +197,8 @@ async function createOrganization(req, res) {
 
     const payload = cleanUndefined(pickOrganizationPayload(req.body));
     normalizeTaxpayerProfile(payload);
+    const registrationError = normalizeTaxRegistration(payload);
+    if (registrationError) return res.status(400).json({ ok: false, message: registrationError });
 
     if (!payload.name) {
       return res.status(400).json({ ok: false, message: 'name is required.' });
@@ -435,7 +457,7 @@ async function listOrganizationAssignableRoles(req, res) {
     }
 
     const roles = await Role.findAll({
-      where: { isActive: true },
+      where: { isActive: true, code: { [Op.in]: ORGANIZATION_PRESET_ROLES } },
       attributes: ['id', 'name', 'code', 'description'],
       order: [['name', 'ASC']],
     });
@@ -452,272 +474,136 @@ async function listOrganizationAssignableRoles(req, res) {
 }
 
 async function addUserToOrganization(req, res) {
-  try {
-    const models = getOrganizationMembershipModels();
-    if (!models) {
-      return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
-    }
-
-    const { Organization, User, OrganizationUser, Role, UserRole, Token } = models;
-    if (!assertOrganizationAccess(req, req.params.id)) {
-      return res.status(404).json({ ok: false, message: 'Organization not found.' });
-    }
-
-    const organization = await Organization.findByPk(req.params.id);
-    if (!organization) {
-      return res.status(404).json({ ok: false, message: 'Organization not found.' });
-    }
-
-    const userId = String(req.body?.userId || '').trim();
-    if (!userId) {
-      return res.status(400).json({ ok: false, message: 'userId is required.' });
-    }
-
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ ok: false, message: 'User not found.' });
-    }
-
-    const requestedRoleId = String(req.body?.roleId || '').trim();
-    const requestedRole = String(req.body?.role || 'member').trim() || 'member';
-    let resolvedRoleCode = requestedRole;
-    let resolvedRoleId = null;
-
-    if (
-      String(requestedRole || '').toLowerCase() === 'superuser' &&
-      !isRequesterSuperuser(req)
-    ) {
-      return res.status(403).json({
-        ok: false,
-        message: 'Only superusers can assign the SUPERUSER role.',
-      });
-    }
-
-    if (requestedRoleId && Role) {
-      const roleRecord = await Role.findByPk(requestedRoleId);
-      if (!roleRecord) {
-        return res.status(404).json({ ok: false, message: 'Role not found.' });
-      }
-      if (
-        String(roleRecord.code || '').toLowerCase() === 'superuser' &&
-        !isRequesterSuperuser(req)
-      ) {
-        return res.status(403).json({
-          ok: false,
-          message: 'Only superusers can assign the SUPERUSER role.',
-        });
-      }
-      resolvedRoleCode = String(roleRecord.code || requestedRole).trim() || 'member';
-      resolvedRoleId = roleRecord.id;
-    }
-
-    const isActive = req.body?.isActive === undefined ? true : Boolean(req.body.isActive);
-    const requestedIsPrimary = parseBoolean(req.body?.isPrimary);
-    const hasExistingPrimary = await OrganizationUser.count({
-      where: {
-        userId,
-        isPrimary: true,
-      },
-    });
-    const shouldSetPrimary = requestedIsPrimary === true || hasExistingPrimary === 0;
-
-    const [membership, created] = await OrganizationUser.findOrCreate({
-      where: {
-        organizationId: organization.id,
-        userId,
-      },
-      defaults: {
-        organizationId: organization.id,
-        userId,
-        role: resolvedRoleCode,
-        isActive,
-        isPrimary: shouldSetPrimary,
-      },
-    });
-
-    if (!created) {
-      const nextMembershipPayload = { role: resolvedRoleCode, isActive };
-      if (requestedIsPrimary !== undefined) {
-        nextMembershipPayload.isPrimary = requestedIsPrimary;
-      }
-      await membership.update(nextMembershipPayload);
-    }
-
-    if (shouldSetPrimary || requestedIsPrimary === true) {
-      await setPrimaryOrganizationMembership(models, userId, organization.id);
-      await membership.reload();
-    }
-
-    if (resolvedRoleId && UserRole) {
-      const [userRole] = await UserRole.findOrCreate({
-        where: {
-          userId,
-          roleId: resolvedRoleId,
-        },
-        defaults: {
-          userId,
-          roleId: resolvedRoleId,
-          assignedByUserId: req.auth?.userId || null,
-          isActive: true,
-        },
-      });
-
-      if (!userRole.isActive) {
-        await userRole.update({
-          isActive: true,
-          assignedByUserId: req.auth?.userId || null,
-        });
-      }
-
-      if (user.role !== resolvedRoleCode) {
-        await user.update({ role: resolvedRoleCode });
-      }
-    }
-
-    const sendInviteFlag = parseBoolean(req.body?.sendInvite);
-    const shouldSendInvite = sendInviteFlag === undefined ? created : sendInviteFlag;
-    let inviteEmail = null;
-
-    if (shouldSendInvite && user.email && Token) {
-      const normalizedEmail = String(user.email).toLowerCase().trim();
-      const expiresInMinutes = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
-      const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
-      const rawToken = crypto.randomBytes(48).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-
-      await Token.update(
-        {
-          isActive: false,
-          revokedAt: new Date(),
-          revokedReason: 'superseded_organization_invite',
-        },
-        {
-          where: {
-            userId: user.id,
-            type: 'reset_password',
-            isActive: true,
-            revokedAt: null,
-          },
-        }
-      );
-
-      await Token.create({
-        userId: user.id,
-        tokenHash,
-        type: 'reset_password',
-        scope: 'organization_invite',
-        expiresAt,
-        ipAddress: req.ip || null,
-        userAgent: req.get('user-agent') || null,
-        metadata: {
-          email: normalizedEmail,
-          organizationId: organization.id,
-          organizationName: organization.name,
-          invitedByUserId: req.auth?.userId || null,
-        },
-        isActive: true,
-      });
-
-      const setPasswordUrl = buildSetPasswordUrl(rawToken);
-      try {
-        await sendOrganizationUserInviteEmail({
-          toEmail: normalizedEmail,
-          toName:
-            [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-            normalizedEmail,
-          organizationName: organization.name || organization.legalName || 'your organization',
-          setPasswordUrl,
-          expiresInMinutes,
-        });
-        inviteEmail = { sent: true };
-      } catch (emailErr) {
-        console.error('Organization invite email error:', emailErr);
-        inviteEmail = {
-          sent: false,
-          message: 'Membership added, but invite email was not sent.',
-        };
-      }
-    }
-
-    return res.status(created ? 201 : 200).json({
-      ok: true,
-      message: created ? 'User added to organization.' : 'Organization membership updated.',
-      data: {
-        id: membership.id,
-        organizationId: membership.organizationId,
-        userId: membership.userId,
-        role: membership.role,
-        roleId: resolvedRoleId,
-        isActive: membership.isActive,
-        isPrimary: membership.isPrimary,
-        inviteEmail,
-      },
-    });
-  } catch (err) {
-    console.error('Add user to organization error:', err);
-    return res.status(500).json({ ok: false, message: 'Unable to add user to organization.' });
-  }
+  return inviteOrganizationUser(req, res);
 }
 
 async function removeUserFromOrganization(req, res) {
   try {
     const models = getOrganizationMembershipModels();
-    if (!models) {
-      return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
-    }
-
-    const { Organization, User, OrganizationUser } = models;
-    if (!assertOrganizationAccess(req, req.params.id)) {
-      return res.status(404).json({ ok: false, message: 'Organization not found.' });
-    }
-
+    if (!models) return res.status(503).json({ok:false,message:'Database models are not ready yet.'});
+    const {Organization, User, OrganizationUser, Token, OrganizationUserRole} = models;
+    if (!assertOrganizationAccess(req, req.params.id)) return res.status(404).json({ok:false,message:'Organization not found.'});
     const organization = await Organization.findByPk(req.params.id);
-    if (!organization) {
-      return res.status(404).json({ ok: false, message: 'Organization not found.' });
-    }
+    if (!organization) return res.status(404).json({ok:false,message:'Organization not found.'});
 
-    const user = await User.findByPk(req.params.userId);
-    if (!user) {
-      return res.status(404).json({ ok: false, message: 'User not found.' });
-    }
-
-    const membership = await OrganizationUser.findOne({
-      where: {
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    });
-    if (!membership) {
-      return res.status(404).json({ ok: false, message: 'User is not a member of this organization.' });
-    }
-
-    const wasPrimary = Boolean(membership.isPrimary);
-    const deletedCount = await OrganizationUser.destroy({
-      where: {
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    });
-
-    if (wasPrimary) {
-      const nextPrimary = await OrganizationUser.findOne({
-        where: {
-          userId: user.id,
-          isActive: true,
-        },
-        order: [['createdAt', 'ASC']],
-      });
-      if (nextPrimary?.organizationId) {
-        await setPrimaryOrganizationMembership(models, user.id, nextPrimary.organizationId);
-      } else {
-        await User.update({ organizationId: null }, { where: { id: user.id } });
+    // Remove membership, fallback access and token scope together. A concurrent
+    // session must not regain access through a stale primary organization.
+    await User.sequelize.transaction(async transaction => {
+      const user = await User.findByPk(req.params.userId, {transaction,lock:transaction.LOCK.UPDATE});
+      if (!user) throw fail(404, 'User not found.');
+      const where = {organizationId:organization.id,userId:user.id};
+      const membership = await OrganizationUser.findOne({where,transaction});
+      if (!membership) throw fail(404, 'User is not a member of this organization.');
+      await OrganizationUser.destroy({where,transaction});
+      if (OrganizationUserRole) await OrganizationUserRole.destroy({where,transaction});
+      if (Token) {
+        const tokens = await Token.findAll({where:{userId:user.id,type:'access',isActive:true},transaction});
+        for (const token of tokens) {
+          if (token.metadata?.organizationId === organization.id || (!token.metadata?.organizationId && user.organizationId === organization.id)) {
+            await token.update({isActive:false,revokedAt:new Date(),revokedReason:'organization_membership_removed'}, {transaction});
+          }
+        }
       }
+      if (membership.isPrimary || user.organizationId === organization.id) {
+        const nextPrimary = await OrganizationUser.findOne({where:{userId:user.id,isActive:true},order:[['createdAt','ASC']],transaction});
+        if (nextPrimary?.organizationId) await setPrimaryOrganizationMembership(models,user.id,nextPrimary.organizationId,transaction);
+        else await User.update({organizationId:null},{where:{id:user.id},transaction});
+      }
+    });
+    const io = getSocketServer();
+    if (io) {
+      const sockets = await io.in(`user:${req.params.userId}`).fetchSockets();
+      for (const socket of sockets) if (socket.data?.auth?.organizationId === organization.id) socket.disconnect(true);
     }
-
-    return res.status(200).json({ ok: true, message: 'User removed from organization.' });
+    return res.status(200).json({ok:true,message:'User removed from organization.'});
   } catch (err) {
-    console.error('Remove user from organization error:', err);
-    return res.status(500).json({ ok: false, message: 'Unable to remove user from organization.' });
+    if (err.status) return res.status(err.status).json({ok:false,message:err.message});
+    console.error('Remove user from organization error:',err);
+    return res.status(500).json({ok:false,message:'Unable to remove user from organization.'});
+  }
+}
+
+async function inviteAccountant(req, res) {
+  return inviteOrganizationUserWithRole(req, res, 'accountant');
+}
+
+async function inviteOrganizationUser(req, res) {
+  return inviteOrganizationUserWithRole(req, res);
+}
+
+async function inviteOrganizationUserWithRole(req, res, forcedRole) {
+  try {
+    if (!(req.auth?.roleCodes || []).some(code => ['administrator', 'superuser'].includes(code))) {
+      return res.status(403).json({ok:false,message:'Only administrators or superusers can invite organization users.'});
+    }
+    const models = getOrganizationMembershipModels();
+    if (!models?.Token || !models?.Role) return res.status(503).json({ok:false,message:'Database models are not ready yet.'});
+    const {Organization, User, OrganizationUser, Token, Role} = models;
+    if (!assertOrganizationAccess(req, req.params.id)) return res.status(404).json({ok:false,message:'Organization not found.'});
+    const organization = await Organization.findByPk(req.params.id);
+    if (!organization?.isActive) return res.status(404).json({ok:false,message:'Active organization not found.'});
+    let roleCode = forcedRole || String(req.body?.role || 'enduser').trim().toLowerCase();
+    if (!forcedRole && req.body?.roleId) {
+      const role = Role && await Role.findByPk(req.body.roleId);
+      if (!role?.isActive) return res.status(400).json({ok:false,message:'Select an active organization role.'});
+      roleCode = String(role.code).toLowerCase();
+    }
+    if (!ORGANIZATION_PRESET_ROLES.includes(roleCode)) return res.status(400).json({ok:false,message:'Select an organization role. Global superuser access cannot be assigned through an organization invitation.'});
+    const invitationRole = await Role.findOne({where:{code:roleCode,isActive:true}});
+    if (!invitationRole) return res.status(400).json({ok:false,message:'Select an active organization role.'});
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const firstName = String(req.body?.firstName || '').trim();
+    const lastName = String(req.body?.lastName || '').trim();
+    const userId = String(req.body?.userId || '').trim();
+    if (!userId && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255)) {
+      return res.status(400).json({ok:false,message:'Enter a valid email address.'});
+    }
+    const result = await User.sequelize.transaction(async transaction => {
+      let user = userId ? await User.findByPk(userId,{transaction,lock:transaction.LOCK.UPDATE})
+        : await User.findOne({where:{email},transaction,lock:transaction.LOCK.UPDATE});
+      if (userId && !user) throw fail(404,'User not found.');
+      if (!user) {
+        if (!firstName || !lastName || firstName.length > 100 || lastName.length > 100) throw fail(400,'First and last name are required for a new user (maximum 100 characters each).');
+        user = await User.create({email,firstName,lastName,password:crypto.randomBytes(48).toString('hex'),
+          organizationId:organization.id,role:'member',status:'invited',isActive:true,isEmailVerified:false},{transaction});
+      }
+      if (!user.isActive || user.status === 'suspended') throw fail(409,'This account is inactive or suspended.');
+      const existing = await OrganizationUser.findOne({where:{organizationId:organization.id,userId:user.id},transaction});
+      if (existing && existing.role !== roleCode) throw fail(409,'This user already has another role in this organization. Manage their existing assignment first.');
+      const hasPrimary = Boolean(user.organizationId) || await OrganizationUser.count({where:{userId:user.id,isPrimary:true,isActive:true},transaction});
+      const isPrimary = user.organizationId === organization.id || !hasPrimary;
+      const membership = existing || await OrganizationUser.create({organizationId:organization.id,userId:user.id,
+        role:roleCode,isActive:true,isPrimary},{transaction});
+      if (existing && !existing.isActive) await existing.update({isActive:true},{transaction});
+      if (!hasPrimary) await user.update({organizationId:organization.id},{transaction});
+      const expiresInMinutes = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
+      let setPasswordUrl;
+      if (!user.isEmailVerified || user.status !== 'active') {
+        const rawToken = crypto.randomBytes(48).toString('hex');
+        await Token.create({userId:user.id,tokenHash:crypto.createHash('sha256').update(rawToken).digest('hex'),
+          type:'reset_password',scope:'organization_invite',expiresAt:new Date(Date.now()+expiresInMinutes*60000),
+          ipAddress:req.ip || null,userAgent:req.get('user-agent') || null,isActive:true,
+          metadata:{organizationId:organization.id,invitedByUserId:req.auth.userId,email:user.email}}, {transaction});
+        setPasswordUrl = buildSetPasswordUrl(rawToken);
+      }
+      return {user,membership,created:!existing,setPasswordUrl,expiresInMinutes};
+    });
+    let inviteEmail;
+    try {
+      await sendOrganizationUserInviteEmail({toEmail:result.user.email,toName:[result.user.firstName,result.user.lastName].join(' '),
+        organizationName:organization.name,roleName:invitationRole.name || roleCode,expiresInMinutes:result.expiresInMinutes,setPasswordUrl:result.setPasswordUrl,
+        loginUrl:result.setPasswordUrl ? undefined : `${String(process.env.APP_BASE_URL || 'http://localhost').replace(/\/+$/,'')}/login`});
+      inviteEmail = {sent:true};
+    } catch (err) {
+      console.error('Organization invite email error:', err);
+      inviteEmail = {sent:false,message:'Organization access was added, but the invitation email could not be sent. Retry the invitation.'};
+    }
+    return res.status(result.created ? 201 : 200).json({ok:true,message:inviteEmail.sent ? 'Organization invitation sent.' : inviteEmail.message,
+      data:{id:result.membership.id,userId:result.user.id,organizationId:organization.id,role:roleCode,isActive:true,inviteEmail}});
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ok:false,message:err.message});
+    console.error('Invite organization user error:',err);
+    return res.status(500).json({ok:false,message:'Unable to invite organization user.'});
   }
 }
 
@@ -740,6 +626,8 @@ async function updateOrganization(req, res) {
 
     const payload = cleanUndefined(pickOrganizationPayload(req.body));
     normalizeTaxpayerProfile(payload);
+    const registrationError = normalizeTaxRegistration(payload);
+    if (registrationError) return res.status(400).json({ ok: false, message: registrationError });
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
@@ -810,6 +698,8 @@ module.exports = {
   searchAssignableUsers,
   listOrganizationAssignableRoles,
   addUserToOrganization,
+  inviteAccountant,
+  inviteOrganizationUser,
   removeUserFromOrganization,
   updateOrganization,
   deleteOrganization,

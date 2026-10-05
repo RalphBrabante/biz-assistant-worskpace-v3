@@ -4,10 +4,19 @@ require('ts-node').register({ transpileOnly: true, project: require('node:path')
 require('reflect-metadata');
 const sequelize = require('../src/sequelize');
 const roles = { admin: ['administrator'], accountant: ['accountant'], staff: ['staff'], super: ['superuser'] };
+const users = Object.fromEntries(Object.entries(roles).map(([key, codes]) => [key, {
+  id: key, isActive: true, status: 'active', organizationId: 'org',
+  roles: codes.map(code => ({ code, permissions: [{ code: '*' }] })),
+  toJSON() { return { id: this.id, organizationId: this.organizationId }; },
+}]));
 sequelize.getModels = () => ({
   Token: { async findOne(query) { const role = Object.keys(roles).find(key => require('node:crypto').createHash('sha256').update(key).digest('hex') === query.where.tokenHash);
-    return role ? { id: 'token', expiresAt: new Date(Date.now() + 60000), user: { id: 'user', isActive: true, organizationId: 'org', roles: roles[role].map(code => ({ code, permissions: [{ code: '*' }] })), toJSON() { return { id: 'user', organizationId: 'org' }; } } } : null; } },
-  User: {}, Role: {}, Permission: {}, License: { async findOne() { return {}; } },
+    return role ? { id: 'token', metadata: { organizationId: 'org' }, expiresAt: new Date(Date.now() + 60000), user: users[role] } : null; } },
+  User: { async findByPk(id) { return users[id]; } },
+  UserRole: { async findAll(query) { return users[query.where.userId].roles.map(role => ({ role })); } },
+  OrganizationUser: { async findOne(query) { const user = users[query.where.userId]; return user ? { organizationId: 'org', isActive: true, role: user.roles[0].code } : null; } },
+  Role: { async findOne(query) { return Object.values(users).flatMap(user => user.roles).find(role => role.code === query.where.code); } },
+  Permission: {}, License: { async findOne() { return {}; } },
 });
 const { NestFactory } = require('@nestjs/core');
 const { Module } = require('@nestjs/common');

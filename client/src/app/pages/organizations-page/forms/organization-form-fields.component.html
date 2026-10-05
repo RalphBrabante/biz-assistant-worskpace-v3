@@ -109,9 +109,29 @@
   <div class="col-span-12">
     <div class="flex items-center gap-2 mt-2">
       <i class="bi bi-file-earmark-text text-brand"></i>
-      <span class="text-xs font-semibold uppercase tracking-wider text-muted">BIR Income Tax Filing Profile</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted">BIR Tax Filing Profile</span>
     </div>
     <hr class="mt-1 mb-0" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold" for="organization-rdo-code">RDO Code (optional)</label>
+    <input id="organization-rdo-code" type="text" inputmode="numeric" maxlength="3" placeholder="e.g. 039"
+      class="ui-form-control" formControlName="rdoCode" [class.is-invalid]="hasError('rdoCode')"
+      aria-describedby="organization-rdo-help organization-rdo-error" />
+    <div id="organization-rdo-help" class="ui-form-text">Enter the three-digit code from the Certificate of Registration, including any leading zero. Prefills tax reports.</div>
+    <div id="organization-rdo-error" *ngIf="hasError('rdoCode')" class="text-danger text-xs mt-1">{{ error('rdoCode') }}</div>
+  </div>
+  <div class="col-span-12 md:col-span-6">
+    <label class="ui-form-label font-semibold" for="organization-taxpayer-size">Business Size (optional)</label>
+    <select id="organization-taxpayer-size" class="ui-form-select" formControlName="taxpayerSize" aria-describedby="organization-size-help">
+      <option value="">Not configured</option>
+      <option value="micro">Micro</option>
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large">Large</option>
+    </select>
+    <div id="organization-size-help" class="ui-form-text">BIR taxpayer size classification. Prefills the size of business on the 2550Q VAT return.</div>
   </div>
 
   <div class="col-span-12 md:col-span-3">

@@ -152,6 +152,10 @@ export class CustomersPageComponent {
   }
 
 
+  get canCreateRecords(): boolean { return this.auth.hasPermission('organizations.update'); }
+  get canEditRecords(): boolean { return this.auth.hasPermission('organizations.update'); }
+  get canDeleteRecords(): boolean { return this.auth.hasPermission('organizations.update'); }
+
   ngOnInit(): void {
     this.restoreTablePreferences();
     this.load();

@@ -279,6 +279,10 @@ export class ExpensesPageComponent {
     return !this.submitting() && !this.taxContextLoading && !this.taxContextError && !this.calculationError;
   }
 
+  get canCreateRecords(): boolean { return this.auth.hasPermission('expenses.create'); }
+  get canEditRecords(): boolean { return this.auth.hasPermission('expenses.update'); }
+  get canDeleteRecords(): boolean { return this.auth.hasPermission('expenses.delete'); }
+
   ngOnInit(): void {
     this.restoreTablePreferences();
     const requestedStatus = this.dashboardRoute.snapshot.queryParamMap.get('status');

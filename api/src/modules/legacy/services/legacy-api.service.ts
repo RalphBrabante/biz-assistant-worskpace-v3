@@ -1,3 +1,5 @@
+const { isAccountant } = require('../../../services/accountant-access');
+const { effectiveRoleAccess, resolveTokenOrganizationId } = require('../../../services/role-access');
 const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('../../../jobs/quarterly-tax-reminder-job');
 const {startDebtReminderJob, stopDebtReminderJob} = require('../../../jobs/debt-reminder-job');
 const {startGmailTicketJob, stopGmailTicketJob} = require('../../../services/gmail-tickets');
@@ -164,6 +166,7 @@ export class LegacyApiService {
         const tokenRecord = await models.Token.findOne({
           where: {
             tokenHash,
+            type: 'access',
             isActive: true,
             revokedAt: null,
           },
@@ -199,13 +202,15 @@ export class LegacyApiService {
         }
 
         const user = tokenRecord.user;
-        if (!user || !user.isActive) {
+        if (!user || !user.isActive || user.status !== 'active') {
           return next(new Error('User is inactive or unavailable.'));
         }
 
-        const roleCodes = (user.roles || []).map((role: any) => String(role.code || '').toLowerCase());
-        const isSuperuser = this.hasSuperuserRole(roleCodes);
-        const effectiveOrganizationId = await this.resolveEffectiveOrganizationId(models, user);
+        const globalAccess = await effectiveRoleAccess(models, user, null);
+        const isSuperuser = globalAccess.roleCodes.includes('superuser');
+        const fallbackOrganizationId = await this.resolveEffectiveOrganizationId(models, user);
+        const effectiveOrganizationId = isSuperuser ? fallbackOrganizationId : await resolveTokenOrganizationId(models, user, tokenRecord, fallbackOrganizationId);
+        const {roleCodes} = await effectiveRoleAccess(models, user, effectiveOrganizationId);
 
         if (!isSuperuser) {
           if (!effectiveOrganizationId) {
@@ -255,7 +260,7 @@ export class LegacyApiService {
         socket.join(`user:${userId}`);
       }
       if (organizationId) {
-        socket.join(`org:${organizationId}`);
+        socket.join(`${isAccountant(socket.data?.auth?.roleCodes) ? 'accounting' : 'org'}:${organizationId}`);
       }
     });
 

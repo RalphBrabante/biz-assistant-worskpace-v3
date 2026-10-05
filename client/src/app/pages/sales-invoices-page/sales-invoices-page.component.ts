@@ -208,6 +208,10 @@ export class SalesInvoicesPageComponent implements OnDestroy {
   }
 
 
+  get canCreateRecords(): boolean { return this.auth.hasPermission('sales_invoices.create'); }
+  get canEditRecords(): boolean { return this.auth.hasPermission('sales_invoices.update'); }
+  get canDeleteRecords(): boolean { return this.auth.hasPermission('sales_invoices.update'); }
+
   ngOnInit(): void {
     this.restoreTablePreferences();
     const requestedStatus = this.dashboardRoute.snapshot.queryParamMap.get('status');
