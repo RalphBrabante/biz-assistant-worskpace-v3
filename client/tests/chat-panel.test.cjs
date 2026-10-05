@@ -193,6 +193,27 @@ test('the member sidebar groups verified presence and keeps offline members avai
   assert.equal(e.component.sender(message('1')).id, 'user-e');
   assert.equal(e.component.photo(e.component.sender(message('2', { senderUserId: 'user-a' }))), '/alice.jpg');
 });
+test('sidebar updates retain member button views between pointer down and click', async t => {
+  // Use Angular's real list differ: replacing an outer group destroys its
+  // member buttons, so a pointerdown-triggered update cancels the later click.
+  await import('@angular/compiler');
+  const { DefaultIterableDiffer } = await import('@angular/core');
+  const e = setup(t); e.component.toggle(); e.finish('users', { data: [bob] });
+  e.finish('presence', { data: [{ userId: bob.id, status: 'online' }] });
+  const differ = new DefaultIterableDiffer(e.component.trackGroup?.bind(e.component));
+  differ.diff(e.component.memberGroups);
+  e.component.refreshPresence(); e.finish('presence', { data: [{ userId: bob.id, status: 'online' }] });
+  const update = differ.diff(e.component.memberGroups), removed = [], added = [];
+  update?.forEachRemovedItem(row => removed.push(row.item));
+  update?.forEachAddedItem(row => added.push(row.item));
+  assert.equal(removed.length, 0, 'UI updates must retain the group containing the pressed member button');
+  assert.equal(added.length, 0, 'Existing member groups must not be recreated');
+  const template = fs.readFileSync(require.resolve('../src/app/shared/chat-panel.component.html'), 'utf8');
+  assert.match(template, /\*ngFor="let group of memberGroups; trackBy: trackGroup"/);
+  e.component.select(bob);
+  assert.equal(e.component.selected.id, bob.id);
+  assert.equal(e.requests.filter(req => req.kind === 'history').at(-1).args[1], bob.id);
+});
 test('presence invalidations are organization scoped and stale results cannot survive an organization switch', t => {
   const e = setup(t); e.component.toggle(); e.finish('presence', { data: [{ userId: bob.id, status: 'online' }] });
   const before = e.requests.length;
@@ -202,6 +223,18 @@ test('presence invalidations are organization scoped and stale results cannot su
   assert.equal(e.component.presenceAvailable, false); assert.equal(e.component.status(bob), 'unknown');
   e.component.toggleSound(); assert.equal(e.socketService.silent, true);
   e.component.ngOnDestroy(); assert.equal(e.presenceEvents.observers.length, 0);
+});
+test('selecting another member cancels old history and opens only that member conversation', t => {
+  const e = setup(t), carol = { id: 'user-c', firstName: 'Carol', email: 'carol@example.test' };
+  e.component.toggle(); e.finish('users', { data: [bob, carol] });
+  e.component.select(bob); const oldHistory = e.requests.filter(req => req.kind === 'history').at(-1);
+  e.component.select(carol); assert.equal(oldHistory.stream.observers.length, 0);
+  oldHistory.stream.next({ data: [message('1')] }); assert.equal(e.component.messages.length, 0);
+  e.finish('history', { data: [message('2', { senderUserId: carol.id })] });
+  assert.equal(e.component.selected.id, carol.id); assert.equal(e.component.messages[0].senderUserId, carol.id);
+  assert.equal(e.requests.filter(req => req.kind === 'history').at(-1).args[1], carol.id);
+  e.component.select(bob); assert.equal(e.component.selected.id, bob.id);
+  assert.equal(e.component.users.length, 2);
 });
 test('reply sends preserve the selected target and retry ID on failure, then clear the quote on success', t => {
   const e = setup(t); e.component.toggle(); e.component.select(bob);

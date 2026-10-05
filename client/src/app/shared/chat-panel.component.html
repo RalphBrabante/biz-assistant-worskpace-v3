@@ -22,7 +22,7 @@
           <input #searchInput id="chat-member-search" class="ui-form-control" type="search" placeholder="Search members…" autocomplete="off" [(ngModel)]="search" (ngModelChange)="searchChanged()" /></div>
         <div class="chat-members">
           <div *ngIf="usersError" class="chat-error" role="alert">{{ usersError }} <button type="button" class="ui-btn ui-btn-link" (click)="loadUsers()">Retry</button></div>
-          <ng-container *ngFor="let group of memberGroups">
+          <ng-container *ngFor="let group of memberGroups; trackBy: trackGroup">
             <h3 class="chat-group-heading">{{ group.label }} <span>{{ group.users.length }}</span></h3>
             <button *ngFor="let user of group.users; trackBy: trackUser" type="button" class="chat-member" (click)="select(user)" [class.chat-member-selected]="selected?.id === user.id" [attr.aria-current]="selected?.id === user.id ? 'true' : null" [disabled]="sending">
               <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ $implicit: user }"></ng-container>

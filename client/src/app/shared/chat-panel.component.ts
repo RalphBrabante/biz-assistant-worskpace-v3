@@ -344,6 +344,9 @@ export class ChatPanelComponent implements OnDestroy {
   }
   private errorText(error: any, fallback: string): string { return error?.error?.message || fallback; }
   trackUser(_index: number, user: ChatUser): string { return user.id; }
+  // Groups are recalculated during change detection. Stable keys preserve
+  // their member buttons between pointerdown and the subsequent click.
+  trackGroup(_index: number, group: { label: string }): string { return group.label; }
   trackMessage(_index: number, message: ChatMessage): string { return message.id; }
   ngOnDestroy(): void {
     this.contextVersion++; clearInterval(this.pollTimer); clearTimeout(this.searchTimer);
