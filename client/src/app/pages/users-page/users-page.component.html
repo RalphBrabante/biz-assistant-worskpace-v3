@@ -101,7 +101,7 @@
         </tr>
 
         <tr *ngFor="let row of filteredRows(); trackBy: trackById">
-          <td class="row-actions-cell"><app-row-actions label="Users actions">
+          <td class="row-actions-cell"><span *ngIf="row.canManageAccount === false" class="text-xs text-muted">Organization member</span><app-row-actions *ngIf="row.canManageAccount !== false" label="Users actions">
             <div class="row-action-items">
               <a
 
@@ -163,123 +163,82 @@
 </section>
 
 <div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
-<div
-  appModal class="ui-modal fade show"
-  tabindex="-1"
-  [style.display]="isCreateModalOpen() ? 'block' : 'none'"
-  [attr.aria-hidden]="!isCreateModalOpen()"
-  *ngIf="isCreateModalOpen()"
->
+<div appModal class="ui-modal fade show" tabindex="-1" role="dialog" aria-labelledby="create-user-title" aria-modal="true" [style.display]="isCreateModalOpen() ? 'block' : 'none'" *ngIf="isCreateModalOpen()">
   <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
     <div class="ui-modal-content border-0 shadow-dialog">
       <div class="ui-modal-header border-0 pb-0">
-        <h5 class="ui-modal-title">Create New User</h5>
-        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+        <h5 class="ui-modal-title" id="create-user-title">{{ existingUser() ? 'Add Existing User' : 'Create New User' }}</h5>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" [disabled]="submitting()" aria-label="Close dialog"></button>
       </div>
-      <div class="ui-modal-body pt-4 relative">
-        <div *ngIf="submitting()" class="modal-loading-overlay">
-          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
-        </div>
-        <div *ngIf="createModalError()" class="ui-alert ui-alert-danger mb-4">
-          {{ createModalError() }}
-        </div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createUserForm" (ngSubmit)="createUser()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">First Name</label>
-            <input class="ui-form-control" formControlName="firstName" />
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Last Name</label>
-            <input class="ui-form-control" formControlName="lastName" />
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Email</label>
-            <input type="email" class="ui-form-control" formControlName="email" />
-          </div>
-
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Password Generator <span class="text-danger">*</span></label>
-            <div class="ui-input-group">
-              <input type="text" class="ui-form-control" formControlName="password" placeholder="Generate or enter password" />
-              <button class="ui-btn ui-btn-outline-primary" type="button" (click)="generateCreatePassword()" appTooltip title="Generate Password">
-                <i class="bi bi-magic"></i>
-              </button>
+      <div class="ui-modal-body pt-4">
+        <div *ngIf="createModalError()" class="ui-alert ui-alert-danger mb-4" role="alert">{{ createModalError() }}</div>
+        <form [formGroup]="createUserForm" (ngSubmit)="createUser()" [attr.aria-busy]="submitting() || emailLookupLoading()">
+          <fieldset [disabled]="submitting()" class="ui-grid grid grid-cols-12 gap-4">
+            <div class="col-span-12 md:col-span-6">
+              <label class="ui-form-label font-semibold" for="create-user-email">Email</label>
+              <input id="create-user-email" type="email" class="ui-form-control" formControlName="email" autocomplete="off" />
+              <div *ngIf="canAssignExistingUser" class="ui-form-text">Enter an email to find an existing account or create a new one.</div>
+              <div *ngIf="emailLookupLoading()" class="ui-form-text" role="status">Checking email…</div>
             </div>
-            <div class="ui-form-text">This password is temporary. User will receive an email to set a new password.</div>
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Organization <span class="text-danger">*</span></label>
-            <ng-container *ngIf="isSuperuser; else fixedOrganizationField">
-              <select class="ui-form-select" formControlName="organizationId" [disabled]="createOptionsLoading()">
+            <div class="col-span-12 md:col-span-6">
+              <label class="ui-form-label font-semibold" for="create-user-organization">Organization <span class="text-danger">*</span></label>
+              <select *ngIf="isSuperuser; else fixedOrganizationField" id="create-user-organization" class="ui-form-select" formControlName="organizationId">
                 <option value="">Select organization</option>
-                <option *ngFor="let organization of createOrganizationOptions()" [value]="organization.id">
-                  {{ organizationOptionLabel(organization) }}
-                </option>
+                <option *ngFor="let organization of createOrganizationOptions()" [value]="organization.id">{{ organizationOptionLabel(organization) }}</option>
               </select>
+              <ng-template #fixedOrganizationField><input id="create-user-organization" class="ui-form-control" [value]="createOrganizationName || 'No organization on logged in user'" readonly /></ng-template>
+            </div>
+            <div *ngIf="emailLookupError()" class="col-span-12 ui-alert ui-alert-danger" role="alert">
+              {{ emailLookupError() }} <button type="button" class="ui-btn ui-btn-outline-dark ui-btn-sm ml-2" (click)="checkExistingEmail(true)">Retry email check</button>
+            </div>
+            <ng-container *ngIf="existingUser() as existing; else newAccountFields">
+              <div class="col-span-12 ui-alert ui-alert-info" role="status">
+                <strong>This user already exists: {{ existing.firstName }} {{ existing.lastName }}</strong>
+                <div>{{ existing.email }}</div>
+                <p *ngIf="existing.alreadyAssigned" class="mb-0 mt-2">This user already belongs to {{ createOrganizationName }}. Their existing assignment is preserved.</p>
+                <p *ngIf="!existing.alreadyAssigned && existing.canAssign" class="mb-0 mt-2">{{ existing.inactiveMembership ? 'Reactivate this user’s membership in' : 'Assign this user to' }} {{ createOrganizationName }}. Their account, password and memberships in other organizations will be preserved. A user can belong to multiple organizations.</p>
+                <p *ngIf="!existing.alreadyAssigned && !existing.canAssign" class="mb-0 mt-2">This account is inactive or suspended. An account administrator must restore it before it can be assigned.</p>
+              </div>
+              <div *ngIf="existing.canAssign" class="col-span-12 md:col-span-6">
+                <label class="ui-form-label font-semibold" for="existing-user-role">Role in {{ createOrganizationName }} <span class="text-danger">*</span></label>
+                <select id="existing-user-role" class="ui-form-select" [ngModel]="existingRoleId" (ngModelChange)="existingRoleId = $event" [ngModelOptions]="{standalone:true}" [disabled]="existing.inactiveMembership || createOptionsLoading()">
+                  <option value="">Select organization role</option>
+                  <option *ngFor="let role of existingRoleOptions" [value]="role.id">{{ roleOptionLabel(role) }}</option>
+                </select>
+                <div class="ui-form-text">This role applies only to the selected organization.</div>
+                <div *ngIf="existing.inactiveMembership" class="ui-form-text">The previous membership role ({{ existing.membershipRole }}) is preserved. Change it through organization membership management.</div>
+                <div *ngIf="!createOptionsLoading() && !existingRoleOptions.length" class="ui-form-text">No organization roles are available.</div>
+              </div>
             </ng-container>
-            <ng-template #fixedOrganizationField>
-              <input class="ui-form-control" [value]="currentOrganizationId || 'No organization on logged in user'" readonly />
+            <ng-template #newAccountFields>
+              <div class="col-span-12 md:col-span-6"><label class="ui-form-label font-semibold" for="create-first-name">First Name</label><input id="create-first-name" class="ui-form-control" formControlName="firstName" /></div>
+              <div class="col-span-12 md:col-span-6"><label class="ui-form-label font-semibold" for="create-last-name">Last Name</label><input id="create-last-name" class="ui-form-control" formControlName="lastName" /></div>
+              <div class="col-span-12 md:col-span-6">
+                <label class="ui-form-label font-semibold" for="create-password">Password Generator <span class="text-danger">*</span></label>
+                <div class="ui-input-group"><input id="create-password" type="text" class="ui-form-control" formControlName="password" placeholder="Generate or enter password" /><button class="ui-btn ui-btn-outline-primary" type="button" (click)="generateCreatePassword()" appTooltip title="Generate Password"><i class="bi bi-magic"></i></button></div>
+                <div class="ui-form-text">This password is temporary. User will receive an email to set a new password.</div>
+              </div>
+              <div class="col-span-12 md:col-span-6">
+                <label class="ui-form-label font-semibold">Roles <span class="text-danger">*</span></label>
+                <div class="border rounded-lg p-2 role-checklist bg-subtle">
+                  <div *ngIf="createOptionsLoading()" class="text-xs text-muted">Loading roles...</div>
+                  <div *ngIf="!createOptionsLoading() && !createRoleOptions().length" class="text-xs text-muted">No roles available</div>
+                  <div class="ui-form-check mb-1" *ngFor="let role of createRoleOptions()"><input class="ui-form-check-input" type="checkbox" [id]="'create-role-' + role.id" [checked]="isCreateRoleSelected(role.id)" (change)="toggleCreateRoleSelection(role.id, $any($event.target).checked)" /><label class="ui-form-check-label text-xs" [for]="'create-role-' + role.id">{{ roleOptionLabel(role) }}</label></div>
+                </div>
+              </div>
+              <div class="col-span-12 md:col-span-4"><label class="ui-form-label font-semibold" for="create-status">Status</label><input id="create-status" class="ui-form-control" formControlName="status" /></div>
+              <div class="col-span-12 md:col-span-4"><label class="ui-form-label font-semibold" for="create-phone">Phone</label><input id="create-phone" class="ui-form-control" formControlName="phone" /></div>
+              <div class="col-span-12 md:col-span-4"><label class="ui-form-label font-semibold">Country</label><app-country-select formControlName="country"></app-country-select></div>
+              <div class="col-span-12"><label class="ui-form-label font-semibold" for="create-address">Address</label><input id="create-address" class="ui-form-control" formControlName="addressLine1" /></div>
+              <div class="col-span-12 md:col-span-4"><label class="ui-form-check"><input class="ui-form-check-input" type="checkbox" formControlName="isEmailVerified" /><span class="ui-form-check-label">Email Verified</span></label></div>
+              <div class="col-span-12 md:col-span-4"><label class="ui-form-check"><input class="ui-form-check-input" type="checkbox" formControlName="isActive" /><span class="ui-form-check-label">Active</span></label></div>
             </ng-template>
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Roles <span class="text-danger">*</span></label>
-            <div class="border rounded-lg p-2 role-checklist bg-subtle">
-              <div *ngIf="createOptionsLoading()" class="text-xs text-muted">Loading roles...</div>
-              <div *ngIf="!createOptionsLoading() && createRoleOptions().length === 0" class="text-xs text-muted">
-                No roles available
-              </div>
-              <div class="ui-form-check mb-1" *ngFor="let role of createRoleOptions()">
-                <input
-                  class="ui-form-check-input"
-                  type="checkbox"
-                  [id]="'create-role-' + role.id"
-                  [checked]="isCreateRoleSelected(role.id)"
-                  (change)="toggleCreateRoleSelection(role.id, $any($event.target).checked)"
-                />
-                <label class="ui-form-check-label text-xs" [for]="'create-role-' + role.id">
-                  {{ roleOptionLabel(role) }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Status</label>
-            <input class="ui-form-control" formControlName="status" />
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Phone</label>
-            <input class="ui-form-control" formControlName="phone" />
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Country</label>
-            <app-country-select formControlName="country"></app-country-select>
-          </div>
-
-          <div class="col-span-12">
-            <label class="ui-form-label font-semibold">Address</label>
-            <input class="ui-form-control" formControlName="addressLine1" />
-          </div>
-
-          <div class="col-span-12 md:col-span-4 flex items-end">
-            <div class="ui-form-check">
-              <input class="ui-form-check-input" type="checkbox" formControlName="isEmailVerified" />
-              <label class="ui-form-check-label">Email Verified</label>
-            </div>
-          </div>
-          <div class="col-span-12 md:col-span-4 flex items-end">
-            <div class="ui-form-check">
-              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
-              <label class="ui-form-check-label">Active</label>
-            </div>
-          </div>
+          </fieldset>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">
-        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
-        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createUser()">
-          {{ submitting() ? 'Creating...' : 'Create User' }}
-        </button>
+        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()" [disabled]="submitting()">{{ existingUser()?.alreadyAssigned ? 'Close' : 'Cancel' }}</button>
+        <button class="ui-btn ui-btn-primary" [disabled]="submitting() || emailLookupLoading() || createOptionsLoading() || !!emailLookupError() || (!!existingUser() && !existingUser()?.canAssign)" (click)="createUser()">{{ submitting() ? (existingUser() ? 'Assigning…' : 'Creating…') : (existingUser() ? (existingUser()?.inactiveMembership ? 'Reactivate Membership' : 'Assign Existing User') : 'Create User') }}</button>
       </div>
     </div>
   </div>

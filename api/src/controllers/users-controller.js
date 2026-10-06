@@ -10,6 +10,8 @@ const {
   getActorDisplayName,
 } = require('../services/message-service');
 const { deleteRemoteFileByUrl } = require('../services/storage-service');
+const { fail } = require('../services/debt-amounts');
+const { ORGANIZATION_PRESET_ROLES } = require('../services/accountant-access');
 const {
   isPrivilegedRequest,
   getAuthenticatedOrganizationId,
@@ -558,6 +560,95 @@ async function createUser(req, res) {
   }
 }
 
+async function userAssignmentOrganization(req, models) {
+  if (!(req.auth?.roleCodes || []).some(code => ['administrator', 'superuser'].includes(String(code).toLowerCase()))) {
+    throw fail(403, 'Only administrators or superusers can assign existing users.');
+  }
+  const requested = String(req.body?.organizationId || '').trim();
+  const organizationId = isRequesterSuperuser(req) ? requested : getAuthenticatedOrganizationId(req);
+  if (!organizationId) throw fail(400, 'Select an organization.');
+  if (!isRequesterSuperuser(req) && requested && requested !== organizationId) throw fail(403, 'You cannot assign users to another organization.');
+  const organization = await models.Organization.findByPk(organizationId, { attributes: ['id', 'name', 'legalName', 'isActive'] });
+  if (!organization?.isActive) throw fail(404, 'Active organization not found.');
+  return organization;
+}
+
+function assignmentEmail(value) {
+  if (typeof value !== 'string') throw fail(400, 'Enter a valid email address.');
+  const email = value.trim().toLowerCase();
+  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw fail(400, 'Enter a valid email address.');
+  return email;
+}
+
+function existingUserSuggestion(user, membership, organizationId) {
+  if (!user) return null;
+  const alreadyAssigned = membership ? membership.isActive : user.organizationId === organizationId;
+  return {
+    id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email,
+    alreadyAssigned: Boolean(alreadyAssigned),
+    canAssign: user.isActive && !['suspended', 'disabled', 'blocked'].includes(user.status) && !alreadyAssigned,
+    inactiveMembership: Boolean(membership && !membership.isActive),
+    membershipRole: membership?.role || (alreadyAssigned ? user.role : null),
+  };
+}
+
+// Exact-email discovery for the create flow. Return only the identity needed to
+// confirm assignment; never expose other memberships, credentials or tokens.
+async function lookupExistingUser(req, res) {
+  try {
+    const models = getModels();
+    if (!models?.User || !models?.Organization || !models?.OrganizationUser) return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
+    const organization = await userAssignmentOrganization(req, models);
+    const email = assignmentEmail(req.body?.email);
+    const user = await models.User.findOne({ where: { email }, attributes: ['id', 'firstName', 'lastName', 'email', 'organizationId', 'role', 'isActive', 'status'] });
+    const membership = user && await models.OrganizationUser.findOne({ where: { userId: user.id, organizationId: organization.id } });
+    res.set?.('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true, data: existingUserSuggestion(user, membership, organization.id) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
+    console.error('Existing user lookup error:', { name: err.name });
+    return res.status(500).json({ ok: false, message: 'Unable to check this email address.' });
+  }
+}
+
+async function assignExistingUser(req, res) {
+  try {
+    const models = getModels();
+    if (!models?.User || !models?.Organization || !models?.OrganizationUser || !models?.Role) return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
+    const organization = await userAssignmentOrganization(req, models);
+    const email = assignmentEmail(req.body?.email);
+    const userId = String(req.body?.userId || '').trim();
+    if (!userId) throw fail(400, 'Select the existing user.');
+    const roleId = String(req.body?.roleId || '').trim();
+    if (!roleId) throw fail(400, 'Select an active organization role.');
+    const role = await models.Role.findByPk(roleId);
+    if (!role?.isActive || !ORGANIZATION_PRESET_ROLES.includes(String(role.code).toLowerCase())) throw fail(400, 'Select an active organization role. Global roles cannot be assigned here.');
+    const result = await models.User.sequelize.transaction(async transaction => {
+      // Serialize assignments for this user, preserving every other membership
+      // and the current primary organization even for simultaneous requests.
+      const user = await models.User.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!user || String(user.email).trim().toLowerCase() !== email) throw fail(409, 'The user email changed. Check the email address again.');
+      if (!user.isActive || ['suspended', 'disabled', 'blocked'].includes(user.status)) throw fail(409, 'This account is inactive or suspended.');
+      const where = { userId: user.id, organizationId: organization.id };
+      const membership = await models.OrganizationUser.findOne({ where, transaction });
+      if (membership?.isActive || (!membership && user.organizationId === organization.id)) return { alreadyAssigned: true, userId: user.id };
+      if (membership && membership.role !== role.code) throw fail(409, 'Reactivate this membership with its existing role, or manage its organization assignment separately.');
+      const hasPrimary = Boolean(user.organizationId) || await models.OrganizationUser.count({ where: { userId: user.id, isPrimary: true, isActive: true }, transaction });
+      if (membership) await membership.update({ isActive: true, isPrimary: user.organizationId === organization.id || !hasPrimary }, { transaction });
+      else await models.OrganizationUser.create({ ...where, role: role.code, isActive: true, isPrimary: !hasPrimary }, { transaction });
+      if (!hasPrimary) await user.update({ organizationId: organization.id }, { transaction });
+      return { alreadyAssigned: false, userId: user.id };
+    });
+    return res.status(result.alreadyAssigned ? 200 : 201).json({ ok: true,
+      message: result.alreadyAssigned ? 'User already belongs to this organization.' : 'Existing user assigned to organization.',
+      data: { ...result, organizationId: organization.id } });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
+    console.error('Assign existing user error:', { name: err.name });
+    return res.status(500).json({ ok: false, message: 'Unable to assign existing user.' });
+  }
+}
+
 async function listUsers(req, res) {
   try {
     const models = getModels();
@@ -571,15 +662,21 @@ async function listUsers(req, res) {
     const offset = (page - 1) * limit;
 
     const where = {};
-    if (req.query.organizationId) where.organizationId = req.query.organizationId;
-    if (!isPrivilegedRequest(req)) {
-      const scopedWhere = applyOrganizationWhereScope(where, req);
-      if (!scopedWhere) {
-        return res.status(400).json({ ok: false, message: 'organizationId is required for this user.' });
-      }
-    }
+    const organizationId = isPrivilegedRequest(req) ? req.query.organizationId : getAuthenticatedOrganizationId(req);
+    if (!isPrivilegedRequest(req) && !organizationId) return res.status(400).json({ ok: false, message: 'organizationId is required for this user.' });
+    let memberships = [];
+    if (organizationId && models.OrganizationUser) {
+      memberships = await models.OrganizationUser.findAll({ where: { organizationId }, attributes: ['userId', 'role', 'isActive'] });
+      // Explicit inactive memberships override legacy primary-organization
+      // access. Shared accounts belong in every active organization's list.
+      const activeIds = memberships.filter(m => m.isActive && (!req.query.role || m.role === req.query.role)).map(m => m.userId);
+      where[Op.and] = [{ [Op.or]: [
+        { id: { [Op.in]: activeIds } },
+        { organizationId, id: { [Op.notIn]: memberships.map(m => m.userId) }, ...(req.query.role ? { role: req.query.role } : {}) },
+      ] }];
+    } else if (organizationId) where.organizationId = organizationId;
     if (req.query.status) where.status = req.query.status;
-    if (req.query.role) where.role = req.query.role;
+    if (req.query.role && !memberships.length) where.role = req.query.role;
 
     const isActive = parseBoolean(req.query.isActive);
     if (isActive !== undefined) {
@@ -616,7 +713,17 @@ async function listUsers(req, res) {
 
     return res.status(200).json({
       ok: true,
-      data: rows.map(sanitizeUser),
+      data: rows.map(user => {
+        const canManageAccount = isPrivilegedRequest(req) || user.organizationId === getAuthenticatedOrganizationId(req);
+        const result = canManageAccount ? sanitizeUser(user) : {
+          id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email,
+          status: user.status, isActive: user.isActive, isEmailVerified: user.isEmailVerified,
+        };
+        const membership = memberships.find(m => m.userId === user.id && m.isActive);
+        if (membership) result.role = membership.role;
+        result.canManageAccount = canManageAccount;
+        return result;
+      }),
       meta: {
         page,
         limit,
@@ -1104,6 +1211,8 @@ async function removeOrganizationFromUser(req, res) {
 }
 
 module.exports = {
+  lookupExistingUser,
+  assignExistingUser,
   createUser,
   listUsers,
   getUserById,

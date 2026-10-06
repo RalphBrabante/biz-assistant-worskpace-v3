@@ -1,6 +1,8 @@
 const express = require('express');
 const {
   createUser,
+  lookupExistingUser,
+  assignExistingUser,
   listUsers,
   getUserById,
   updateUser,
@@ -13,10 +15,13 @@ const {
   removeOrganizationFromUser,
 } = require('../controllers/users-controller');
 const { authorize } = require('../middleware/authz');
+const { requireRoleAdministrator } = require('../services/role-access');
 
 const router = express.Router();
 
 router.post('/', authorize('users.create'), createUser);
+router.post('/lookup-email', requireRoleAdministrator, authorize('users.create'), lookupExistingUser);
+router.post('/assign-existing', requireRoleAdministrator, authorize('users.create'), assignExistingUser);
 router.get('/', authorize('users.read'), listUsers);
 router.get('/:id', authorize('users.read'), getUserById);
 router.get('/:id/assignable-roles', authorize('users.read'), listUserAssignableRoles);

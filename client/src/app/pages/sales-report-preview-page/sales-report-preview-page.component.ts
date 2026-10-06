@@ -1,7 +1,9 @@
+import { BirAlphalistExportComponent } from '../../shared/bir-alphalist-export.component';
+import { salesWithholdingLines } from '../../core/bir-alphalist-export';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { SalesInvoiceRow, SalesReportRow, downloadSalesReport } from '../../core/sales-report-export';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { OrganizationContextService } from '../../core/organization-context.service';
@@ -27,7 +29,7 @@ interface SalesPreviewResponse {
 @Component({
   selector: 'app-sales-report-preview-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, BirAlphalistExportComponent],
   templateUrl: './sales-report-preview-page.component.html',
   styleUrl: '../../shared/report-tables.css',
 })
@@ -45,14 +47,11 @@ export class SalesReportPreviewPageComponent {
   readonly report = signal<SalesReportRow | null>(null);
   readonly summary = signal<SalesPreviewSummary | null>(null);
   readonly salesInvoices = signal<SalesInvoiceRow[]>([]);
+  readonly withholdingLines = computed(() => salesWithholdingLines(this.salesInvoices(), this.report()?.currency || 'PHP'));
 
   ngOnInit(): void {
     this.routeSub = this.route.paramMap.subscribe((params) => {
       const reportId = String(params.get('id') || '').trim();
-      if (!reportId) {
-        this.error.set('Report id is required.');
-        return;
-      }
       this.load(reportId);
     });
   }
@@ -67,6 +66,8 @@ export class SalesReportPreviewPageComponent {
     this.report.set(null);
     this.summary.set(null);
     this.salesInvoices.set([]);
+
+    if (!reportId) { this.loading.set(false); this.error.set('Report id is required.'); return; }
 
     const params = new URLSearchParams();
     const organizationId = this.organizationContext.getActiveOrganizationId();

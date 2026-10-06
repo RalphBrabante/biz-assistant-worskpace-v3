@@ -7,7 +7,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, of, Subscription, timer, map, distinctUntilChanged, switchMap } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
@@ -18,6 +18,7 @@ import { TooltipDirective } from '../../shared/tooltip.directive';
 
 interface UserRow {
   id: string;
+  canManageAccount?: boolean;
   organizationId?: string;
   primaryOrganization?: {
     id: string;
@@ -48,6 +49,12 @@ interface UserCreateResponse extends UserRow {
     message?: string;
   };
 }
+
+interface ExistingUserSuggestion {
+  id: string; firstName: string; lastName: string; email: string;
+  alreadyAssigned: boolean; canAssign: boolean; inactiveMembership: boolean; membershipRole?: string;
+}
+const ORGANIZATION_ROLES = ['administrator', 'enduser', 'accountant', 'inventorymanager'];
 
 interface RoleOption {
   id: string;
@@ -89,6 +96,14 @@ export class UsersPageComponent {
   readonly createRoleOptions = signal<RoleOption[]>([]);
   readonly createOrganizationOptions = signal<OrganizationOption[]>([]);
   readonly createModalError = signal('');
+  readonly existingUser = signal<ExistingUserSuggestion | null>(null);
+  readonly emailLookupLoading = signal(false);
+  readonly emailLookupError = signal('');
+  existingRoleId = '';
+  private formChangesSub?: Subscription;
+  private emailLookupSub?: Subscription;
+  private createOptionsSub?: Subscription;
+  private lookupGeneration = 0;
 
   readonly message = signal('');
   readonly error = signal('');
@@ -127,6 +142,28 @@ export class UsersPageComponent {
 
   get isSuperuser(): boolean {
     return this.organizationContext.isSuperuser();
+  }
+
+  get canAssignExistingUser(): boolean {
+    return (this.auth.currentUser()?.roleCodes || []).some(code => ['administrator', 'superuser'].includes(code.toLowerCase()));
+  }
+
+  get existingRoleOptions(): RoleOption[] {
+    return this.createRoleOptions().filter(role => ORGANIZATION_ROLES.includes(String(role.code).toLowerCase()));
+  }
+
+  get createOrganizationId(): string {
+    return this.isSuperuser ? this.asString(this.createUserForm.getRawValue()['organizationId']) : this.currentOrganizationId;
+  }
+
+  get createOrganizationName(): string {
+    const org = this.createOrganizationOptions().find(row => row.id === this.createOrganizationId);
+    return org ? this.organizationOptionLabel(org) : this.auth.currentUser()?.organizationName || this.createOrganizationId;
+  }
+
+  ngOnDestroy(): void {
+    this.formChangesSub?.unsubscribe(); this.emailLookupSub?.unsubscribe(); this.createOptionsSub?.unsubscribe();
+    this.lookupGeneration++;
   }
 
   ngOnInit(): void {
@@ -168,24 +205,37 @@ export class UsersPageComponent {
   }
 
   openCreateModal(): void {
+    if (this.submitting()) return;
+    this.closeCreateModal();
     this.createUserForm = this.newCreateUserForm();
     this.createSelectedRoleIds = [];
     this.createUserForm.patchValue({
-      organizationId: this.isSuperuser ? '' : this.currentOrganizationId,
+      organizationId: this.isSuperuser ? this.organizationContext.getActiveOrganizationId() : this.currentOrganizationId,
     });
     this.createModalError.set('');
     this.message.set('');
     this.isCreateModalOpen.set(true);
+    this.formChangesSub = this.createUserForm.valueChanges.pipe(
+      map(() => `${this.asString(this.createUserForm.getRawValue()['email']).toLowerCase()}|${this.createOrganizationId}`),
+      distinctUntilChanged(),
+    ).subscribe(() => this.checkExistingEmail());
     this.loadCreateModalOptions();
   }
 
   closeCreateModal(): void {
+    if (this.submitting()) return;
+    this.formChangesSub?.unsubscribe(); this.emailLookupSub?.unsubscribe(); this.createOptionsSub?.unsubscribe();
+    this.lookupGeneration++;
+    this.existingUser.set(null); this.existingRoleId = '';
+    this.emailLookupLoading.set(false); this.emailLookupError.set('');
     this.isCreateModalOpen.set(false);
     this.createModalError.set('');
   }
 
   createUser(): void {
-    if (this.submitting()) return;
+    if (this.submitting() || this.emailLookupLoading()) return;
+    if (this.existingUser()) { this.assignExistingUser(); return; }
+    if (this.emailLookupError()) { this.checkExistingEmail(true); return; }
     if (this.createUserForm.invalid) {
       this.createUserForm.markAllAsTouched();
       this.createModalError.set('Please complete all required user fields.');
@@ -222,7 +272,7 @@ export class UsersPageComponent {
         const inviteEmail = response.data?.inviteEmail;
         const inviteSent = inviteEmail?.sent !== false;
 
-        this.isCreateModalOpen.set(false);
+        this.closeCreateModal();
         this.message.set(inviteSent
           ? response.message || 'User created successfully.'
           : inviteEmail?.message || 'User was created, but invite email could not be sent.');
@@ -231,6 +281,57 @@ export class UsersPageComponent {
       error: (err) => {
         this.submitting.set(false);
         this.createModalError.set(err?.error?.message || 'Unable to create user.');
+        if (err?.status === 409 && this.canAssignExistingUser) this.checkExistingEmail(true);
+      },
+    });
+  }
+
+  checkExistingEmail(immediate = false): void {
+    this.emailLookupSub?.unsubscribe();
+    const generation = ++this.lookupGeneration;
+    this.existingUser.set(null); this.existingRoleId = ''; this.emailLookupError.set(''); this.emailLookupLoading.set(false);
+    const email = this.asString(this.createUserForm.getRawValue()['email']).toLowerCase();
+    const organizationId = this.createOrganizationId;
+    if (!this.isCreateModalOpen() || !this.canAssignExistingUser || !organizationId || this.createUserForm.get('email')?.invalid) return;
+    this.emailLookupLoading.set(true);
+    this.emailLookupSub = timer(immediate ? 0 : 350).pipe(
+      switchMap(() => this.api.create<ExistingUserSuggestion | null>('/api/v1/users/lookup-email', { email, organizationId })),
+    ).subscribe({
+      next: response => {
+        if (generation !== this.lookupGeneration || !this.isCreateModalOpen()) return;
+        this.emailLookupLoading.set(false); this.existingUser.set(response.data || null);
+        if (response.data) this.createModalError.set('');
+        this.selectExistingRole();
+      },
+      error: err => {
+        if (generation !== this.lookupGeneration) return;
+        this.emailLookupLoading.set(false); this.emailLookupError.set(err?.error?.message || 'Unable to check this email. Retry the check.');
+      },
+    });
+  }
+
+  private selectExistingRole(): void {
+    const existing = this.existingUser();
+    if (existing?.inactiveMembership) this.existingRoleId = this.existingRoleOptions.find(role => role.code === existing.membershipRole)?.id || '';
+  }
+
+  assignExistingUser(): void {
+    const existing = this.existingUser();
+    if (this.submitting() || this.emailLookupLoading() || !existing?.canAssign || !this.canAssignExistingUser) return;
+    const email = this.asString(this.createUserForm.getRawValue()['email']).toLowerCase();
+    if (email !== existing.email.toLowerCase() || !this.createOrganizationId) { this.checkExistingEmail(true); return; }
+    if (!this.existingRoleOptions.some(role => role.id === this.existingRoleId)) {
+      this.createModalError.set('Select an organization role for this user.'); return;
+    }
+    this.submitting.set(true); this.createModalError.set('');
+    this.api.create('/api/v1/users/assign-existing', { userId: existing.id, email, organizationId: this.createOrganizationId, roleId: this.existingRoleId }).subscribe({
+      next: response => {
+        this.submitting.set(false); this.closeCreateModal();
+        this.message.set(response.message || 'Existing user assigned to organization.'); this.load();
+      },
+      error: err => {
+        this.submitting.set(false); this.createModalError.set(err?.error?.message || 'Unable to assign this user.');
+        if (err?.status === 409) this.checkExistingEmail(true);
       },
     });
   }
@@ -333,7 +434,8 @@ export class UsersPageComponent {
       ? this.api.list<OrganizationOption>('/api/v1/organizations?limit=500')
       : of({ ok: true, data: [] } as ApiResponse<OrganizationOption[]>);
 
-    forkJoin([rolesRequest, organizationsRequest]).subscribe({
+    this.createOptionsSub?.unsubscribe();
+    this.createOptionsSub = forkJoin([rolesRequest, organizationsRequest]).subscribe({
       next: ([rolesResponse, organizationsResponse]: [ApiResponse<RoleOption[]>, ApiResponse<OrganizationOption[]>]) => {
         this.createOptionsLoading.set(false);
         const roleRows = (rolesResponse.data || []).filter(
@@ -342,6 +444,7 @@ export class UsersPageComponent {
         );
         this.createRoleOptions.set(roleRows);
         this.createOrganizationOptions.set(organizationsResponse.data || []);
+        this.selectExistingRole();
       },
       error: () => {
         this.createOptionsLoading.set(false);

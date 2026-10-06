@@ -9,6 +9,7 @@
       <button type="button" class="ui-btn ui-btn-primary" [disabled]="loading() || !report() || !!error() || exporting()" (click)="exportExcel()">
         <i class="bi bi-file-earmark-excel mr-1" aria-hidden="true"></i>{{ exporting() ? 'Exporting…' : 'Export Excel' }}
       </button>
+      <app-bir-alphalist-export kind="sales" [report]="report()" [lines]="withholdingLines()" [disabled]="loading() || !!error()" />
     <a class="ui-btn ui-btn-outline-dark" routerLink="/reports">
       <i class="bi bi-arrow-left mr-1"></i>Back to Reports
     </a>
@@ -17,6 +18,8 @@
 </section>
 
 <div *ngIf="exportError()" class="ui-alert ui-alert-danger mb-6" role="alert">{{ exportError() }}</div>
+
+<p *ngIf="!loading() && report()" class="text-muted text-sm mb-6">Excel includes all invoices plus BIR SAWT preparation and review sheets. Use BIR Alphalist Export to review tax details and download a companion DAT for the current BIR validation module.</p>
 
 <section class="ui-card shadow-panel rounded-xl mb-6" *ngIf="error()">
   <div class="ui-card-body p-6">

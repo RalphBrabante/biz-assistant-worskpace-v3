@@ -100,12 +100,13 @@ test('email failures retain membership with an explicit retryable result; repeat
 test('removing membership revokes its access tokens and disconnects its sockets without affecting the other organization',async()=>{
  const f=invitationFixture(true);f.req.params.userId=f.user.id;
  f.memberships.push({id:'membership',organizationId:'b',userId:f.user.id,role:'accountant',isActive:true,isPrimary:false});
- f.models.OrganizationUser.destroy=async()=>{f.memberships.length=0;return 1;};
+ f.models.OrganizationUser.update=async(payload,options)=>{assert.ok(options.transaction);Object.assign(f.memberships[0],payload);};
  let revoked=0,disconnected=0,deletedRoles=0;
  f.models.Token.findAll=async()=>[{metadata:{organizationId:'b'},update:async()=>revoked++},{metadata:{organizationId:'a'},update:async()=>assert.fail('Must preserve tokens for the other organization')}];
  f.models.OrganizationUserRole={destroy:async options=>{assert.equal(options.where.organizationId,'b');deletedRoles++;}};
  const controller=load('../src/controllers/organizations-controller',f.models,{'../services/socket-service':{getSocketServer:()=>({in:()=>({fetchSockets:async()=>[{data:{auth:{organizationId:'b'}},disconnect:()=>disconnected++},{data:{auth:{organizationId:'a'}},disconnect:()=>assert.fail('Other organization socket must stay connected')}]})})}});
  const res=response();await controller.removeUserFromOrganization(f.req,res);assert.equal(res.statusCode,200);assert.equal(revoked,1);assert.equal(disconnected,1);assert.equal(deletedRoles,1);assert.equal(f.user.organizationId,'a');
+ assert.equal(f.memberships.length,1);assert.equal(f.memberships[0].isActive,false);assert.equal(f.memberships[0].isPrimary,false);
 });
 test('invitation emails preserve escaping and use the correct existing/new account action',()=>{
  const {buildOrganizationUserInviteTemplate}=require('../src/templates/emails/organization-user-invite-template');
@@ -178,11 +179,13 @@ test('standard membership cannot inherit global administrator rights from anothe
  const b=await effectiveRoleAccess(f.models,f.user,'b');assert.deepEqual(b.roleCodes,['enduser']);assert.deepEqual([...b.permissions],['orders.read']);assert.ok(!(b.roleCodes.includes('administrator')));
 });
 test('removing the last primary membership clears the legacy organization fallback in the same transaction',async()=>{
- const f=invitationFixture(true);f.user.organizationId='b';f.req.params.userId=f.user.id;f.memberships.push({organizationId:'b',userId:f.user.id,role:'accountant',isPrimary:true});
- f.models.OrganizationUser.destroy=async options=>{assert.ok(options.transaction);f.memberships.length=0;};
+ const f=invitationFixture(true);f.user.organizationId='b';f.req.params.userId=f.user.id;f.memberships.push({organizationId:'b',userId:f.user.id,role:'accountant',isPrimary:true,isActive:true});
+ f.models.OrganizationUser.update=async(payload,options)=>{assert.ok(options.transaction);Object.assign(f.memberships[0],payload);};
+ f.models.OrganizationUser.findOne=async({where})=>f.memberships.find(m=>Object.entries(where).every(([key,value])=>m[key]===value));
  f.models.Token.findAll=async()=>[];
  f.models.User.update=async(payload,options)=>{assert.ok(options.transaction);Object.assign(f.user,payload);};
  const res=response();await f.controller.removeUserFromOrganization(f.req,res);assert.equal(res.statusCode,200);assert.equal(f.user.organizationId,null);
+ assert.equal(f.memberships.length,1);assert.equal(f.memberships[0].isActive,false);
 });
 
 test('real organization invitation route accepts an administrator request and assigns the selected scoped role',async()=>{

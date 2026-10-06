@@ -12,7 +12,7 @@ function load(relative, requireDependency = require, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, experimentalDecorators: true },
   }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(source, { module, exports: module.exports, require: requireDependency, URLSearchParams, ...globals });
+  vm.runInNewContext(source, { module, exports: module.exports, require: requireDependency === require ? (name => name.startsWith('.') ? load(path.join(path.dirname(relative), name + '.ts'), require, globals) : require(name)) : requireDependency, URLSearchParams, ...globals });
   return module.exports;
 }
 const { buildSalesReportWorkbook } = load('core/sales-report-export.ts');
@@ -89,7 +89,7 @@ function preview() {
   };
   const module = load('pages/sales-report-preview-page/sales-report-preview-page.component.ts', name => {
     if (name === '../../core/sales-report-export') return { downloadSalesReport: (...args) => { if (downloadError) throw downloadError; downloads.push(args); } };
-    if (name === '@angular/core') return { Component: () => target => target, inject: key => deps[key], signal(value) { const read = () => value; read.set = next => { value = next; }; return read; } };
+    if (name === '@angular/core') return { Component: () => target => target, inject: key => deps[key], computed: fn => fn, signal(value) { const read = () => value; read.set = next => { value = next; }; return read; } };
     return new Proxy({}, { get: (_, key) => key });
   }, { Error });
   const page = new module.SalesReportPreviewPageComponent(); page.ngOnInit();

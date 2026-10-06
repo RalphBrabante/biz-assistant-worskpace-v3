@@ -1,0 +1,92 @@
+<button type="button" class="ui-btn ui-btn-outline-dark" [disabled]="disabled || !draft || exporting" (click)="toggle()" [attr.aria-expanded]="opened">
+  <i class="bi bi-file-earmark-arrow-down mr-1" aria-hidden="true"></i>BIR Alphalist Export
+</button>
+<dialog #exportDialog class="p-0 rounded-xl w-full max-w-5xl max-h-[90vh] backdrop:bg-black/40" aria-label="Review BIR alphalist export" (cancel)="opened = false">
+  <ng-container *ngIf="draft as draft">
+  <div class="ui-card rounded-xl shadow-panel max-w-5xl mx-auto">
+    <div class="ui-card-body p-6">
+      <div class="flex justify-between items-start gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold">{{ kind === 'expenses' ? 'QAP — 1601EQ' : 'SAWT — Sales withholding' }}</h2>
+          <p class="text-muted text-sm">{{ report?.year }} Q{{ report?.quarter }} · BIR Alphalist {{ version }} · Format checked {{ verifiedOn }}</p>
+        </div>
+        <button type="button" class="ui-btn ui-btn-outline-dark" (click)="close()">Close</button>
+      </div>
+      <p class="text-sm mb-4">Review registered identities, branch codes, ATCs and rates before downloading the Excel records or companion DAT. Use the latest BIR validation module and ATC patch before filing. Reviewed details apply to this download only.</p>
+      <p *ngIf="!draft.lines.length" class="ui-alert ui-alert-warning">This report has no recorded withholding lines to export. Use Export Excel for the complete transaction report.</p>
+      <div *ngIf="error" class="ui-alert ui-alert-danger mb-4" role="alert">{{ error }}</div>
+      <div class="grid md:grid-cols-2 gap-4 mb-4">
+        <label class="block">Return form
+          <select class="ui-form-select mt-1" [(ngModel)]="draft.form" (ngModelChange)="changed()" [disabled]="kind === 'expenses'">
+            <option value="">Select return form</option>
+            <option *ngIf="kind === 'expenses'" value="1601EQ">1601EQ — Expanded withholding</option>
+            <option *ngIf="kind === 'sales' && report?.quarter !== 4" value="1701Q">1701Q — Individual quarterly income tax</option>
+            <option *ngIf="kind === 'sales' && report?.quarter !== 4" value="1702Q">1702Q — Corporate quarterly income tax</option>
+            <option *ngIf="kind === 'sales'" value="2551Q">2551Q — Quarterly percentage tax</option>
+          </select>
+        </label>
+        <label class="block">Filer RDO code
+          <input class="ui-form-control mt-1" [(ngModel)]="draft.rdoCode" (ngModelChange)="changed()" inputmode="numeric" maxlength="3" />
+        </label>
+      </div>
+      <p *ngIf="kind === 'sales' && report?.quarter === 4" class="ui-alert ui-alert-warning text-sm">Q4 alone cannot supply an annual income-tax SAWT. Only the quarterly percentage-tax attachment is offered here.</p>
+      <h3 class="font-semibold mb-3">Filer identity</h3>
+      <ng-container *ngTemplateOutlet="partyEditor; context: { $implicit: draft.filer }"></ng-container>
+      <h3 class="font-semibold mt-6 mb-3">{{ kind === 'expenses' ? 'Payees' : 'Withholding agents' }} ({{ draft.lines.length }} source transactions)</h3>
+      <div *ngFor="let line of draft.lines; let i = index" class="border rounded-xl p-4 mb-4">
+        <h4 class="font-semibold mb-2">{{ line.reference }} · {{ line.date }}</h4>
+        <p class="text-muted text-sm mb-3">Source: {{ line.party.legalName || line.party.name || 'Unclassified taxpayer' }} · {{ line.status || 'Status unavailable' }} · {{ line.currency }} {{ line.incomePayment | number:'1.2-2' }} income payment · {{ line.withheld | number:'1.2-2' }} tax withheld</p>
+        <ng-container *ngTemplateOutlet="partyEditor; context: { $implicit: line.identity }"></ng-container>
+        <div class="grid md:grid-cols-3 gap-3 mt-3">
+          <label class="block">BIR ATC
+            <input class="ui-form-control mt-1" [(ngModel)]="line.atc" (ngModelChange)="changed()" maxlength="5" placeholder="e.g. WC160" />
+          </label>
+          <label class="block">Withholding rate (%)
+            <input type="number" class="ui-form-control mt-1" [(ngModel)]="line.rate" (ngModelChange)="changed()" min="0.01" max="99.99" step="0.01" />
+          </label>
+          <label *ngIf="kind === 'sales'" class="block">Nature of income
+            <input class="ui-form-control mt-1" [(ngModel)]="line.nature" (ngModelChange)="changed()" maxlength="50" />
+          </label>
+        </div>
+      </div>
+      <label class="flex items-start gap-2 mb-3 text-sm">
+        <input type="checkbox" [(ngModel)]="draft.scopeConfirmed" class="mt-1" />
+        <span *ngIf="kind === 'expenses'">I confirm these recorded withholding transactions cover this QAP and no exempt Schedule 2 payments or final-withholding schedules are required. Transactions without recorded withholding are excluded.</span>
+        <span *ngIf="kind === 'sales'">I confirm these recorded withholding transactions and supporting Form 2307 certificates cover the credits claimed on the selected return. This file contains this quarter's records only.</span>
+      </label>
+      <label class="flex items-start gap-2 mb-4 text-sm">
+        <input type="checkbox" [(ngModel)]="draft.reviewed" class="mt-1" />
+        <span>I reviewed the filer, taxpayer identities, ATCs, applicable rates, PHP amounts and attachment coverage.</span>
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="ui-btn ui-btn-primary" [disabled]="exporting || !draft.reviewed || !draft.scopeConfirmed || !draft.lines.length" (click)="download('dat')">{{ exporting ? 'Exporting…' : 'Download BIR DAT' }}</button>
+        <button type="button" class="ui-btn ui-btn-outline-dark" [disabled]="exporting || !draft.reviewed || !draft.scopeConfirmed || !draft.lines.length" (click)="download('excel')">Download Reviewed Excel</button>
+        <a href="https://www.bir.gov.ph/Downloadables" target="_blank" rel="noopener" class="ui-btn ui-btn-outline-dark">Latest BIR downloads</a>
+      </div>
+    </div>
+  </div>
+  </ng-container>
+</dialog>
+<ng-template #partyEditor let-person>
+  <div class="grid md:grid-cols-3 gap-3">
+    <label class="block">Taxpayer type
+      <select class="ui-form-select mt-1" [(ngModel)]="person.type" (ngModelChange)="changed()">
+        <option value="">Confirm taxpayer type</option><option value="business">Business / non-individual</option><option value="individual">Individual</option>
+      </select>
+    </label>
+    <label class="block">TIN (9 digits)
+      <input class="ui-form-control mt-1" [(ngModel)]="person.tin" (ngModelChange)="changed()" inputmode="numeric" maxlength="9" />
+    </label>
+    <label class="block">Branch code (4 digits)
+      <input class="ui-form-control mt-1" [(ngModel)]="person.branch" (ngModelChange)="changed()" inputmode="numeric" maxlength="4" />
+    </label>
+    <label *ngIf="person.type !== 'individual'" class="block md:col-span-3">BIR registered name
+      <input class="ui-form-control mt-1" [(ngModel)]="person.registeredName" (ngModelChange)="changed()" maxlength="50" />
+    </label>
+    <ng-container *ngIf="person.type === 'individual'">
+      <label class="block">Last name<input class="ui-form-control mt-1" [(ngModel)]="person.lastName" (ngModelChange)="changed()" maxlength="30" /></label>
+      <label class="block">First name<input class="ui-form-control mt-1" [(ngModel)]="person.firstName" (ngModelChange)="changed()" maxlength="30" /></label>
+      <label class="block">Middle name (optional)<input class="ui-form-control mt-1" [(ngModel)]="person.middleName" (ngModelChange)="changed()" maxlength="30" /></label>
+    </ng-container>
+  </div>
+</ng-template>

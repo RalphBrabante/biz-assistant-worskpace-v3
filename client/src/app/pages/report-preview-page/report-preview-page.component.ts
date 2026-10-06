@@ -1,55 +1,12 @@
+import { Subscription } from 'rxjs';
+import { ExpenseRow, ExpenseReportRow, downloadExpenseReport } from '../../core/expense-report-export';
+import { BirAlphalistExportComponent } from '../../shared/bir-alphalist-export.component';
+import { expenseWithholdingLines } from '../../core/bir-alphalist-export';
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { OrganizationContextService } from '../../core/organization-context.service';
-
-interface ExpenseRow {
-  id: string;
-  expenseDate: string;
-  category?: string;
-  description?: string;
-  status?: string;
-  currency?: string;
-  amount?: number;
-  taxableAmount?: number;
-  taxAmount?: number;
-  vatExemptAmount?: number;
-  withHoldingTaxAmount?: number;
-  discountAmount?: number;
-  totalAmount?: number;
-  vendor?: {
-    id: string;
-    name?: string;
-    legalName?: string;
-    taxId?: string;
-  };
-  taxType?: {
-    id: string;
-    code?: string;
-    name?: string;
-    percentage?: number;
-  };
-  withholdingTaxType?: {
-    id: string;
-    name?: string;
-    percentage?: number;
-  };
-}
-
-interface ReportRow {
-  id: string;
-  year: number;
-  quarter: number;
-  periodStart: string;
-  periodEnd: string;
-  currency: string;
-  organization?: {
-    id: string;
-    name?: string;
-    legalName?: string;
-  };
-}
 
 interface PreviewSummary {
   expenseCount: number;
@@ -64,7 +21,7 @@ interface PreviewSummary {
 }
 
 interface PreviewResponse {
-  report: ReportRow;
+  report: ExpenseReportRow;
   summary: PreviewSummary;
   expenses: ExpenseRow[];
 }
@@ -72,7 +29,7 @@ interface PreviewResponse {
 @Component({
   selector: 'app-report-preview-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, BirAlphalistExportComponent],
   templateUrl: './report-preview-page.component.html',
   styleUrl: '../../shared/report-tables.css',
 })
@@ -83,27 +40,34 @@ export class ReportPreviewPageComponent {
 
   readonly loading = signal(false);
   readonly error = signal('');
-  readonly report = signal<ReportRow | null>(null);
+  readonly exportError = signal('');
+  readonly exporting = signal(false);
+  private previewSub?: Subscription;
+  private routeSub?: Subscription;
+  readonly report = signal<ExpenseReportRow | null>(null);
   readonly summary = signal<PreviewSummary | null>(null);
   readonly expenses = signal<ExpenseRow[]>([]);
+  readonly withholdingLines = computed(() => expenseWithholdingLines(this.expenses(), this.report()?.currency || 'PHP'));
 
   ngOnInit(): void {
-    this.route.paramMap.subscribe((params) => {
+    this.routeSub = this.route.paramMap.subscribe((params) => {
       const reportId = String(params.get('id') || '').trim();
-      if (!reportId) {
-        this.error.set('Report id is required.');
-        return;
-      }
       this.load(reportId);
     });
   }
 
+  ngOnDestroy(): void { this.routeSub?.unsubscribe(); this.previewSub?.unsubscribe(); }
+
   private load(reportId: string): void {
+    this.previewSub?.unsubscribe();
+    this.exportError.set('');
     this.loading.set(true);
     this.error.set('');
     this.report.set(null);
     this.summary.set(null);
     this.expenses.set([]);
+
+    if (!reportId) { this.loading.set(false); this.error.set('Report id is required.'); return; }
 
     const params = new URLSearchParams();
     const organizationId = this.organizationContext.getActiveOrganizationId();
@@ -112,8 +76,8 @@ export class ReportPreviewPageComponent {
     }
     const suffix = params.toString() ? `?${params.toString()}` : '';
 
-    this.api
-      .get<PreviewResponse>(`/api/v1/reports/quarterly-expenses/${reportId}/preview${suffix}`)
+    this.previewSub = this.api
+      .getFresh<PreviewResponse>(`/api/v1/reports/quarterly-expenses/${encodeURIComponent(reportId)}/preview${suffix}`)
       .subscribe({
         next: (response) => {
           this.loading.set(false);
@@ -126,6 +90,17 @@ export class ReportPreviewPageComponent {
           this.error.set(err?.error?.message || 'Unable to load report preview.');
         },
       });
+  }
+
+  async exportExcel(): Promise<void> {
+    const report = this.report();
+    if (!report || this.loading() || this.error() || this.exporting()) return;
+    this.exporting.set(true); this.exportError.set('');
+    try {
+      await downloadExpenseReport(report, this.expenses());
+    } catch (error) {
+      this.exportError.set(error instanceof Error ? error.message : 'Unable to export this report. Please try again.');
+    } finally { this.exporting.set(false); }
   }
 
   quarterLabel(value: number | null | undefined): string {

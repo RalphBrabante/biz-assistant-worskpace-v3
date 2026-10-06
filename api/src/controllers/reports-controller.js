@@ -446,6 +446,7 @@ async function getQuarterlySalesReportPreviewById(req, res, next) {
       SalesInvoice,
       Order,
       Customer,
+      WithholdingTaxType,
     } = models;
 
     const report = await QuarterlySalesReport.findOne({
@@ -457,7 +458,7 @@ async function getQuarterlySalesReportPreviewById(req, res, next) {
         {
           model: Organization,
           as: 'organization',
-          attributes: ['id', 'name', 'legalName'],
+          attributes: ['id', 'name', 'legalName', 'taxId', 'rdoCode', 'taxpayerClassification'],
         },
       ],
     });
@@ -491,13 +492,14 @@ async function getQuarterlySalesReportPreviewById(req, res, next) {
                     {
                       model: Customer,
                       as: 'customer',
-                      attributes: ['id', 'name', 'taxId'],
+                      attributes: ['id', 'name', 'legalName', 'taxId', 'type'],
                       required: false,
                     },
                   ]
                 : [],
             }
           : null,
+        WithholdingTaxType ? { model: WithholdingTaxType, as: 'withholdingTaxType', attributes: ['id', 'code', 'name', 'percentage'], required: false } : null,
       ].filter(Boolean),
       order: [
         ['issueDate', 'DESC'],
@@ -834,7 +836,7 @@ async function getQuarterlyExpenseReportPreviewById(req, res, next) {
         {
           model: Organization,
           as: 'organization',
-          attributes: ['id', 'name', 'legalName'],
+          attributes: ['id', 'name', 'legalName', 'taxId', 'rdoCode', 'taxpayerClassification'],
         },
       ],
     });
@@ -877,7 +879,7 @@ async function getQuarterlyExpenseReportPreviewById(req, res, next) {
           ? {
               model: WithholdingTaxType,
               as: 'withholdingTaxType',
-              attributes: ['id', 'name', 'percentage'],
+              attributes: ['id', 'code', 'name', 'percentage'],
               required: false,
             }
           : null,
