@@ -1,6 +1,7 @@
 import { buildWorkbook, Cell, dateCell, money, moneyCell, downloadWorkbook } from './report-workbook';
 import { BirParty, buildBirPreparationSheets, expenseWithholdingLines } from './bir-alphalist-export';
 import type { SalesReportRow } from './sales-report-export';
+import { reportAddressCell } from './report-address';
 type Money = number | string | null;
 export interface ExpenseRow {
   id: string; expenseNumber?: string; expenseDate: string; dueDate?: string;
@@ -17,7 +18,7 @@ const FIELDS = ['amount', 'taxableAmount', 'taxAmount', 'vatExemptAmount', 'rece
 const LABELS = ['Receipt total', 'Taxable purchases', 'Input VAT', 'VAT-exempt amount', 'Supplier receipt VAT', 'Withholding base', 'Withholding tax', 'Discount', 'SC/PWD discount', 'Service charge', 'Net payable'];
 export function buildExpenseReportWorkbook(report: ExpenseReportRow, expenses: ExpenseRow[], exportedAt = new Date()): Uint8Array {
   if (expenses.length > 1048575) throw new Error('This report exceeds the Excel worksheet row limit.');
-  const rows: Cell[][] = [['Expense #', 'Expense date', 'Due date', 'Vendor', 'Vendor TIN', 'Category', 'Status', 'Currency', 'Tax type', 'ATC', 'Withholding rate', ...LABELS, 'Expense ID', 'Description']];
+  const rows: Cell[][] = [['Expense #', 'Expense date', 'Due date', 'Vendor', 'Vendor TIN', 'Vendor Address', 'Category', 'Status', 'Currency', 'Tax type', 'ATC', 'Withholding rate', ...LABELS, 'Expense ID', 'Description']];
   const totals = new Map<string, { count: number; cents: number[] }>();
   expenses.forEach(row => {
     const currency = row.currency || report.currency;
@@ -25,7 +26,7 @@ export function buildExpenseReportWorkbook(report: ExpenseReportRow, expenses: E
     const group = totals.get(currency) || { count: 0, cents: FIELDS.map(() => 0) };
     group.count++; values.forEach((v, i) => group.cents[i] += Math.round((v ?? 0) * 100)); totals.set(currency, group);
     rows.push([row.expenseNumber || '', dateCell(row.expenseDate), dateCell(row.dueDate), row.vendor?.legalName || row.vendor?.name || '',
-      row.vendorTaxId || row.vendor?.taxId || '', row.category || '', row.status || '', currency, row.taxType?.code || row.taxType?.name || '',
+      row.vendorTaxId || row.vendor?.taxId || '', reportAddressCell(row.vendor), row.category || '', row.status || '', currency, row.taxType?.code || row.taxType?.name || '',
       row.withholdingTaxType?.code || '', row.withholdingTaxType?.percentage == null ? '' : moneyCell(row.withholdingTaxType.percentage),
       ...values.map((value): Cell => value === undefined ? '' : moneyCell(value)), row.id, row.description || '']);
   });
@@ -43,7 +44,7 @@ export function buildExpenseReportWorkbook(report: ExpenseReportRow, expenses: E
   ];
   return buildWorkbook([
     { name: 'Summary', rows: summary, widths: [32, 44, ...LABELS.map(() => 24)], headerRow: 14 },
-    { name: 'Expenses', rows, widths: [24, 14, 14, 40, 24, 22, 18, 12, 24, 16, 22, ...LABELS.map(() => 24), 38, 55], filter: true },
+    { name: 'Expenses', rows, widths: [24, 14, 14, 40, 24, 70, 22, 18, 12, 24, 16, 22, ...LABELS.map(() => 24), 38, 55], filter: true },
     ...buildBirPreparationSheets('expenses', report, expenseWithholdingLines(expenses, report.currency)),
   ]);
 }

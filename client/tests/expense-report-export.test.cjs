@@ -27,13 +27,13 @@ test('expense workbook exports all rows with typed amounts, dates, TINs and safe
   const data = Array.from({ length: 300 }, (_, i) => ({ ...expense, id: `e${i}`, expenseNumber: String(i).padStart(6, '0') }));
   const result = sheets(buildExpenseReportWorkbook(report, data));
   assert.equal((result.xml(2).match(/<row /g) || []).length, 301);
-  assert.match(result.xml(2), /autoFilter ref="A1:X301"/);
+  assert.match(result.xml(2), /autoFilter ref="A1:Y301"/);
   assert.match(cell(result.xml(2), 'A2'), /t="inlineStr".*000000/);
   assert.match(cell(result.xml(2), 'E2'), /t="inlineStr".*001-002-003-000/);
   assert.match(cell(result.xml(2), 'B2'), /s="3" t="n"/);
-  assert.match(cell(result.xml(2), 'L2'), /s="2" t="n"><v>112<\/v>/);
-  assert.match(cell(result.xml(2), 'R2'), /<v>2<\/v>/);
-  assert.match(cell(result.xml(2), 'X2'), /=SUM\(A1:A5\) &amp; &lt;text&gt;/);
+  assert.match(cell(result.xml(2), 'M2'), /s="2" t="n"><v>112<\/v>/);
+  assert.match(cell(result.xml(2), 'S2'), /<v>2<\/v>/);
+  assert.match(cell(result.xml(2), 'Y2'), /=SUM\(A1:A5\) &amp; &lt;text&gt;/);
   assert.doesNotMatch(result.xml(2), /<f[ >]/);
   assert.match(cell(result.xml(1), 'B11'), /<v>300<\/v>/);
   assert.match(strFromU8(result.archive['xl/workbook.xml']), /name="QAP Details"/);
@@ -43,7 +43,7 @@ test('expense currency totals never mix PHP and USD and optional values stay bla
   const result = sheets(buildExpenseReportWorkbook(report, data));
   assert.match(cell(result.xml(1), 'A15'), /PHP/); assert.match(cell(result.xml(1), 'C15'), /<v>112<\/v>/);
   assert.match(cell(result.xml(1), 'A16'), /USD/); assert.match(cell(result.xml(1), 'C16'), /<v>0.3<\/v>/);
-  assert.match(cell(result.xml(2), 'Q3'), /t="inlineStr".*<t xml:space="preserve"><\/t>/);
+  assert.match(cell(result.xml(2), 'R3'), /t="inlineStr".*<t xml:space="preserve"><\/t>/);
   assert.match(result.xml(5), /foreign amounts have not been converted/);
   assert.match(cell(result.xml(3), 'B10'), /<v>2<\/v>/);
 });
@@ -81,10 +81,21 @@ test('SAWT uses the frozen invoice buyer and correct detail field order without 
   const q4 = sheets(buildSalesReportWorkbook({ ...report, quarter: 4 }, [invoice])); assert.match(q4.xml(5), /Q4 alone is not a complete annual attachment/);
 });
 test('empty exports remain valid, internal ATCs and missing tax data require review, invalid amounts fail', () => {
-  const empty = sheets(buildExpenseReportWorkbook(report, [])); assert.match(empty.xml(2), /A1:X1/); assert.match(empty.xml(4), /A1:N1/);
+  const empty = sheets(buildExpenseReportWorkbook(report, [])); assert.match(empty.xml(2), /A1:Y1/); assert.match(empty.xml(4), /A1:N1/);
   const result = sheets(buildExpenseReportWorkbook(report, [{ ...expense, vendor: undefined, vendorTaxId: undefined, withholdingTaxType: { id: 'internal', code: 'EWT2' } }]));
   assert.match(result.xml(5), /Missing or invalid TIN/); assert.match(result.xml(5), /not an internal tax code/); assert.match(result.xml(5), /Confirm the applicable withholding rate/);
   assert.throws(() => buildExpenseReportWorkbook(report, [{ ...expense, amount: 'broken' }]), /invalid amount/);
+});
+
+test('vendor address includes barangay, province and postal code, trims missing components and stays safe text', () => {
+  const vendor = { ...expense.vendor, addressLine1: ' =SUM(A1:A5) & <street> ', addressLine2: ' Unit 2 ', barangay: 'San Antonio', city: 'San Pedro', state: 'Region IV-A', province: 'Laguna', postalCode: '0402', country: 'Philippines' };
+  const result = sheets(buildExpenseReportWorkbook(report, [{ ...expense, vendor }, { ...expense, vendor: { city: ' Manila ', province: ' ' } }, { ...expense, vendor: undefined }]));
+  assert.match(cell(result.xml(2), 'F1'), /Vendor Address/);
+  assert.match(cell(result.xml(2), 'F2'), /s="4" t="inlineStr".*=SUM\(A1:A5\) &amp; &lt;street&gt;, Unit 2, San Antonio, San Pedro, Region IV-A, Laguna, 0402, Philippines/);
+  assert.match(cell(result.xml(2), 'F3'), /<t xml:space="preserve">Manila<\/t>/);
+  assert.match(cell(result.xml(2), 'F4'), /<t xml:space="preserve"><\/t>/);
+  assert.doesNotMatch(result.xml(2), /<f[ >]/);
+  assert.match(result.xml(2), /<row r="2" ht="\d+" customHeight="1">/);
 });
 function preview() {
   const requests = [], downloads = [], route = new Subject(); let fail = false;

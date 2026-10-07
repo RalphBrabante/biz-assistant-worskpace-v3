@@ -216,6 +216,7 @@ interface BirFilingSummary {
         referenceNumber: string;
         customerName: string;
         customerTin: string;
+        customerAddress?: string;
         grossSales: number;
         taxableSales: number;
         outputVat: number;
@@ -230,6 +231,7 @@ interface BirFilingSummary {
         referenceNumber: string;
         vendorName: string;
         vendorTin: string;
+        vendorAddress?: string;
         grossPurchases: number;
         taxablePurchases: number;
         inputVat: number;

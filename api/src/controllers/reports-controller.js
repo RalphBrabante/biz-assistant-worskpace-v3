@@ -10,6 +10,13 @@ const { getOrganizationCurrency } = require('../services/organization-currency')
 const { isPrivilegedRequest } = require('../services/request-scope');
 const { sendQuarterlyExpenseReportReadyEmail } = require('../services/email-service');
 const { isPercentageTaxType, isVatTaxType, roundCurrency } = require('../services/tax-calculation');
+const PARTY_ADDRESS_FIELDS = ['addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'];
+
+function formatPartyAddress(party) {
+  return [party?.addressLine1, party?.addressLine2, party?.barangay, party?.city,
+    party?.state, party?.province, party?.postalCode, party?.country]
+    .map(value => String(value ?? '').trim()).filter(Boolean).join(', ');
+}
 
 function getQuarterDates(year, quarter) {
   const quarterStartMonth = (quarter - 1) * 3;
@@ -492,7 +499,7 @@ async function getQuarterlySalesReportPreviewById(req, res, next) {
                     {
                       model: Customer,
                       as: 'customer',
-                      attributes: ['id', 'name', 'legalName', 'taxId', 'type'],
+                      attributes: ['id', 'name', 'legalName', 'taxId', 'type', ...PARTY_ADDRESS_FIELDS],
                       required: false,
                     },
                   ]
@@ -863,7 +870,7 @@ async function getQuarterlyExpenseReportPreviewById(req, res, next) {
           ? {
               model: Vendor,
               as: 'vendor',
-              attributes: ['id', 'name', 'legalName', 'taxId'],
+              attributes: ['id', 'name', 'legalName', 'taxId', ...PARTY_ADDRESS_FIELDS, 'barangay', 'province'],
               required: false,
             }
           : null,
@@ -1161,7 +1168,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
         {
           model: Vendor,
           as: 'vendor',
-          attributes: ['id', 'name', 'legalName', 'taxId'],
+          attributes: ['id', 'name', 'legalName', 'taxId', ...PARTY_ADDRESS_FIELDS, 'barangay', 'province'],
           required: false,
         },
         {
@@ -1190,6 +1197,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
       attributes: [
         'id',
         'invoiceNumber',
+        'invoiceDocument',
         'issueDate',
         'currency',
         'subtotalAmount',
@@ -1210,7 +1218,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
             {
               model: Customer,
               as: 'customer',
-              attributes: ['id', 'name', 'legalName', 'taxId'],
+              attributes: ['id', 'name', 'legalName', 'taxId', ...PARTY_ADDRESS_FIELDS],
               required: false,
             },
           ],
@@ -1348,6 +1356,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
         referenceNumber: json.invoiceNumber || json.id,
         customerName: safeName(customer.legalName, customer.name, 'Unclassified customer'),
         customerTin: safeName(customer.taxId),
+        customerAddress: safeName(json.invoiceDocument?.buyer?.address, formatPartyAddress(customer)),
         grossSales: roundCurrency(toNumber(json.taxableAmount) + toNumber(json.taxAmount)),
         taxableSales: roundCurrency(toNumber(json.taxableAmount)),
         outputVat: isVatTaxType(taxType || {}) ? roundCurrency(toNumber(json.taxAmount)) : 0,
@@ -1367,6 +1376,7 @@ async function respondBirFilingSummary(req, res, next, pdf = false) {
         referenceNumber: json.expenseNumber || json.id,
         vendorName: safeName(vendor.legalName, vendor.name, 'Unclassified vendor'),
         vendorTin: safeName(vendor.taxId, json.vendorTaxId),
+        vendorAddress: formatPartyAddress(vendor),
         grossPurchases: roundCurrency(toNumber(json.amount)),
         taxablePurchases: roundCurrency(toNumber(json.amount) - toNumber(json.receiptVatAmount ?? json.taxAmount)),
         inputVat: isVatTaxType(taxType || {}) ? roundCurrency(toNumber(json.taxAmount)) : 0,

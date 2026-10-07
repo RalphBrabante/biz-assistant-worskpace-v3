@@ -5,7 +5,7 @@ Open a saved expense or sales report from **Reports & Tax Documents**, then choo
 Each XLSX contains:
 
 - **Summary**: report identity, dates, saved snapshot, actual exported count and current totals grouped by currency. Stored optional expense receipt VAT/withholding base values stay blank when absent; their totals sum recorded values only.
-- **Expenses** or **Invoices**: all preview rows, numeric money/dates, and text TINs/references preserving leading zeros. User text is stored as an inline string, never a formula.
+- **Expenses** or **Invoices**: all preview rows, numeric money/dates, and text TINs/references preserving leading zeros. **Client Address** and **Vendor Address** columns include saved address lines, city, state, postal code and country; vendor addresses also include barangay and province. An invoice's saved buyer address takes precedence over the current client address. Missing addresses remain blank. Address cells wrap and have expanded row heights. User text is stored as an inline string, never a formula.
 - **BIR Guide**: reporting period, filer identity, candidate return, PHP-only withholding totals, scope and conversion instructions.
 - **QAP Details** (expenses) or **SAWT Details** (sales): withholding rows in the prescribed BIR detail field order. These include a separate nine-digit TIN and four-digit branch, ATC, rate, tax base and withheld amount.
 - **BIR Review**: missing/invalid TIN or branch, individual names/taxpayer type, registered names longer than 50 characters, RDO, target return, internal rather than BIR ATCs, rates, unposted transactions and foreign currencies requiring review.
@@ -42,8 +42,12 @@ Official references checked on 2026-10-06:
 - [Official Alphalist 7.4 package](https://bir-cdn.bir.gov.ph/BIR/pdf/Alphalist%20Data%20Entry%20and%20Validation%20ver.%207.4.zip): embedded `genfilesawt`, `schedsawt`, `testfieldsawt`, QAP generation and `valname` routines verify complete records/filename/name restrictions.
 - [Current official ATC patch](https://bir-cdn.bir.gov.ph/BIR/pdf/ATC-Patch.zip): creditable additions WI/WC156, 820, 830, 840, 850, 860. Final WC810 and VAT WV codes are excluded.
 
-No migration or new dependencies are required. Preview APIs supply the existing organization tax identity, customer legal name/type and withholding ATC/rate associations. Organization authorization and the current report period/status filters remain enforced.
+The GIMO sales/purchases XLSX templates also include client/vendor addresses in their existing **Name and Address** column. The filing summary API supplies these values, including the saved invoice buyer address when available.
+
+No migration or new dependencies are required. Preview APIs supply the existing organization tax identity, customer legal name/type, client/vendor address fields and withholding ATC/rate associations. Organization authorization and the current report period/status filters remain enforced.
 
 ## Verification
 
-The 62 focused export, report-preview, report-year and BIR-document tests pass. Client production and API TypeScript builds pass; the client retains an initial-bundle size warning. Browser checks against the production client with a local synthetic API downloaded the expense and sales workbooks, both reviewed workbooks, QAP DAT and SAWT DAT. Downloaded XLSX XML/relationships parsed successfully, and the DAT files matched the expected record widths, CRLF delimiters and control totals. These checks do not use live accounting records or establish acceptance by the Windows BIR validation module.
+The 81 focused export, report-preview, report-year and BIR-document tests pass. Address regressions verify both report address columns, saved-invoice address precedence, empty/partial addresses, leading-zero postal codes, safe text, wrapped cells and expanded row heights. Tests using the actual GIMO templates verify addresses in the name/address cells, retained borders/formulas and preservation of other workbook parts. Client production and API TypeScript builds pass; the client retains an initial-bundle size warning. The address changes have not been deployed or verified in an authenticated production session or native Excel.
+
+Earlier browser checks against the production client with a local synthetic API downloaded the expense and sales workbooks, both reviewed workbooks, QAP DAT and SAWT DAT. Downloaded XLSX XML/relationships parsed successfully, and the DAT files matched the expected record widths, CRLF delimiters and control totals. These checks do not use live accounting records or establish acceptance by the Windows BIR validation module.

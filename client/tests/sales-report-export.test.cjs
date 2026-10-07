@@ -30,7 +30,7 @@ test('workbook has summary and invoice sheets with Excel package relationships',
   assert.ok(result.archive['_rels/.rels']);
   assert.match(strFromU8(result.archive['xl/workbook.xml']), /name="Summary"/);
   assert.match(strFromU8(result.archive['xl/workbook.xml']), /name="Invoices"/);
-  assert.match(result.invoices, /autoFilter ref="A1:T2"/);
+  assert.match(result.invoices, /autoFilter ref="A1:U2"/);
   assert.match(result.invoices, /state="frozen"/);
   assert.match(result.summary, /Example &amp; Co/);
   assert.match(result.summary, /2026 Q3/);
@@ -41,9 +41,9 @@ test('invoice amounts and dates are numeric, while TINs, references and formula-
   assert.match(cell(result.invoices, 'A2'), /t="inlineStr".*000001/);
   assert.match(cell(result.invoices, 'F2'), /t="inlineStr".*001-002-003-000/);
   assert.match(cell(result.invoices, 'B2'), /s="3" t="n"/);
-  assert.match(cell(result.invoices, 'J2'), /s="2" t="n"><v>112<\/v>/);
-  assert.match(cell(result.invoices, 'N2'), /<v>2<\/v>/);
-  assert.match(cell(result.invoices, 'R2'), /<v>111.5<\/v>/);
+  assert.match(cell(result.invoices, 'K2'), /s="2" t="n"><v>112<\/v>/);
+  assert.match(cell(result.invoices, 'O2'), /<v>2<\/v>/);
+  assert.match(cell(result.invoices, 'S2'), /<v>111.5<\/v>/);
   assert.match(cell(result.invoices, 'E2'), /t="inlineStr".*=HYPERLINK\(&quot;/);
   assert.match(cell(result.invoices, 'E2'), /&amp; &lt;Client&gt;/);
   assert.doesNotMatch(result.invoices, /<f[ >]/);
@@ -69,14 +69,34 @@ test('empty reports export a valid header-only invoice sheet and zero invoice co
   const result = sheets([]);
   assert.equal((result.invoices.match(/<row /g) || []).length, 1);
   assert.match(cell(result.summary, 'B11'), /<v>0<\/v>/);
-  assert.match(result.invoices, /autoFilter ref="A1:T1"/);
+  assert.match(result.invoices, /autoFilter ref="A1:U1"/);
 });
 
 test('missing customers and optional dates export safely; invalid amounts fail clearly', () => {
   const result = sheets([{ ...invoice, order: undefined, dueDate: undefined, notes: 'Text\u0000 with control character' }]);
   assert.match(cell(result.invoices, 'E2'), /<t xml:space="preserve"><\/t>/);
+  assert.match(cell(result.invoices, 'G2'), /<t xml:space="preserve"><\/t>/);
   assert.doesNotMatch(result.invoices, /\u0000/);
   assert.throws(() => sheets([{ ...invoice, taxAmount: 'not a number' }]), /invalid amount/);
+});
+
+test('client address includes every saved component with blanks removed and postal zeros preserved', () => {
+  const customer = { ...invoice.order.customer, addressLine1: ' 123 Example St ', addressLine2: ' Unit 2 ', city: 'Manila', state: 'Metro Manila', postalCode: '0010', country: 'Philippines' };
+  const result = sheets([{ ...invoice, order: { ...invoice.order, customer } }, { ...invoice, order: { ...invoice.order, customer: { addressLine1: ' ', city: 'Manila', country: '' } } }]);
+  assert.match(cell(result.invoices, 'G1'), /Client Address/);
+  assert.match(cell(result.invoices, 'G2'), /s="4" t="inlineStr".*123 Example St, Unit 2, Manila, Metro Manila, 0010, Philippines/);
+  assert.match(cell(result.invoices, 'G3'), /<t xml:space="preserve">Manila<\/t>/);
+  assert.match(strFromU8(result.archive['xl/styles.xml']), /wrapText="1"/);
+});
+
+test('saved invoice buyer address wins over a changed client, stays safe text and wraps long values', () => {
+  const saved = '=HYPERLINK("example") & <saved> ' + 'Long address '.repeat(30);
+  const result = sheets([{ ...invoice, invoiceDocument: { buyer: { address: saved } }, order: { ...invoice.order, customer: { ...invoice.order.customer, addressLine1: 'Changed street' } } }]);
+  assert.match(cell(result.invoices, 'G2'), /=HYPERLINK\(&quot;example&quot;\) &amp; &lt;saved&gt;/);
+  assert.doesNotMatch(result.invoices, /Changed street|<f[ >]/);
+  assert.match(result.invoices, /<row r="2" ht="\d+" customHeight="1">/);
+  const blankSnapshot = sheets([{ ...invoice, invoiceDocument: { buyer: { address: ' ' } }, order: { ...invoice.order, customer: { addressLine1: 'Legacy street' } } }]);
+  assert.match(cell(blankSnapshot.invoices, 'G2'), /Legacy street/);
 });
 
 function preview() {

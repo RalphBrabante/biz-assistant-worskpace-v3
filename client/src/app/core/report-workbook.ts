@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from 'fflate';
 
-export type Cell = string | number | { value: number; style: number };
+export type Cell = string | number | { value: string | number; style: number };
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 function xml(value: unknown): string {
@@ -28,15 +28,21 @@ export function dateCell(value: string | undefined): Cell {
 export function moneyCell(value: number | string | null | undefined): Cell { return { value: money(value), style: 2 }; }
 function sheet(rows: Cell[][], widths: number[], headerRow: number, filter = false): string {
   const lastColumn = columnName(widths.length - 1);
-  const data = rows.map((cells, index) => `<row r="${index + 1}">${cells.map((cell, col) => {
-    const ref = `${columnName(col)}${index + 1}`;
-    const style = index + 1 === headerRow ? 1 : typeof cell === 'object' ? cell.style : 0;
-    if (typeof cell === 'number' || typeof cell === 'object') {
-      return `<c r="${ref}" s="${style}" t="n"><v>${typeof cell === 'number' ? cell : cell.value}</v></c>`;
-    }
-    // Inline strings preserve identifiers/TINs and never interpret user text as formulas.
-    return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(cell)}</t></is></c>`;
-  }).join('')}</row>`).join('');
+  const data = rows.map((cells, index) => {
+    const lines = Math.max(1, ...cells.map((cell, col) => typeof cell === 'object' && cell.style === 4
+      ? String(cell.value).split(/\r?\n/).reduce((count, line) => count + Math.max(1, Math.ceil(line.length / Math.max(1, widths[col] - 2))), 0) : 1));
+    const height = lines > 1 ? ` ht="${Math.min(409, lines * 18)}" customHeight="1"` : '';
+    return `<row r="${index + 1}"${height}>${cells.map((cell, col) => {
+      const ref = `${columnName(col)}${index + 1}`;
+      const style = index + 1 === headerRow ? 1 : typeof cell === 'object' ? cell.style : 0;
+      const value = typeof cell === 'object' ? cell.value : cell;
+      if (typeof value === 'number') {
+        return `<c r="${ref}" s="${style}" t="n"><v>${value}</v></c>`;
+      }
+      // Inline strings preserve identifiers/TINs and never interpret user text as formulas.
+      return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`;
+    }).join('')}</row>`;
+  }).join('');
   return `${XML}<worksheet xmlns="${NS}"><dimension ref="A1:${lastColumn}${rows.length}"/><sheetViews><sheetView workbookViewId="0">${headerRow > 0 ? `<pane ySplit="${headerRow}" topLeftCell="A${headerRow + 1}" activePane="bottomLeft" state="frozen"/>` : ''}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${widths.map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`).join('')}</cols><sheetData>${data}</sheetData>${filter ? `<autoFilter ref="A${headerRow}:${lastColumn}${rows.length}"/>` : ''}</worksheet>`;
 }
 
@@ -51,7 +57,7 @@ export function buildWorkbook(sheets: WorkbookSheet[]): Uint8Array {
     '_rels/.rels': `${XML}<Relationships xmlns="${relationshipNS}"><Relationship Id="rId1" Type="${officeNS}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
     'xl/workbook.xml': `${XML}<workbook xmlns="${NS}" xmlns:r="${officeNS}"><sheets>${sheets.map((s, i) => `<sheet name="${xml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
     'xl/_rels/workbook.xml.rels': `${XML}<Relationships xmlns="${relationshipNS}">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${officeNS}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="${officeNS}/styles" Target="styles.xml"/></Relationships>`,
-    'xl/styles.xml': `${XML}<styleSheet xmlns="${NS}"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF423C86"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
+    'xl/styles.xml': `${XML}<styleSheet xmlns="${NS}"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF423C86"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
   };
   sheets.forEach((s, i) => files[`xl/worksheets/sheet${i + 1}.xml`] = sheet(s.rows, s.widths, s.headerRow ?? 1, !!s.filter));
   return zipSync(Object.fromEntries(Object.entries(files).map(([name, content]) => [name, strToU8(content)])));

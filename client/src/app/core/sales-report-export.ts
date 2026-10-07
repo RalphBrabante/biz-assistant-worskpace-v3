@@ -1,5 +1,6 @@
 import { buildWorkbook, Cell, dateCell, money, moneyCell, downloadWorkbook } from './report-workbook';
 import { buildBirPreparationSheets, salesWithholdingLines, BirParty } from './bir-alphalist-export';
+import { reportAddressCell } from './report-address';
 
 type Money = number | string | null;
 export interface SalesInvoiceRow {
@@ -21,7 +22,7 @@ export interface SalesInvoiceRow {
   totalAmount?: Money;
   notes?: string;
   withholdingTaxType?: { code?: string; name?: string; percentage?: Money };
-  invoiceDocument?: { buyer?: { name?: string; taxId?: string } };
+  invoiceDocument?: { buyer?: { name?: string; taxId?: string; address?: string } };
   order?: {
     id: string; orderNumber?: string; status?: string; paymentStatus?: string;
     customer?: BirParty & { id: string };
@@ -36,7 +37,7 @@ export interface SalesReportRow {
 
 const MONEY_FIELDS = ['amount', 'taxableAmount', 'subtotalAmount', 'taxAmount', 'withHoldingTaxAmount', 'discountAmount', 'scPwdDiscount', 'serviceCharge', 'totalAmount'] as const;
 const MONEY_LABELS = ['Amount', 'Taxable amount', 'Subtotal', 'Tax', 'Withholding tax', 'Discount', 'SC/PWD discount', 'Service charge', 'Total'];
-const INVOICE_HEADERS = ['Invoice #', 'Issue date', 'Due date', 'Order #', 'Customer', 'Customer TIN', 'Status', 'Payment status', 'Currency', ...MONEY_LABELS, 'Invoice ID', 'Notes'];
+const INVOICE_HEADERS = ['Invoice #', 'Issue date', 'Due date', 'Order #', 'Customer', 'Customer TIN', 'Client Address', 'Status', 'Payment status', 'Currency', ...MONEY_LABELS, 'Invoice ID', 'Notes'];
 
 export function buildSalesReportWorkbook(report: SalesReportRow, invoices: SalesInvoiceRow[], exportedAt = new Date()): Uint8Array {
   if (invoices.length > 1048575) throw new Error('This report exceeds the Excel worksheet row limit.');
@@ -52,6 +53,7 @@ export function buildSalesReportWorkbook(report: SalesReportRow, invoices: Sales
     invoiceRows.push([
       invoice.invoiceNumber || '', dateCell(invoice.issueDate), dateCell(invoice.dueDate), invoice.order?.orderNumber || '',
       invoice.order?.customer?.name || '', invoice.order?.customer?.taxId || '',
+      reportAddressCell(invoice.order?.customer, invoice.invoiceDocument?.buyer?.address),
       (invoice.status || '').replace(/_/g, ' '), (invoice.paymentStatus || '').replace(/_/g, ' '), currency,
       ...values.map(value => ({ value, style: 2 })), invoice.id, invoice.notes || '',
     ]);
@@ -73,7 +75,7 @@ export function buildSalesReportWorkbook(report: SalesReportRow, invoices: Sales
   ];
   return buildWorkbook([
     { name: 'Summary', rows: summary, widths: [30, 42, ...MONEY_LABELS.map(() => 20)], headerRow: 14 },
-    { name: 'Invoices', rows: invoiceRows, widths: [24, 14, 14, 24, 34, 22, 18, 20, 12, ...MONEY_LABELS.map(() => 20), 38, 50], filter: true },
+    { name: 'Invoices', rows: invoiceRows, widths: [24, 14, 14, 24, 34, 22, 70, 18, 20, 12, ...MONEY_LABELS.map(() => 20), 38, 50], filter: true },
     ...buildBirPreparationSheets('sales', report, salesWithholdingLines(invoices, report.currency)),
   ]);
 }

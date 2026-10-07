@@ -1,10 +1,10 @@
 import { Cell, money, moneyCell, WorkbookSheet } from './report-workbook';
 import type { SalesInvoiceRow, SalesReportRow } from './sales-report-export';
 import type { ExpenseRow } from './expense-report-export';
+import type { ReportAddress } from './report-address';
 
-export interface BirParty {
+export interface BirParty extends ReportAddress {
   name?: string; legalName?: string; taxId?: string; type?: string;
-  addressLine1?: string; addressLine2?: string; city?: string; state?: string; postalCode?: string; country?: string;
 }
 export interface WithholdingLine {
   reference: string; date?: string; currency: string; status?: string;

@@ -35,8 +35,13 @@ for (const kind of ['sales', 'expenses']) {
     const withholding = query.include.find(i => i.as === 'withholdingTaxType'); assert.ok(withholding.attributes.includes('code')); assert.equal(withholding.required, false);
     if (kind === 'sales') {
       const customer = query.include.find(i => i.as === 'order').include[0]; assert.ok(customer.attributes.includes('legalName')); assert.ok(customer.attributes.includes('type'));
+      for (const field of ['addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country']) assert.ok(customer.attributes.includes(field), field);
       assert.equal(e.res.body.data.salesInvoices[0], e.invoice);
-    } else assert.equal(e.res.body.data.expenses[0], e.expense);
+    } else {
+      const vendor = query.include.find(i => i.as === 'vendor');
+      for (const field of ['addressLine1', 'addressLine2', 'barangay', 'city', 'state', 'province', 'postalCode', 'country']) assert.ok(vendor.attributes.includes(field), field);
+      assert.equal(e.res.body.data.expenses[0], e.expense);
+    }
   });
   test(`${kind} missing or out-of-scope report does not load transaction data`, async () => {
     const e = setup(kind, true); await e.run(); assert.equal(e.res.statusCode, 404); assert.equal(e.queries.length, 1);

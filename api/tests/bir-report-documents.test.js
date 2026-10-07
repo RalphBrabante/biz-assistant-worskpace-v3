@@ -194,6 +194,32 @@ function controllerFixture(privileged = false) {
   return { controller: module.exports, req, res, queries, f };
 }
 
+test('filing summary supplies complete client and vendor addresses to both GIMO Excel templates', async () => {
+  const e = controllerFixture();
+  e.f.invoices[2].order.customer = { ...e.f.invoices[2].order.customer,
+    addressLine1: ' 123 Client St ', addressLine2: ' Unit 4 ', city: 'Manila', state: 'Metro Manila', postalCode: '0010', country: 'Philippines' };
+  e.f.invoices[2].invoiceDocument = { buyer: { address: ' Saved invoice address ' } };
+  Object.assign(e.f.expenses[2].vendor, { addressLine2: ' Unit 2 ', barangay: 'San Antonio', city: 'San Pedro', state: 'Region IV-A', province: 'Laguna', postalCode: '0402', country: 'Philippines' });
+  await e.controller.getBirFilingSummary(e.req, e.res, error => { throw error; });
+  assert.equal(e.res.statusCode, 200);
+  const sales = e.queries.find(query => query.attributes?.includes('invoiceNumber'));
+  assert.ok(sales.attributes.includes('invoiceDocument'));
+  const customer = sales.include.find(i => i.as === 'order').include[0];
+  for (const field of ['addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country']) assert.ok(customer.attributes.includes(field), field);
+  const purchases = e.queries.find(query => query.attributes?.includes('expenseNumber'));
+  const vendor = purchases.include.find(i => i.as === 'vendor');
+  for (const field of ['addressLine1', 'addressLine2', 'barangay', 'city', 'state', 'province', 'postalCode', 'country']) assert.ok(vendor.attributes.includes(field), field);
+  assert.equal(e.res.body.data.attachments.slsp.sales[0].customerAddress, 'Saved invoice address');
+  assert.equal(e.res.body.data.attachments.slsp.purchases[0].vendorAddress, 'SUPPLIER STREET, Unit 2, San Antonio, San Pedro, Region IV-A, Laguna, 0402, Philippines');
+  e.f.invoices[2].invoiceDocument.buyer.address = ' ';
+  await e.controller.getBirFilingSummary(e.req, e.res, error => { throw error; });
+  assert.equal(e.res.body.data.attachments.slsp.sales[0].customerAddress, '123 Client St, Unit 4, Manila, Metro Manila, 0010, Philippines');
+  delete e.f.invoices[2].order.customer; delete e.f.expenses[2].vendor;
+  await e.controller.getBirFilingSummary(e.req, e.res, error => { throw error; });
+  assert.equal(e.res.body.data.attachments.slsp.sales[0].customerAddress, '');
+  assert.equal(e.res.body.data.attachments.slsp.purchases[0].vendorAddress, '');
+});
+
 test('new PDF endpoint keeps tenant scope, loads prior-quarter records and rejects stale sources', async () => {
   const f = controllerFixture(); await f.controller.generateBirReportDocumentPdf(f.req, f.res, error => { throw error; });
   assert.equal(f.res.statusCode, 200); assert.equal(f.queries[0].organization, 'org-a');
