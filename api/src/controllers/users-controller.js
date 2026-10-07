@@ -862,21 +862,24 @@ async function deleteUser(req, res) {
         return res.status(404).json({ ok: false, message: 'User not found.' });
       }
     }
-    const user = await User.findOne({ where });
-    if (!user) {
-      return res.status(404).json({ ok: false, message: 'User not found.' });
-    }
+    const profileImageUrls = await User.sequelize.transaction(async (transaction) => {
+      const user = await User.findOne({ where, transaction, lock: transaction.LOCK.UPDATE });
+      if (!user) throw fail(404, 'User not found.');
+      // Check the persisted account flag under a lock so reactivation cannot
+      // race the check and deletion. Status alone does not deactivate an account.
+      if (user.isActive !== false) throw fail(409, 'Deactivate this user before deleting the account.');
 
-    const profileImageUrls = Array.from(
-      new Set(
-        [
-          String(user.profileImageCdnUrl || '').trim(),
-          String(user.profileImageUrl || '').trim(),
-        ].filter(Boolean)
-      )
-    );
-
-    await user.destroy();
+      const urls = Array.from(
+        new Set(
+          [
+            String(user.profileImageCdnUrl || '').trim(),
+            String(user.profileImageUrl || '').trim(),
+          ].filter(Boolean)
+        )
+      );
+      await user.destroy({ transaction });
+      return urls;
+    });
     for (const fileUrl of profileImageUrls) {
       try {
         // Best-effort cleanup after delete.
@@ -888,6 +891,7 @@ async function deleteUser(req, res) {
     }
     return res.status(200).json({ ok: true, message: 'User deleted successfully.' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     console.error('Delete user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to delete user.' });
   }

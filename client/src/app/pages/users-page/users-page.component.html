@@ -111,16 +111,24 @@
                class="ui-dropdown-item">
                 <i class="bi bi-person-vcard"></i>
                Open User Details</a>
-              <button
-
+              <button *ngIf="canDeactivateUser(row)"
                 type="button"
-                [disabled]="deletingId() === row.id"
+                [disabled]="!!deletingId() || !!deactivatingId()"
+                (click)="deactivateUser(row.id)"
+                class="ui-dropdown-item text-danger">
+                <i class="bi bi-person-dash"></i>
+                {{ deactivatingId() === row.id ? 'Deactivating...' : 'Deactivate' }}
+              </button>
+              <button
+                type="button"
+                [disabled]="!canDeleteUser(row) || !!deletingId() || !!deactivatingId()"
                 (click)="removeUser(row.id)"
 
-                title="Delete"
+                [title]="row.isActive === false ? 'Delete' : 'Deactivate this user before deleting the account'"
                class="ui-dropdown-item text-danger">
                 <i class="bi bi-trash3"></i>
                Delete</button>
+              <span *ngIf="row.isActive !== false" class="text-xs text-muted px-4 py-2 block">Deactivate before deleting.<span *ngIf="!isSuperuser"> Ask a superuser to deactivate this account.</span></span>
             </div>
           </app-row-actions></td>
         <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>

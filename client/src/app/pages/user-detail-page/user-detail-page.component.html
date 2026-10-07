@@ -64,11 +64,12 @@
           <label class="ui-form-check-label">Email Verified</label>
         </div>
       </div>
-      <div class="col-span-12 md:col-span-4 flex items-end">
+      <div class="col-span-12 md:col-span-4">
         <div class="ui-form-check">
-          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" />
+          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" [disabled]="!isSuperuser" />
           <label class="ui-form-check-label">Active</label>
         </div>
+        <p class="ui-form-text">{{ isSuperuser ? 'Clear Active and save before deleting this account.' : 'Only a superuser can deactivate this account.' }}</p>
       </div>
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label">New Password (optional)</label>

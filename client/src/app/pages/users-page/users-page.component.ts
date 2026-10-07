@@ -91,6 +91,8 @@ export class UsersPageComponent {
   readonly loading = signal(false);
   readonly submitting = signal(false);
   readonly deletingId = signal('');
+  readonly deactivatingId = signal('');
+  private accountActionPending = false;
   readonly isCreateModalOpen = signal(false);
   readonly createOptionsLoading = signal(false);
   readonly createRoleOptions = signal<RoleOption[]>([]);
@@ -336,15 +338,66 @@ export class UsersPageComponent {
     });
   }
 
+  canDeleteUser(row: UserRow): boolean {
+    return row.canManageAccount !== false && row.isActive === false && this.auth.hasPermission('users.delete');
+  }
+
+  canDeactivateUser(row: UserRow): boolean {
+    return this.isSuperuser && row.canManageAccount !== false && row.isActive === true;
+  }
+
+  async deactivateUser(id: string): Promise<void> {
+    const row = this.rows().find(user => user.id === id);
+    if (!row || !this.canDeactivateUser(row) || this.accountActionPending) return;
+    this.accountActionPending = true;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Deactivate User',
+      message: `Deactivate ${row.email}? This user will lose access. You can delete the account after deactivation.`,
+      confirmText: 'Deactivate User',
+      confirmButtonClass: 'ui-btn-danger',
+      iconClass: 'bi-person-dash',
+    });
+    const current = this.rows().find(user => user.id === id);
+    if (!confirmed || !current || !this.canDeactivateUser(current)) {
+      this.accountActionPending = false;
+      return;
+    }
+    this.deactivatingId.set(id);
+    this.error.set('');
+    this.message.set('');
+    this.api.update<UserRow>('/api/v1/users', id, { isActive: false }).subscribe({
+      next: (response) => {
+        this.accountActionPending = false;
+        this.deactivatingId.set('');
+        this.message.set(response.message || 'User deactivated. The account can now be deleted.');
+        this.load();
+      },
+      error: (err) => {
+        this.accountActionPending = false;
+        this.deactivatingId.set('');
+        this.error.set(err?.error?.message || 'Unable to deactivate user.');
+      },
+    });
+  }
+
   async removeUser(id: string): Promise<void> {
+    const row = this.rows().find(user => user.id === id);
+    if (!row || row.canManageAccount === false || this.accountActionPending) return;
+    if (!this.canDeleteUser(row)) {
+      if (row.isActive !== false) this.error.set('Deactivate this user before deleting the account.');
+      return;
+    }
+    this.accountActionPending = true;
     const confirmed = await this.confirmDialog.confirm({
       title: 'Delete User',
-      message: 'Delete this user? This action cannot be undone.',
+      message: `Delete ${row.email}? This action cannot be undone.`,
       confirmText: 'Delete User',
       confirmButtonClass: 'ui-btn-danger',
       iconClass: 'bi-person-x',
     });
-    if (!confirmed) {
+    const current = this.rows().find(user => user.id === id);
+    if (!confirmed || !current || !this.canDeleteUser(current)) {
+      this.accountActionPending = false;
       return;
     }
     this.deletingId.set(id);
@@ -353,11 +406,13 @@ export class UsersPageComponent {
 
     this.api.remove('/api/v1/users', id).subscribe({
       next: (response) => {
+        this.accountActionPending = false;
         this.deletingId.set('');
         this.message.set(response.message || 'User deleted successfully.');
         this.load();
       },
       error: (err) => {
+        this.accountActionPending = false;
         this.deletingId.set('');
         this.error.set(err?.error?.message || 'Unable to delete user.');
       },
