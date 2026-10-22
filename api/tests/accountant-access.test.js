@@ -164,7 +164,7 @@ test('new user completes the invitation password setup and becomes verified and 
  const f=invitationFixture();await f.controller.inviteAccountant(f.req,response());
  const raw=new URL(f.sent[0].setPasswordUrl).searchParams.get('token');let consumed=false;
  f.models.Token.findOne=async options=>{assert.equal(options.where.tokenHash,f.tokens[0].tokenHash);assert.equal(options.where.type,'reset_password');return {...f.tokens[0],user:f.user};};
- f.models.Token.update=async()=>{consumed=true;};
+ f.models.Token.update=async()=>{consumed=true;};f.models.InvalidLoginAttempt={destroy:async()=>{}};
  const controller=load('../src/controllers/auth-controller',f.models),res=response();
  await controller.resetPassword({body:{token:raw,newPassword:'SyntheticPass123',confirmPassword:'SyntheticPass123'}},res);
  assert.equal(res.statusCode,200);assert.equal(f.user.isEmailVerified,true);assert.equal(f.user.status,'active');assert.equal(f.user.organizationId,'b');assert.equal(consumed,true);

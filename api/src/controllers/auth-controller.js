@@ -678,28 +678,38 @@ async function resetPassword(req, res) {
     const nextStatus = String(user.status || '').toLowerCase();
     const shouldActivate =
       nextStatus === 'pending_verification' || nextStatus === 'invited';
-    await user.update({
-      password: newPassword,
-      isEmailVerified: true,
-      emailVerifiedAt: new Date(),
-      ...(shouldActivate ? { status: 'active' } : {}),
-    });
-
-    await models.Token.update(
-      {
-        isActive: false,
-        revokedAt: new Date(),
-        revokedReason: 'password_reset_completed',
-      },
-      {
-        where: {
-          userId: user.id,
-          type: 'reset_password',
-          isActive: true,
-          revokedAt: null,
+    await models.User.sequelize.transaction(async (transaction) => {
+      await user.update(
+        {
+          password: newPassword,
+          isEmailVerified: true,
+          emailVerifiedAt: new Date(),
+          ...(shouldActivate ? { status: 'active' } : {}),
         },
-      }
-    );
+        { transaction }
+      );
+
+      // Revoke the reset link and any existing sessions so the old password's sessions cannot linger
+      await models.Token.update(
+        {
+          isActive: false,
+          revokedAt: new Date(),
+          revokedReason: 'password_reset_completed',
+        },
+        {
+          where: {
+            userId: user.id,
+            type: ['reset_password', 'access', 'refresh'],
+            isActive: true,
+            revokedAt: null,
+          },
+          transaction,
+        }
+      );
+
+      // Proving inbox ownership lifts any brute-force lockout, so the new password works immediately
+      await models.InvalidLoginAttempt.destroy({ where: { userId: user.id }, transaction });
+    });
 
     return res.status(200).json({
       ok: true,
