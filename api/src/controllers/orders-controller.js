@@ -168,8 +168,6 @@ function pickOrderPayload(body = {}) {
     shippingAddress: body.shippingAddress,
     notes: body.notes,
     paidAt: body.paidAt,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
   };
 }
 

@@ -168,6 +168,14 @@ async function updateRole(req, res) {
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
+    // Role resolution and grant checks key off system role codes, so they must stay fixed
+    if (role.isSystem) {
+      const renamesCode = payload.code !== undefined && payload.code !== String(role.code || '').toLowerCase();
+      const deactivates = payload.isActive !== undefined && !payload.isActive;
+      if (renamesCode || deactivates) {
+        return res.status(403).json({ ok: false, message: 'System role codes cannot be changed and system roles cannot be deactivated.' });
+      }
+    }
 
     await role.update(payload);
     return res.status(200).json({ ok: true, data: role });

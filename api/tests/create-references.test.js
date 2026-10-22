@@ -61,7 +61,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
     async findByPk(id) { return organizations.get(id) || null; },
     async findAll({ where }) { return where.id.map((id) => organizations.get(id)).filter(Boolean); },
   };
-  models.Role = { findAll: async () => [{ id: 'role', code: 'member' }] };
+  models.Role = { findAll: async () => [{ id: 'role', code: 'enduser' }] };
   models.UserRole = { bulkCreate: async () => {} };
   models.Token = { update: async () => {}, create: async () => {} };
   models.Vendor.findOne = async ({ where }) => where.id === 'vendor' && where.organizationId === 'org'

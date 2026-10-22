@@ -25,6 +25,13 @@ function buildDialectOptions() {
       require: true,
       rejectUnauthorized,
     };
+    // Managed databases (e.g. DigitalOcean) sign with their own CA; accept a PEM file path or inline PEM
+    const ca = String(process.env.DB_SSL_CA || '').trim();
+    if (ca) {
+      dialectOptions.ssl.ca = ca.includes('BEGIN CERTIFICATE')
+        ? ca.replace(/\\n/g, '\n')
+        : require('fs').readFileSync(ca, 'utf8');
+    }
   }
 
   return dialectOptions;

@@ -1,7 +1,8 @@
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 
 interface ExpenseDetail {
@@ -74,7 +75,7 @@ interface ExpenseDetail {
     `,
   ],
 })
-export class ExpenseDetailPageComponent {
+export class ExpenseDetailPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
 
@@ -83,6 +84,11 @@ export class ExpenseDetailPageComponent {
   readonly expense = signal<ExpenseDetail | null>(null);
   readonly previewImageUrl = signal('');
   readonly attachmentImageFailed = signal(false);
+  // Attachments are private: fetched with the session token and shown through a local object URL
+  readonly attachmentObjectUrl = signal('');
+  readonly attachmentIsImage = signal(false);
+  readonly attachmentState = signal<'none' | 'loading' | 'ready' | 'failed'>('none');
+  private attachmentRequest: Subscription | null = null;
 
   ngOnInit(): void {
     const id = String(this.route.snapshot.paramMap.get('id') || '').trim();
@@ -101,12 +107,55 @@ export class ExpenseDetailPageComponent {
         this.loading.set(false);
         this.attachmentImageFailed.set(false);
         this.expense.set(response.data || null);
+        this.loadAttachment(id);
       },
       error: (err) => {
         this.loading.set(false);
         this.error.set(err?.error?.message || 'Unable to load expense.');
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.releaseAttachment();
+  }
+
+  private loadAttachment(id: string): void {
+    this.releaseAttachment();
+    if (!this.storedAttachmentUrl()) {
+      return;
+    }
+    this.attachmentState.set('loading');
+    this.attachmentRequest = this.api.download(`/api/v1/expenses/${id}/attachment`).subscribe({
+      next: (blob) => {
+        this.attachmentIsImage.set(blob.type.startsWith('image/'));
+        this.attachmentObjectUrl.set(URL.createObjectURL(blob));
+        this.attachmentState.set('ready');
+      },
+      error: () => this.attachmentState.set('failed'),
+    });
+  }
+
+  hasAttachment(): boolean {
+    return Boolean(this.storedAttachmentUrl());
+  }
+
+  // Older expenses may hold an external link (not a stored upload); offer it when it can't be served
+  externalAttachmentUrl(): string {
+    const url = this.storedAttachmentUrl();
+    return /^https?:\/\//i.test(url) ? url : '';
+  }
+
+  private releaseAttachment(): void {
+    this.attachmentRequest?.unsubscribe();
+    this.attachmentRequest = null;
+    this.attachmentState.set('none');
+    const objectUrl = this.attachmentObjectUrl();
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    this.attachmentObjectUrl.set('');
+    this.attachmentIsImage.set(false);
   }
 
   organizationLabel(): string {
@@ -156,7 +205,7 @@ export class ExpenseDetailPageComponent {
     window.print();
   }
 
-  attachmentUrl(): string {
+  private storedAttachmentUrl(): string {
     const row = this.expense();
     if (!row) {
       return '';
@@ -164,8 +213,12 @@ export class ExpenseDetailPageComponent {
     return String(row.fileCdnUrl || row.file || row.receiptUrl || '').trim();
   }
 
+  attachmentUrl(): string {
+    return this.attachmentObjectUrl();
+  }
+
   attachmentName(): string {
-    const url = this.attachmentUrl();
+    const url = this.storedAttachmentUrl();
     if (!url) {
       return '';
     }
@@ -178,17 +231,8 @@ export class ExpenseDetailPageComponent {
     }
   }
 
-  isImageAttachment(url = this.attachmentUrl()): boolean {
-    const cleanUrl = String(url || '').split('?')[0].split('#')[0].toLowerCase();
-    return (
-      cleanUrl.startsWith('data:image/') ||
-      cleanUrl.endsWith('.jpg') ||
-      cleanUrl.endsWith('.jpeg') ||
-      cleanUrl.endsWith('.png') ||
-      cleanUrl.endsWith('.gif') ||
-      cleanUrl.endsWith('.webp') ||
-      cleanUrl.endsWith('.bmp')
-    );
+  isImageAttachment(_url = this.attachmentUrl()): boolean {
+    return this.attachmentIsImage();
   }
 
   onAttachmentImageError(): void {

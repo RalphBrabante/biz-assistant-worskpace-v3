@@ -12,7 +12,7 @@ const RAW_TOKEN = 'reset-token-a';
 function setup() {
   let attempts = [
     { userId: 'user-a', lockedUntil: null },
-    { userId: 'user-a', lockedUntil: new Date(Date.now() + 10 * 60 * 1000) },
+    { userId: 'user-a', failureReason: 'account_lockout', lockedUntil: new Date(Date.now() + 10 * 60 * 1000) },
   ];
   const transactions = [];
   const tokenUpdates = [];

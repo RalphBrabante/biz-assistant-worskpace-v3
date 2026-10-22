@@ -7,14 +7,15 @@ const {
   deletePermission,
 } = require('../controllers/permissions-controller');
 const { authorize } = require('../middleware/authz');
+const { requireGlobalRoleAdministrator } = require('../services/role-access');
 
 const router = express.Router();
 
-router.post('/', authorize('permissions.manage'), createPermission);
+router.post('/', requireGlobalRoleAdministrator, authorize('permissions.manage'), createPermission);
 router.get('/', authorize('permissions.manage'), listPermissions);
 router.get('/:id', authorize('permissions.manage'), getPermissionById);
-router.put('/:id', authorize('permissions.manage'), updatePermission);
-router.patch('/:id', authorize('permissions.manage'), updatePermission);
-router.delete('/:id', authorize('permissions.manage'), deletePermission);
+router.put('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), updatePermission);
+router.patch('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), updatePermission);
+router.delete('/:id', requireGlobalRoleAdministrator, authorize('permissions.manage'), deletePermission);
 
 module.exports = router;

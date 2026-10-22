@@ -5,7 +5,7 @@ const {
 
 async function inspectDevCache(req, res) {
   try {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'staging') {
       return res.status(403).json({
         code: 'FORBIDDEN',
         message: 'This endpoint is available only in development.',

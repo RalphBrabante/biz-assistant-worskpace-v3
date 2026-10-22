@@ -11,7 +11,8 @@ module.exports = {
       const now = new Date();
       const userId = '6f6a8f50-2ff9-4f4a-9f4a-b0af669bb0af';
       const email = 'gimotechsupplies@gmail.com';
-      const passwordHash = await bcrypt.hash('Default123!', 10);
+      // Initial password only; set SEED_SUPERUSER_PASSWORD so the published default is never live
+      const passwordHash = await bcrypt.hash(process.env.SEED_SUPERUSER_PASSWORD || 'Default123!', 10);
 
       const [orgRows] = await queryInterface.sequelize.query(
         'SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1',
@@ -33,11 +34,11 @@ module.exports = {
           :createdAt, :updatedAt
         )
         ON DUPLICATE KEY UPDATE
+          -- Never reset an existing account's password back to the seed default on re-seed
           organization_id = VALUES(organization_id),
           first_name = VALUES(first_name),
           last_name = VALUES(last_name),
           email = VALUES(email),
-          password = VALUES(password),
           role = VALUES(role),
           status = VALUES(status),
           is_email_verified = VALUES(is_email_verified),

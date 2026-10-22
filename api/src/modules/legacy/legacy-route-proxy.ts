@@ -80,7 +80,7 @@ const ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
   'tickets': { prefix: '/api/v1/tickets', router: ticketsRoutes, protected: true },
   'bug-reports': { prefix: '/api/v1/bug-reports', router: bugReportsRoutes, protected: true },
   auth: { prefix: '/api/v1/auth', router: authRoutes, protected: false },
-  dev: { prefix: '/api/v1/dev', router: devRoutes, protected: false },
+  dev: { prefix: '/api/v1/dev', router: devRoutes, protected: true },
   system: { prefix: '/api/v1', router: systemRoutes, protected: true },
   items: { prefix: '/api/v1/items', router: itemsRoutes, protected: true },
   organizations: { prefix: '/api/v1/organizations', router: organizationsRoutes, protected: true },

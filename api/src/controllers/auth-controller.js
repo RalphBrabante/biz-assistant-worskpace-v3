@@ -29,20 +29,39 @@ function isUserAllowedToLogin(user) {
   return { ok: true };
 }
 
+const bcrypt = require('bcryptjs');
+
+// Never fall back to plaintext comparison: a malformed hash must fail closed
 async function comparePassword(plainPassword, storedPassword) {
   try {
-    // Support bcrypt hashes if bcryptjs is available.
-    // Fallback to plain text comparison for existing simple records.
-    // eslint-disable-next-line global-require, import/no-extraneous-dependencies
-    const bcrypt = require('bcryptjs');
-    try {
-      return await bcrypt.compare(plainPassword, storedPassword);
-    } catch (err) {
-      return plainPassword === storedPassword;
-    }
-  } catch (err) {
-    return plainPassword === storedPassword;
+    return await bcrypt.compare(String(plainPassword || ''), String(storedPassword || ''));
+  } catch (_err) {
+    return false;
   }
+}
+
+// Spending the same bcrypt work for unknown emails keeps response timing from revealing accounts.
+// Hash of discarded random bytes: no password matches it.
+const DUMMY_PASSWORD_HASH = '$2a$10$2xM6AjfNQ4JFk0hN/h7YdeuxgiyOH447i.iZBmR.DCEy94eQ5mKEu';
+
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+// Per client IP: stops one source guessing a password without letting strangers lock the owner out
+const LOCKOUT_THRESHOLD_PER_IP = 5;
+// Across all IPs: bounds distributed guessing against a single account
+const LOCKOUT_THRESHOLD_PER_ACCOUNT = 20;
+const ACCOUNT_LOCK_REASON = 'account_lockout';
+
+async function failuresSinceLastLock(models, where, lockWhere = where) {
+  const windowStart = new Date(Date.now() - LOCKOUT_WINDOW_MS);
+  const lastLock = await models.InvalidLoginAttempt.findOne({
+    where: { ...lockWhere, lockedUntil: { [Op.ne]: null } },
+    order: [['lockedUntil', 'DESC']],
+    attributes: ['lockedUntil'],
+  });
+  // Failures that already produced a lock never count toward the next one
+  const lastLockEnd = lastLock?.lockedUntil ? new Date(lastLock.lockedUntil) : null;
+  const since = lastLockEnd && lastLockEnd > windowStart ? lastLockEnd : windowStart;
+  return models.InvalidLoginAttempt.count({ where: { ...where, createdAt: { [Op.gte]: since } } });
 }
 
 async function resolveEffectiveOrganizationId(models, user) {
@@ -205,12 +224,18 @@ async function login(req, res) {
     };
 
     if (!user) {
+      await comparePassword(password, DUMMY_PASSWORD_HASH);
       return res.status(401).json(genericError);
     }
 
-    // Check for an active lockout before attempting password comparison
+    const ipAddress = req.ip || null;
+    // Check for an active lockout (this IP, or the whole account) before comparing the password
     const activeLock = await models.InvalidLoginAttempt.findOne({
-      where: { userId: user.id, lockedUntil: { [Op.gt]: new Date() } },
+      where: {
+        userId: user.id,
+        lockedUntil: { [Op.gt]: new Date() },
+        [Op.or]: [{ ipAddress }, { failureReason: ACCOUNT_LOCK_REASON }],
+      },
       order: [['createdAt', 'DESC']],
     });
     if (activeLock) {
@@ -222,31 +247,31 @@ async function login(req, res) {
 
     const passwordMatches = await comparePassword(password, user.password);
     if (!passwordMatches) {
-      const LOCKOUT_THRESHOLD = 5;
-      const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-      const windowStart = new Date(Date.now() - LOCKOUT_WINDOW_MS);
-      const recentCount = await models.InvalidLoginAttempt.count({
-        where: {
-          userId: user.id,
-          createdAt: { [Op.gte]: windowStart },
-          lockedUntil: null,
-        },
-      });
-      const shouldLock = recentCount + 1 >= LOCKOUT_THRESHOLD;
+      const ipFailures = (await failuresSinceLastLock(models, { userId: user.id, ipAddress })) + 1;
+      const accountFailures = (await failuresSinceLastLock(
+        models,
+        { userId: user.id },
+        { userId: user.id, failureReason: ACCOUNT_LOCK_REASON }
+      )) + 1;
+      const locksAccount = accountFailures >= LOCKOUT_THRESHOLD_PER_ACCOUNT;
+      const locksIp = ipFailures >= LOCKOUT_THRESHOLD_PER_IP;
       await models.InvalidLoginAttempt.create({
         userId: user.id,
         attemptedEmail: normalizedEmail,
-        ipAddress: req.ip || null,
+        ipAddress,
         userAgent: req.get('user-agent') || null,
-        failureReason: 'invalid_password',
-        attemptCountWindow: recentCount + 1,
-        lockedUntil: shouldLock ? new Date(Date.now() + LOCKOUT_WINDOW_MS) : null,
+        failureReason: locksAccount ? ACCOUNT_LOCK_REASON : 'invalid_password',
+        attemptCountWindow: ipFailures,
+        lockedUntil: locksAccount || locksIp ? new Date(Date.now() + LOCKOUT_WINDOW_MS) : null,
       });
       return res.status(401).json(genericError);
     }
 
-    // Successful login — clear any previous failed attempts for this user
-    await models.InvalidLoginAttempt.destroy({ where: { userId: user.id } });
+    // Successful login clears only this IP's failures. Other IPs' locks and the account-wide count
+    // must survive, or every sign-in by the owner would hand an attacker a fresh set of guesses.
+    await models.InvalidLoginAttempt.destroy({
+      where: { userId: user.id, ipAddress, failureReason: { [Op.ne]: ACCOUNT_LOCK_REASON } },
+    });
 
     const loginAccess = isUserAllowedToLogin(user);
     if (!loginAccess.ok) {
@@ -536,22 +561,8 @@ async function forgotPassword(req, res) {
       });
     }
 
-    await models.Token.update(
-      {
-        isActive: false,
-        revokedAt: new Date(),
-        revokedReason: 'superseded_reset_request',
-      },
-      {
-        where: {
-          userId: user.id,
-          type: 'reset_password',
-          isActive: true,
-          revokedAt: null,
-        },
-      }
-    );
-
+    // Earlier links stay valid until they expire or one is used; revoking them here would let
+    // anyone repeatedly invalidate a victim's email simply by requesting another one.
     const rawToken = crypto.randomBytes(48).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresInMinutes = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
@@ -572,12 +583,13 @@ async function forgotPassword(req, res) {
     });
 
     const resetUrl = buildResetPasswordUrl(rawToken);
-    await sendPasswordResetEmail({
+    // Sent in the background so response time does not reveal whether the account exists
+    sendPasswordResetEmail({
       toEmail: user.email,
       toName: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.email,
       resetUrl,
       expiresInMinutes,
-    });
+    }).catch((err) => console.error('Password reset email error:', err));
 
     return res.status(200).json({
       ok: true,
@@ -756,22 +768,8 @@ async function requestEmailVerification(req, res) {
       });
     }
 
-    await models.Token.update(
-      {
-        isActive: false,
-        revokedAt: new Date(),
-        revokedReason: 'superseded_verify_email_request',
-      },
-      {
-        where: {
-          userId: user.id,
-          type: 'verify_email',
-          isActive: true,
-          revokedAt: null,
-        },
-      }
-    );
-
+    // Earlier links stay valid until they expire or one is used; revoking them here would let
+    // anyone repeatedly invalidate a victim's email simply by requesting another one.
     const rawToken = crypto.randomBytes(48).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresInMinutes = Number(process.env.VERIFY_EMAIL_EXPIRES_MINUTES || 60);
@@ -792,12 +790,13 @@ async function requestEmailVerification(req, res) {
     });
 
     const verifyUrl = buildVerifyEmailUrl(rawToken);
-    await sendEmailVerificationEmail({
+    // Sent in the background so response time does not reveal whether the account exists
+    sendEmailVerificationEmail({
       toEmail: user.email,
       toName: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.email,
       verifyUrl,
       expiresInMinutes,
-    });
+    }).catch((err) => console.error('Verification email error:', err));
 
     return res.status(200).json({
       ok: true,

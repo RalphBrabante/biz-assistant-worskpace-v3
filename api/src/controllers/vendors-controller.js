@@ -123,6 +123,11 @@ async function vendorAccessWhere(models, req, vendorId) {
   };
 }
 
+// Linked organizations may use a vendor, but only the owning organization may change or delete it
+function vendorWriteDenied(req, vendor) {
+  return !isPrivilegedRequest(req) && vendor.organizationId !== resolveOrganizationId(req);
+}
+
 async function syncVendorOrganizations(models, vendor, organizationIds, actorId) {
   if (!models.VendorOrganization || !vendor?.id) {
     return;
@@ -233,8 +238,6 @@ function pickVendorPayload(body = {}) {
     paymentTerms: body.paymentTerms,
     notes: body.notes,
     status: body.status,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
   };
 }
 
@@ -254,7 +257,11 @@ function csvValue(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Spreadsheet apps execute cells starting with these as formulas; numbers (incl. negatives) are left as-is
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -670,6 +677,9 @@ async function updateVendor(req, res, next) {
     if (!vendor) {
       return res.status(404).json({ code: 'NOT_FOUND', message: 'Vendor not found.' });
     }
+    if (vendorWriteDenied(req, vendor)) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the organization that owns this vendor can change it.' });
+    }
 
     const payload = cleanUndefined(pickVendorPayload(req.body));
     delete payload.organizationId;
@@ -682,7 +692,7 @@ async function updateVendor(req, res, next) {
         });
       }
     }
-    const actorId = req.auth?.user?.id || req.auth?.userId || payload.updatedBy || vendor.updatedBy || null;
+    const actorId = req.auth?.user?.id || req.auth?.userId || vendor.updatedBy || null;
     payload.updatedBy = actorId;
 
     const organizationIds = await resolveAllowedOrganizationIds(req, models, vendor.organizationId);
@@ -732,6 +742,9 @@ async function deleteVendor(req, res, next) {
 
     if (!vendor) {
       return res.status(404).json({ code: 'NOT_FOUND', message: 'Vendor not found.' });
+    }
+    if (vendorWriteDenied(req, vendor)) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the organization that owns this vendor can delete it.' });
     }
 
     await vendor.destroy();

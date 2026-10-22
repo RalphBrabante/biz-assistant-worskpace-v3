@@ -33,7 +33,9 @@ services:
   biz-assitant-redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD (URL-safe, e.g. openssl rand -hex 24)}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
     expose:
       - "6379"
     volumes:
@@ -70,6 +72,17 @@ services:
     networks:
       - backend
 
+  # One-shot: the API runs as the unprivileged "node" user, but upload volumes created by older
+  # (root) containers are root-owned. Fix ownership before the API starts; then exit.
+  biz-assitant-uploads-permissions:
+    image: ghcr.io/ralphbrabante/biz-assistant-api:staging
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /usr/src/app/uploads/expenses /usr/src/app/uploads/profiles && chown -R node:node /usr/src/app/uploads"]
+    volumes:
+      - api_uploads:/usr/src/app/uploads
+    network_mode: none
+    restart: "no"
+
   biz-assitant-api:
     image: ghcr.io/ralphbrabante/biz-assistant-api:staging
     restart: unless-stopped
@@ -83,7 +96,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      REDIS_URL: redis://biz-assitant-redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@biz-assitant-redis:6379
       AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@biz-assitant-amqp:5672
       DB_POOL_MAX: ${DB_POOL_MAX:-4}
       DB_POOL_MIN: ${DB_POOL_MIN:-0}
@@ -130,6 +143,8 @@ services:
     expose:
       - "3000"
     depends_on:
+      biz-assitant-uploads-permissions:
+        condition: service_completed_successfully
       biz-assitant-mysql:
         condition: service_healthy
       biz-assitant-redis:

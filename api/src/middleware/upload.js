@@ -1,8 +1,10 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
 const { getUploadDirectory } = require('../services/upload-paths');
+const { detectImageType } = require('../services/image-signature');
 const expenseUploadDir = path.join(getUploadDirectory(), 'expenses');
 const profileUploadDir = path.join(getUploadDirectory(), 'profiles');
 fs.mkdirSync(expenseUploadDir, { recursive: true });
@@ -13,11 +15,8 @@ const storage = multer.diskStorage({
     fs.mkdirSync(expenseUploadDir, { recursive: true });
     cb(null, expenseUploadDir);
   },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    const safeExt = ext || '.jpg';
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `expense-${unique}${safeExt}`);
+  filename: (_req, _file, cb) => {
+    cb(null, `expense-${crypto.randomBytes(16).toString('hex')}.upload`);
   },
 });
 
@@ -37,18 +36,50 @@ const upload = multer({
   fileFilter: imageOnlyFilter,
 });
 
-const uploadExpenseImage = upload.single('file');
+// The client's filename and Content-Type are untrusted; derive both from the file's own bytes
+// so nothing but a raster image can ever be stored and served from /uploads.
+async function verifyStoredImage(file) {
+  const handle = await fs.promises.open(file.path, 'r');
+  const header = Buffer.alloc(16);
+  try {
+    await handle.read(header, 0, header.length, 0);
+  } finally {
+    await handle.close();
+  }
+  const signature = detectImageType(header);
+  if (!signature) {
+    await fs.promises.unlink(file.path).catch(() => {});
+    throw new Error('Only image files are allowed (PNG, JPEG, GIF or WebP).');
+  }
+  const verifiedPath = file.path.replace(/\.upload$/, signature.ext);
+  await fs.promises.rename(file.path, verifiedPath);
+  Object.assign(file, {
+    path: verifiedPath,
+    filename: path.basename(verifiedPath),
+    mimetype: signature.mime,
+    originalname: `${path.parse(String(file.originalname || 'image')).name.replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 120)}${signature.ext}`,
+  });
+}
+
+function verifiedImageUpload(multerMiddleware) {
+  return (req, res, next) => multerMiddleware(req, res, (err) => {
+    if (err || !req.file) {
+      next(err);
+      return;
+    }
+    verifyStoredImage(req.file).then(() => next(), next);
+  });
+}
+
+const uploadExpenseImage = verifiedImageUpload(upload.single('file'));
 
 const profileStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     fs.mkdirSync(profileUploadDir, { recursive: true });
     cb(null, profileUploadDir);
   },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    const safeExt = ext || '.jpg';
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `profile-${unique}${safeExt}`);
+  filename: (_req, _file, cb) => {
+    cb(null, `profile-${crypto.randomBytes(16).toString('hex')}.upload`);
   },
 });
 
@@ -60,7 +91,7 @@ const profileUpload = multer({
   fileFilter: imageOnlyFilter,
 });
 
-const uploadProfileImage = profileUpload.single('profileImage');
+const uploadProfileImage = verifiedImageUpload(profileUpload.single('profileImage'));
 
 function csvOnlyFilter(_req, file, cb) {
   const name = String(file?.originalname || '').toLowerCase();

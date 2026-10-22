@@ -28,6 +28,8 @@ function setup(code = 'VAT') {
   '../services/expense-transfer': require('../src/services/expense-transfer'),
   '../services/quarterly-expense-totals': require('../src/services/quarterly-expense-totals'),
   '../services/tax-calculation': require('../src/services/tax-calculation'),
+  '../services/role-access': require('../src/services/role-access'),
+  '../services/image-signature': require('../src/services/image-signature'),
  };
  const module = { exports: {} };
  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/controllers/expenses-controller.js'), 'utf8'), {

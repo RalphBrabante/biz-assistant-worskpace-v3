@@ -13,7 +13,7 @@ function controller(models = {}, provider = gmail) {
   return module.exports;
 }
 function req(overrides = {}) { return {query: {}, body: {}, params: {id: 'ticket'}, auth: {userId: 'user', user: {organizationId: 'org-a'}, roleCodes: ['staff'], permissions: new Set(['tickets.read'])}, ...overrides}; }
-function res() { return {statusCode: 200, headers: {}, set(k,v) {this.headers[k] = v; return this;}, status(n) {this.statusCode = n; return this;}, json(body) {this.body = body; return this;}, redirect(url) {this.redirectUrl = url; return this;}}; }
+function res() { return {statusCode: 200, headers: {}, set(k,v) {this.headers[k] = v; return this;}, status(n) {this.statusCode = n; return this;}, json(body) {this.body = body; return this;}, redirect(url) {this.redirectUrl = url; return this;}, cookie(name, value) {this.cookies = {...this.cookies, [name]: value}; return this;}, clearCookie() {return this;}}; }
 const tx = {LOCK: {UPDATE: 'UPDATE'}};
 const database = {transaction: fn => fn(tx)};
 test('ticket scope cannot be overridden by ordinary staff or administrators', () => {
@@ -83,11 +83,12 @@ test('reply MIME preserves threading and encodes Unicode body without header inj
   assert.match(raw, /In-Reply-To: <parent@example.com>/); assert.match(raw, /References: <parent@example.com>/); assert.doesNotMatch(raw, /\r\nBcc:/); assert.match(raw, new RegExp(Buffer.from('Hello 世界').toString('base64')));
 });
 test('expired and replayed OAuth state is rejected before token exchange', async () => {
+  process.env.APP_BASE_URL = process.env.APP_BASE_URL || 'https://app.example.test';
   let exchanges = 0;
   const provider = {...gmail, tokenRequest: async () => {exchanges++;}};
   for (const expired of [true, false]) {
     const c = controller({GmailOAuthState: {findByPk: async () => ({expiresAt: new Date(Date.now() + (expired ? -1000 : 10000))}), destroy: async () => 0}}, provider);
-    const r = res(); await c.callback(req({query: {state: 'a'.repeat(64), code: 'code'}}), r); assert.equal(r.statusCode, 400);
+    const r = res(); await c.callback(req({query: {state: 'a'.repeat(64), code: 'code'}, headers: {cookie: `gmail_oauth_state=${'a'.repeat(64)}`}}), r); assert.equal(r.statusCode, 400);
   }
   assert.equal(exchanges, 0);
 });

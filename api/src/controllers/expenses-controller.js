@@ -6,6 +6,7 @@ const { getOrganizationCurrency } = require('../services/organization-currency')
 const {
   compressImageAtPath,
   deleteRemoteFileByUrl,
+  readStoredFile,
   uploadImageFromDisk,
   StorageProviderError,
 } = require('../services/storage-service');
@@ -22,6 +23,8 @@ const { computeExpenseAmounts, ExpenseCalculationError } = require('../services/
 const { isVatTaxType } = require('../services/tax-calculation');
 const { buildExpenseTransferPreview, ExpenseTransferError } = require('../services/expense-transfer');
 const { refreshTransferredExpenseReports } = require('../services/quarterly-expense-totals');
+const { effectiveRoleAccess } = require('../services/role-access');
+const { detectImageType } = require('../services/image-signature');
 
 function getExpenseModels() {
   const models = getModels();
@@ -75,14 +78,8 @@ function pickExpensePayload(body = {}) {
     scPwdDiscount: body.scPwdDiscount,
     serviceCharge: body.serviceCharge,
     totalAmount: body.totalAmount,
-    receiptUrl: body.receiptUrl,
-    file: body.file,
-    fileCdnUrl: body.fileCdnUrl,
     notes: body.notes,
     paidAt: body.paidAt,
-    approvedBy: body.approvedBy,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
   };
 }
 
@@ -118,7 +115,11 @@ function csvValue(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Spreadsheet apps execute cells starting with these as formulas; numbers (incl. negatives) are left as-is
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -269,17 +270,30 @@ async function userHasActiveOrganizationMembership(models, userId, organizationI
   return Boolean(membership);
 }
 
-async function userCanAccessOrganization(models, req, organizationId) {
+async function userCanAccessOrganization(models, req, organizationId, permission = 'expenses.read') {
   if (isPrivilegedRequest(req)) {
     return true;
   }
 
+  // Route authorization already checked the permission for the active organization
   const authOrgId = getAuthenticatedOrganizationId(req);
   if (authOrgId && authOrgId === organizationId) {
     return true;
   }
 
-  return userHasActiveOrganizationMembership(models, getAuthenticatedUserId(req), organizationId);
+  const userId = getAuthenticatedUserId(req);
+  if (!await userHasActiveOrganizationMembership(models, userId, organizationId)) {
+    return false;
+  }
+  // Membership alone is not enough: the user's role in that organization must grant the action.
+  // Pass the full record: role resolution compares against the user's primary organization.
+  const allModels = getModels();
+  const user = await allModels.User.findByPk(userId);
+  if (!user) {
+    return false;
+  }
+  const { permissions } = await effectiveRoleAccess(allModels, user, organizationId);
+  return permissions.has(permission);
 }
 
 async function userCanUseVendorForExpenseOrganization(models, req, vendor, expenseOrganizationId) {
@@ -577,6 +591,7 @@ async function resolveUploadedExpenseFile(req) {
       folder: 'expenses',
       fileName: req.file.filename,
       contentType: req.file.mimetype || undefined,
+      private: true,
     });
     if (uploadedUrl) {
       return {
@@ -639,7 +654,7 @@ async function createExpense(req, res, next) {
     if (!payload.organizationId) {
       return res.status(400).json({ ok: false, message: 'organizationId is required.' });
     }
-    if (!await userCanAccessOrganization(models, req, payload.organizationId)) {
+    if (!await userCanAccessOrganization(models, req, payload.organizationId, 'expenses.create')) {
       return res.status(403).json({ ok: false, message: 'You do not have access to this organization.' });
     }
     if (!payload.vendorId) {
@@ -1067,6 +1082,52 @@ async function getExpenseById(req, res) {
   }
 }
 
+async function getExpenseAttachment(req, res) {
+  try {
+    const models = getExpenseModels();
+    if (!models) {
+      return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
+    }
+
+    const where = { id: req.params.id };
+    if (!isPrivilegedRequest(req) && !applyOrganizationWhereScope(where, req)) {
+      return res.status(404).json({ ok: false, message: 'Expense not found.' });
+    }
+    const expense = await models.Expense.findOne({ where, attributes: ['id', 'organizationId', 'file', 'fileCdnUrl', 'receiptUrl'] });
+    const fileUrl = expense ? collectExpenseFileUrls(expense)[0] : null;
+    if (!fileUrl) {
+      return res.status(404).json({ ok: false, message: 'Attachment not found.' });
+    }
+
+    // Rows written before attachment URLs became server-controlled may point at a file another
+    // organization uploaded; a file referenced by another organization's expense is never served here
+    const claimedElsewhere = await models.Expense.count({
+      where: {
+        organizationId: { [Op.ne]: expense.organizationId },
+        [Op.or]: [{ file: fileUrl }, { fileCdnUrl: fileUrl }, { receiptUrl: fileUrl }],
+      },
+    });
+    const stored = claimedElsewhere ? null : await readStoredFile(fileUrl, { folder: 'expenses' });
+    if (!stored) {
+      return res.status(404).json({ ok: false, code: 'ATTACHMENT_UNAVAILABLE', message: 'Attachment not found.' });
+    }
+
+    // Only verified raster images render inline; anything else is forced to download
+    const image = detectImageType(stored.content);
+    res.set({
+      'Content-Type': image ? image.mime : 'application/octet-stream',
+      'Content-Disposition': `${image ? 'inline' : 'attachment'}; filename="expense-${expense.id}${image ? image.ext : ''}"`,
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'private, no-store',
+    });
+    return res.status(200).send(stored.content);
+  } catch (err) {
+    console.error('Get expense attachment error:', err);
+    return res.status(500).json({ ok: false, message: 'Unable to fetch attachment.' });
+  }
+}
+
 async function prepareExpenseTransfer(models, req, selection, transaction) {
   const targetOrganizationId = String(selection.organizationId || selection.targetOrganizationId || '').trim();
   if (!targetOrganizationId) throw new ExpenseTransferError('Target organization is required.');
@@ -1087,7 +1148,7 @@ async function prepareExpenseTransfer(models, req, selection, transaction) {
   });
   if (!expense) throw new ExpenseTransferError('Expense not found.', 404);
   if (expense.organizationId === targetOrganizationId) throw new ExpenseTransferError('Expense is already in the target organization.', 409);
-  if (!await userCanAccessOrganization(models, req, targetOrganizationId)) {
+  if (!await userCanAccessOrganization(models, req, targetOrganizationId, 'expenses.create')) {
     throw new ExpenseTransferError('You must be an active member of the target organization to transfer this expense.', 403);
   }
   // Serialize opposite-direction transfers and report generation in the same order.
@@ -1240,6 +1301,7 @@ async function updateExpense(req, res) {
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
+    payload.updatedBy = getAuthenticatedUserId(req);
     if (payload.organizationId && payload.organizationId !== expense.organizationId) {
       return res.status(400).json({ ok: false, message: 'Use Transfer Expense to change the organization.' });
     }
@@ -1417,6 +1479,7 @@ module.exports = {
   listTransferTargetOrganizations,
   listExpenses,
   getExpenseById,
+  getExpenseAttachment,
   previewExpenseTransfer,
   transferExpense,
   updateExpense,

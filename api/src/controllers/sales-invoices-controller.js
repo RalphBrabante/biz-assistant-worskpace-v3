@@ -46,8 +46,6 @@ function pickSalesInvoicePayload(body = {}) {
     totalAmount: body.totalAmount,
     paidAt: body.paidAt,
     notes: body.notes,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
   };
 }
 
@@ -152,7 +150,11 @@ function csvValue(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Spreadsheet apps execute cells starting with these as formulas; numbers (incl. negatives) are left as-is
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

@@ -1,7 +1,16 @@
 const fs = require('fs');
 const crypto = require('crypto');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const path = require('path');
+const {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  GetObjectAclCommand,
+  PutObjectAclCommand,
+} = require('@aws-sdk/client-s3');
 const { getModels } = require('../sequelize');
+const { getUploadDirectory } = require('./upload-paths');
 
 function isDevEnvironment() {
   const env = String(process.env.NODE_ENV || 'development').toLowerCase().trim();
@@ -548,7 +557,9 @@ async function uploadImageFromDisk(localPath, options = {}) {
         'Google Drive upload did not return a file id.'
       );
     }
-    const permissionResult = await ensureGoogleDrivePublicReadable(fileId, authHeader);
+    const permissionResult = options.private
+      ? { ok: true }
+      : await ensureGoogleDrivePublicReadable(fileId, authHeader);
     if (!permissionResult.ok) {
       // Keep upload successful even when domain policy blocks "anyone with link".
       logStorageDev('warn', 'Google Drive uploaded but public permission was not applied', {
@@ -606,7 +617,7 @@ async function uploadImageFromDisk(localPath, options = {}) {
         Body: bodyBuffer,
         ...(withAcl ? { ACL: 'public-read' } : {}),
         ContentType: options.contentType || 'application/octet-stream',
-        CacheControl: 'public, max-age=31536000',
+        CacheControl: options.private ? 'private, no-store' : 'public, max-age=31536000',
       })
     );
     logStorageDev('info', 'Upload success', {
@@ -622,7 +633,8 @@ async function uploadImageFromDisk(localPath, options = {}) {
   };
 
   try {
-    await putObject(true);
+    // Private objects keep the bucket's default (private) ACL and are only served through the API
+    await putObject(!options.private);
   } catch (err) {
     // Some Spaces credentials allow PutObject but not PutObjectAcl.
     // Retry without ACL to support these policies.
@@ -892,11 +904,187 @@ async function compressImageAtPath(localPath, maxBytes = 2 * 1024 * 1024) {
   return { compressed: false, bytes: originalBuffer.length };
 }
 
+function createDoSpacesClient(config) {
+  return new S3Client({
+    region: config.doSpaces.region,
+    endpoint: normalizeDoSpacesEndpoint(config.doSpaces.endpoint, config.doSpaces.bucket),
+    credentials: {
+      accessKeyId: config.doSpaces.accessKey,
+      secretAccessKey: config.doSpaces.secretKey,
+    },
+  });
+}
+
+// Resolves a stored URL to the concrete file it names, confined to `folder` (the folder name
+// uploadImageFromDisk was given) so a stored URL can never reach other files in the shared store.
+// Returns null when the URL does not resolve to a file in that folder of a configured store.
+async function resolveStoredFile(fileUrl, folder) {
+  const rawUrl = trimOrEmpty(fileUrl);
+  const safeFolder = trimOrEmpty(folder).replace(/^\/+|\/+$/g, '');
+  if (!rawUrl || !safeFolder) {
+    return null;
+  }
+
+  if (rawUrl.startsWith('/uploads/')) {
+    const folderRoot = path.join(getUploadDirectory(), safeFolder);
+    let localPath;
+    try {
+      localPath = path.resolve(getUploadDirectory(), `.${decodeURIComponent(rawUrl.slice('/uploads'.length))}`);
+    } catch (_err) {
+      return null;
+    }
+    return localPath.startsWith(`${folderRoot}${path.sep}`) ? { provider: 'local', localPath } : null;
+  }
+
+  const config = await getStorageConfig();
+  const fileId = extractGoogleDriveFileId(rawUrl);
+  if (fileId) {
+    if (!config.isGoogleDriveConfigured) {
+      return null;
+    }
+    const authHeader = await getGoogleDriveAuthorizationHeader(config);
+    // Drive files are named "<folder>-<file>" at upload; refuse anything outside that folder
+    const metadata = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name&supportsAllDrives=true`,
+      { headers: { Authorization: authHeader } }
+    );
+    const { name = '' } = metadata.ok ? await metadata.json().catch(() => ({})) : {};
+    if (!String(name).startsWith(`${safeFolder.replace(/[\\/]/g, '-')}-`)) {
+      return null;
+    }
+    return { provider: 'google_drive', fileId, authHeader };
+  }
+
+  if (!config.isDoSpacesConfigured) {
+    return null;
+  }
+  const key = extractObjectKeyFromUrl(rawUrl, config.doSpaces);
+  const folderPrefix = `${buildObjectKey(config.doSpaces, safeFolder, '')}/`;
+  if (!key || !key.startsWith(folderPrefix) || key.split('/').includes('..')) {
+    return null;
+  }
+  return { provider: 'do_spaces', key, bucket: config.doSpaces.bucket, client: createDoSpacesClient(config) };
+}
+
+function isMissingObjectError(err) {
+  return String(err?.name || '') === 'NoSuchKey' || Number(err?.$metadata?.httpStatusCode || 0) === 404;
+}
+
+// Reads a stored file with the platform's credentials so private files can be streamed
+// to authorized users. Returns null when the file is outside `folder` or no longer exists.
+async function readStoredFile(fileUrl, { folder } = {}) {
+  const target = await resolveStoredFile(fileUrl, folder);
+  if (!target) {
+    return null;
+  }
+
+  if (target.provider === 'local') {
+    const content = await fs.promises.readFile(target.localPath).catch(() => null);
+    return content ? { content, contentType: null } : null;
+  }
+
+  if (target.provider === 'google_drive') {
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(target.fileId)}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: target.authHeader } }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return {
+      content: Buffer.from(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type'),
+    };
+  }
+
+  try {
+    const object = await target.client.send(new GetObjectCommand({ Bucket: target.bucket, Key: target.key }));
+    return {
+      content: Buffer.from(await object.Body.transformToByteArray()),
+      contentType: object.ContentType || null,
+    };
+  } catch (err) {
+    if (isMissingObjectError(err)) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Removes public access from a file uploaded before attachments became private.
+ * Returns { provider, status } where status is one of:
+ *   'made_private' | 'would_make_private' (dryRun) | 'already_private' | 'not_found' | 'not_in_folder'
+ * Local files need no change: /uploads no longer serves the folder at all.
+ */
+async function makeStoredFilePrivate(fileUrl, { folder, dryRun = true } = {}) {
+  const target = await resolveStoredFile(fileUrl, folder);
+  if (!target) {
+    return { provider: null, status: 'not_in_folder' };
+  }
+
+  if (target.provider === 'local') {
+    return { provider: 'local', status: 'already_private' };
+  }
+
+  if (target.provider === 'google_drive') {
+    const base = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(target.fileId)}/permissions`;
+    const listing = await fetch(`${base}?fields=permissions(id,type)&supportsAllDrives=true`, {
+      headers: { Authorization: target.authHeader },
+    });
+    if (listing.status === 404) {
+      return { provider: 'google_drive', status: 'not_found' };
+    }
+    if (!listing.ok) {
+      throw new Error(`Google Drive permission listing failed (HTTP ${listing.status}).`);
+    }
+    const { permissions = [] } = await listing.json();
+    const publicGrants = permissions.filter((permission) => permission.type === 'anyone');
+    if (publicGrants.length === 0) {
+      return { provider: 'google_drive', status: 'already_private' };
+    }
+    if (dryRun) {
+      return { provider: 'google_drive', status: 'would_make_private' };
+    }
+    for (const grant of publicGrants) {
+      // eslint-disable-next-line no-await-in-loop
+      const removal = await fetch(`${base}/${encodeURIComponent(grant.id)}?supportsAllDrives=true`, {
+        method: 'DELETE',
+        headers: { Authorization: target.authHeader },
+      });
+      if (!removal.ok && removal.status !== 404) {
+        throw new Error(`Google Drive permission removal failed (HTTP ${removal.status}).`);
+      }
+    }
+    return { provider: 'google_drive', status: 'made_private' };
+  }
+
+  try {
+    const acl = await target.client.send(new GetObjectAclCommand({ Bucket: target.bucket, Key: target.key }));
+    const isPublic = (acl.Grants || []).some((grant) => /AllUsers$/.test(String(grant.Grantee?.URI || '')));
+    if (!isPublic) {
+      return { provider: 'do_spaces', status: 'already_private' };
+    }
+    if (dryRun) {
+      return { provider: 'do_spaces', status: 'would_make_private' };
+    }
+    await target.client.send(new PutObjectAclCommand({ Bucket: target.bucket, Key: target.key, ACL: 'private' }));
+    return { provider: 'do_spaces', status: 'made_private' };
+  } catch (err) {
+    if (isMissingObjectError(err)) {
+      return { provider: 'do_spaces', status: 'not_found' };
+    }
+    throw err;
+  }
+}
+
 module.exports = {
   STORAGE_KEYS,
   StorageProviderError,
   compressImageAtPath,
   deleteRemoteFileByUrl,
   getStorageConfig,
+  makeStoredFilePrivate,
+  readStoredFile,
   uploadImageFromDisk,
 };

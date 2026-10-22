@@ -64,60 +64,83 @@
       <div class="col-span-12 md:col-span-3"><strong>Currency:</strong> {{ row.currency || '-' }}</div>
     </div>
 
-    <div class="mt-6 border-t pt-6" *ngIf="attachmentUrl() as fileUrl">
-      <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
-        <div>
-          <div class="font-semibold text-xs uppercase tracking-wider text-muted">Attachment Preview</div>
-          <div class="text-xs text-muted">{{ attachmentName() }}</div>
+    <div class="mt-6 border-t pt-6" *ngIf="hasAttachment()">
+      <ng-container *ngIf="attachmentUrl() as fileUrl; else attachmentPending">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+          <div>
+            <div class="font-semibold text-xs uppercase tracking-wider text-muted">Attachment Preview</div>
+            <div class="text-xs text-muted">{{ attachmentName() }}</div>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button
+              type="button"
+              class="ui-btn ui-btn-outline-primary ui-btn-sm"
+              *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed()"
+              (click)="openImagePreview(fileUrl)"
+            >
+              <i class="bi bi-arrows-fullscreen mr-1"></i>Preview
+            </button>
+            <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
+              <i class="bi bi-box-arrow-up-right mr-1"></i>Open
+            </a>
+            <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" [download]="attachmentName()">
+              <i class="bi bi-download mr-1"></i>Download
+            </a>
+          </div>
         </div>
-        <div class="flex gap-2 no-print">
-          <button
-            type="button"
-            class="ui-btn ui-btn-outline-primary ui-btn-sm"
-            *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed()"
-            (click)="openImagePreview(fileUrl)"
-          >
-            <i class="bi bi-arrows-fullscreen mr-1"></i>Preview
-          </button>
-          <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
-            <i class="bi bi-box-arrow-up-right mr-1"></i>Open
-          </a>
-          <a class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="fileUrl" [download]="attachmentName()">
-            <i class="bi bi-download mr-1"></i>Download
-          </a>
-        </div>
-      </div>
 
-      <button
-        type="button"
-        class="ui-btn p-0 border rounded-lg overflow-hidden block text-left bg-transparent w-full no-print"
-        *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed(); else attachmentOpenOnly"
-        (click)="openImagePreview(fileUrl)"
-      >
-        <img
-          [src]="fileUrl"
-          alt="Expense attachment preview"
-          class="w-full block bg-subtle"
-          style="max-height: 520px; object-fit: contain;"
-          (error)="onAttachmentImageError()"
-        />
-        <div class="px-4 py-2 text-xs bg-subtle">
-          <i class="bi bi-arrows-fullscreen mr-1"></i>Click image to view full size
-        </div>
-      </button>
+        <button
+          type="button"
+          class="ui-btn p-0 border rounded-lg overflow-hidden block text-left bg-transparent w-full no-print"
+          *ngIf="isImageAttachment(fileUrl) && !attachmentImageFailed(); else attachmentOpenOnly"
+          (click)="openImagePreview(fileUrl)"
+        >
+          <img
+            [src]="fileUrl"
+            alt="Expense attachment preview"
+            class="w-full block bg-subtle"
+            style="max-height: 520px; object-fit: contain;"
+            (error)="onAttachmentImageError()"
+          />
+          <div class="px-4 py-2 text-xs bg-subtle">
+            <i class="bi bi-arrows-fullscreen mr-1"></i>Click image to view full size
+          </div>
+        </button>
 
-      <ng-template #attachmentOpenOnly>
-        <div class="border rounded-lg p-6 bg-subtle no-print">
+        <ng-template #attachmentOpenOnly>
+          <div class="border rounded-lg p-6 bg-subtle no-print">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <i class="bi bi-paperclip text-2xl text-muted"></i>
+                <div>
+                  <div class="font-semibold">Attachment available</div>
+                  <div class="text-xs text-muted">Open the file in a new tab to preview it.</div>
+                </div>
+              </div>
+              <a class="ui-btn ui-btn-primary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-box-arrow-up-right mr-1"></i>Open Attachment
+              </a>
+            </div>
+          </div>
+        </ng-template>
+      </ng-container>
+
+      <ng-template #attachmentPending>
+        <div class="font-semibold text-xs uppercase tracking-wider text-muted mb-2">Attachment</div>
+        <div class="text-muted text-sm" *ngIf="attachmentState() === 'loading'">
+          <span class="ui-spinner-border ui-spinner-border-sm mr-2" aria-hidden="true"></span>Loading attachment...
+        </div>
+        <div class="border rounded-lg p-6 bg-subtle no-print" *ngIf="attachmentState() === 'failed'">
           <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-4">
-              <i class="bi bi-paperclip text-2xl text-muted"></i>
+              <i class="bi bi-exclamation-triangle text-2xl text-muted"></i>
               <div>
-                <div class="font-semibold">Attachment available</div>
-                <div class="text-xs text-muted">Open the file in a new tab to preview it.</div>
+                <div class="font-semibold">Attachment unavailable</div>
+                <div class="text-xs text-muted">The stored file could not be loaded.</div>
               </div>
             </div>
-            <a class="ui-btn ui-btn-primary ui-btn-sm" [href]="fileUrl" target="_blank" rel="noopener noreferrer">
-              <i class="bi bi-box-arrow-up-right mr-1"></i>Open Attachment
+            <a *ngIf="externalAttachmentUrl() as externalUrl" class="ui-btn ui-btn-outline-secondary ui-btn-sm" [href]="externalUrl" target="_blank" rel="noopener noreferrer">
+              <i class="bi bi-box-arrow-up-right mr-1"></i>Open original link
             </a>
           </div>
         </div>

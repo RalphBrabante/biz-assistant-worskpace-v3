@@ -1,3 +1,4 @@
+const { bindToBrowser, isSameBrowser } = require('../services/oauth-browser-binding');
 const crypto = require('crypto');
 const { getModels } = require('../sequelize');
 const {
@@ -481,6 +482,7 @@ async function getGoogleDriveAuthUrl(req, res) {
       + '&include_granted_scopes=true'
       + `&state=${encodeURIComponent(Buffer.from(JSON.stringify(statePayload)).toString('base64url'))}`;
 
+    bindToBrowser(req, res, DRIVE_STATE_COOKIE, statePayload.nonce, config.googleDrive.redirectUri);
     return res.status(200).json({
       code: 'SUCCESS',
       message: 'Google Drive auth URL generated.',
@@ -495,6 +497,8 @@ async function getGoogleDriveAuthUrl(req, res) {
     });
   }
 }
+
+const DRIVE_STATE_COOKIE = 'gdrive_oauth_nonce';
 
 async function handleGoogleDriveCallback(req, res) {
   const failRedirect = (reason, returnPath = '/settings') =>
@@ -529,6 +533,10 @@ async function handleGoogleDriveCallback(req, res) {
 
     const returnPath = getSettingsReturnPath(decodedState?.returnPath || savedState?.returnPath || '/settings');
     if (!savedState || !decodedState || savedState.nonce !== decodedState.nonce) {
+      return failRedirect('invalid_state', returnPath);
+    }
+    const driveConfig = await getStorageConfig();
+    if (!isSameBrowser(req, res, DRIVE_STATE_COOKIE, savedState.nonce, driveConfig.googleDrive.redirectUri)) {
       return failRedirect('invalid_state', returnPath);
     }
 

@@ -173,6 +173,15 @@ async function authenticateRequest(req, res, next) {
         });
       }
 
+      // Deactivating an organization must cut off its sessions immediately, not at token expiry
+      const organization = await models.Organization.findByPk(organizationId, { attributes: ['id', 'isActive'] });
+      if (!organization || organization.isActive === false) {
+        return res.status(403).json({
+          code: 'ORGANIZATION_INACTIVE',
+          message: 'This organization has been deactivated.',
+        });
+      }
+
       const now = new Date();
       const activeLicense = await models.License.findOne({
         where: {

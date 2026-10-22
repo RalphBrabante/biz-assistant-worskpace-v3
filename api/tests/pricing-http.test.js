@@ -17,6 +17,7 @@ sequelize.getModels = () => ({
   OrganizationUser: { async findOne(query) { const user = users[query.where.userId]; return user ? { organizationId: 'org', isActive: true, role: user.roles[0].code } : null; } },
   Role: { async findOne(query) { return Object.values(users).flatMap(user => user.roles).find(role => role.code === query.where.code); } },
   Permission: {}, License: { async findOne() { return {}; } },
+  Organization: { async findByPk(id) { return { id, isActive: true }; } },
 });
 const { NestFactory } = require('@nestjs/core');
 const { Module } = require('@nestjs/common');

@@ -42,8 +42,6 @@ function pickItemPayload(body = {}) {
     reorderLevel: body.reorderLevel,
     taxRate: body.taxRate,
     isActive: body.isActive,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
   };
 }
 
@@ -75,7 +73,11 @@ function csvValue(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Spreadsheet apps execute cells starting with these as formulas; numbers (incl. negatives) are left as-is
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -535,10 +537,16 @@ async function updateItem(req, res) {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'vendorId') && !req.body.vendorId) {
       payload.vendorId = null;
     }
+    // Strip a body-supplied organization before any check uses it, so a vendor (and its TIN)
+    // from another organization can never be validated against and attached to this item.
+    if (!isPrivilegedRequest(req)) {
+      delete payload.organizationId;
+    }
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
     const effectiveOrganizationId = payload.organizationId || item.organizationId;
+    payload.updatedBy = req.auth?.user?.id || req.auth?.userId || null;
 
     if (Object.prototype.hasOwnProperty.call(payload, 'vendorId') && payload.vendorId) {
       const vendor = await Vendor.findOne({
@@ -553,10 +561,6 @@ async function updateItem(req, res) {
     }
 
     payload.currency = await getOrganizationCurrency(effectiveOrganizationId);
-
-    if (!isPrivilegedRequest(req)) {
-      delete payload.organizationId;
-    }
 
     await Item.sequelize.transaction(async transaction => {
       await item.reload({ transaction, lock: transaction.LOCK.UPDATE });

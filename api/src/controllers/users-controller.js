@@ -89,6 +89,67 @@ function isRequesterSuperuser(req) {
   return roleCodes.some((code) => String(code || '').toLowerCase() === 'superuser');
 }
 
+function isRequesterAdministrator(req) {
+  const roleCodes = req.auth?.roleCodes || [];
+  return roleCodes.some((code) => String(code || '').toLowerCase() === 'administrator');
+}
+
+// Non-superusers may only grant organization preset roles, and never a role above their own.
+function roleGrantDenial(req, role) {
+  if (isRequesterSuperuser(req)) {
+    return null;
+  }
+  const code = String(role?.code || '').toLowerCase();
+  if (code === 'superuser') {
+    return 'Only superusers can assign the SUPERUSER role.';
+  }
+  if (!ORGANIZATION_PRESET_ROLES.includes(code)) {
+    return 'Only superusers can assign custom global roles.';
+  }
+  if (code === 'administrator' && !isRequesterAdministrator(req)) {
+    return 'Only administrators can assign the ADMINISTRATOR role.';
+  }
+  return null;
+}
+
+// Credential and identity changes on another account are limited to users the requester fully controls.
+async function credentialEditDenial(req, models, user) {
+  // Your own credentials change only through Profile, which re-checks the current password,
+  // so a stolen session cannot rewrite them here
+  if (user.id === req.auth?.userId) {
+    return 'Use Profile settings to change your own email, password or role.';
+  }
+  if (isRequesterSuperuser(req)) {
+    return null;
+  }
+  const assignments = models.UserRole && models.Role
+    ? await models.UserRole.findAll({
+      where: { userId: user.id, isActive: true },
+      include: [{ model: models.Role, as: 'role', required: true, attributes: ['code'] }],
+    })
+    : [];
+  const targetCodes = assignments.map((assignment) => String(assignment.role?.code || '').toLowerCase());
+  if (targetCodes.includes('superuser')) {
+    return 'Only superusers can change a superuser account.';
+  }
+  const otherMemberships = models.OrganizationUser
+    ? await models.OrganizationUser.count({
+      where: { userId: user.id, isActive: true, organizationId: { [Op.ne]: getAuthenticatedOrganizationId(req) } },
+    })
+    : 0;
+  if (otherMemberships > 0) {
+    return 'This user also belongs to another organization. Ask them to use Forgot password instead.';
+  }
+  const membership = models.OrganizationUser
+    ? await models.OrganizationUser.findOne({ where: { userId: user.id, organizationId: getAuthenticatedOrganizationId(req) } })
+    : null;
+  const targetIsAdministrator = targetCodes.includes('administrator') || String(membership?.role || '').toLowerCase() === 'administrator';
+  if (targetIsAdministrator && !isRequesterAdministrator(req)) {
+    return 'Only administrators can change an administrator account.';
+  }
+  return null;
+}
+
 function parseRoleIds(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -352,14 +413,9 @@ async function createUser(req, res) {
       }
     }
 
-    const hasSuperuserRole = resolvedRoles.some(
-      (role) => String(role.code || '').toLowerCase() === 'superuser'
-    );
-    if (hasSuperuserRole && !requesterIsSuper) {
-      return res.status(403).json({
-        ok: false,
-        message: 'Only superusers can assign the SUPERUSER role.',
-      });
+    const roleDenial = resolvedRoles.map((role) => roleGrantDenial(req, role)).find(Boolean);
+    if (roleDenial) {
+      return res.status(403).json({ ok: false, message: roleDenial });
     }
     if (resolvedRoles.length === 0) {
       return res.status(400).json({
@@ -821,7 +877,37 @@ async function updateUser(req, res) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
 
+    const changesPassword = Boolean(payload.password);
+    const changesEmail = Boolean(payload.email) && payload.email !== String(user.email || '').toLowerCase();
+    const nextRole = payload.role === undefined ? undefined : String(payload.role || '').toLowerCase().trim();
+    const changesRole = nextRole !== undefined && nextRole !== String(user.role || '').toLowerCase();
+    if (changesPassword || changesEmail || changesRole) {
+      const denial = await credentialEditDenial(req, models, user);
+      if (denial) {
+        return res.status(403).json({ ok: false, message: denial });
+      }
+    }
+    if (changesRole && nextRole !== 'member') {
+      const roleDenial = roleGrantDenial(req, { code: nextRole });
+      if (roleDenial) {
+        return res.status(403).json({ ok: false, message: roleDenial });
+      }
+    }
+
     await user.update(payload);
+
+    // A credential change by someone else ends the account's existing sessions and lifts any lockout
+    if (changesPassword || changesEmail) {
+      if (models.Token) {
+        await models.Token.update(
+          { isActive: false, revokedAt: new Date(), revokedReason: 'credentials_changed_by_admin' },
+          { where: { userId: user.id, type: ['access', 'refresh', 'reset_password'], isActive: true, revokedAt: null } }
+        );
+      }
+      if (changesPassword && models.InvalidLoginAttempt) {
+        await models.InvalidLoginAttempt.destroy({ where: { userId: user.id } });
+      }
+    }
 
     // Keep multi-organization primary membership in sync when default organization changes.
     if (payload.organizationId && models.OrganizationUser) {
@@ -919,7 +1005,9 @@ async function listUserAssignableRoles(req, res) {
 
     const whereRole = { isActive: true };
     if (!isRequesterSuperuser(req)) {
-      whereRole.code = { [Op.ne]: 'superuser' };
+      whereRole.code = ORGANIZATION_PRESET_ROLES.filter(
+        (code) => code !== 'administrator' || isRequesterAdministrator(req)
+      );
     }
 
     const roles = await Role.findAll({
@@ -968,11 +1056,9 @@ async function addRoleToUser(req, res) {
     if (!role) {
       return res.status(404).json({ ok: false, message: 'Role not found or inactive.' });
     }
-    if (String(role.code || '').toLowerCase() === 'superuser' && !isRequesterSuperuser(req)) {
-      return res.status(403).json({
-        ok: false,
-        message: 'Only superusers can assign the SUPERUSER role.',
-      });
+    const roleDenial = roleGrantDenial(req, role);
+    if (roleDenial) {
+      return res.status(403).json({ ok: false, message: roleDenial });
     }
 
     const [membership] = await UserRole.findOrCreate({
@@ -999,7 +1085,7 @@ async function removeRoleFromUser(req, res) {
     if (!models) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
-    const { User, UserRole } = models;
+    const { User, Role, UserRole } = models;
 
     const where = { id: req.params.id };
     if (!isPrivilegedRequest(req)) {
@@ -1027,6 +1113,11 @@ async function removeRoleFromUser(req, res) {
 
     if (!membership) {
       return res.status(404).json({ ok: false, message: 'User role assignment not found.' });
+    }
+
+    const roleDenial = roleGrantDenial(req, await Role.findByPk(roleId));
+    if (roleDenial) {
+      return res.status(403).json({ ok: false, message: roleDenial.replace('assign', 'remove') });
     }
 
     await membership.destroy();

@@ -9,7 +9,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-appuser}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/conf.d/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -24,7 +24,7 @@ services:
     container_name: biz-assitant-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -41,8 +41,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -54,6 +54,7 @@ services:
   biz-assitant-api:
     build:
       context: ./api
+      target: development
     container_name: biz-assitant-api
     restart: unless-stopped
     environment:
@@ -90,7 +91,7 @@ services:
       SMTP2GO_API_KEY: ${SMTP2GO_API_KEY:-}
       SMTP2GO_API_URL: ${SMTP2GO_API_URL:-https://api.smtp2go.com/v3/email/send}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       biz-assitant-mysql:
         condition: service_healthy

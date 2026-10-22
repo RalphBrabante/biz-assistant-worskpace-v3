@@ -1,7 +1,14 @@
 const { DataTypes, Model } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
-class User extends Model {}
+class User extends Model {
+  // The password hash must never be serialized into an API response, socket payload or log
+  toJSON() {
+    const values = structuredClone(this.get({ plain: true }));
+    delete values.password;
+    return values;
+  }
+}
 
 function initUserModel(sequelize) {
   User.init(

@@ -65,9 +65,10 @@ const {
 const app = express();
 const port = process.env.PORT || 3000;
 const httpServer = http.createServer(app);
+app.set('trust proxy', require('./services/trust-proxy').trustProxySetting());
 
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
-app.use('/uploads', express.static(require('./services/upload-paths').getUploadDirectory()));
+app.use('/uploads', require('./middleware/uploads-static').createUploadsStatic());
 app.use(errorResponseShapeMiddleware);
 app.use(requestLogger);
 
@@ -297,10 +298,10 @@ async function connectAmqp() {
 }
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1', authenticateRequest);
 if (process.env.NODE_ENV !== 'production' && process.env.APP_ENV !== 'staging') {
   app.use('/api/v1/dev', devRoutes);
 }
-app.use('/api/v1', authenticateRequest);
 app.use('/api/v1', invalidateCacheOnWriteMiddleware);
 app.use('/api/v1/items', itemsRoutes);
 app.use('/api/v1/organizations', organizationsRoutes);

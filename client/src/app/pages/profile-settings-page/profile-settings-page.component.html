@@ -103,6 +103,19 @@
         />
       </div>
 
+      <div class="md:col-span-6" *ngIf="needsCurrentPassword">
+        <label class="ui-form-label font-semibold">Current Password</label>
+        <input
+          class="ui-form-control"
+          type="password"
+          [(ngModel)]="form['currentPassword']"
+          name="currentPassword"
+          autocomplete="current-password"
+          required
+        />
+        <div class="text-xs text-muted mt-1">Required to change your email or password.</div>
+      </div>
+
       <div class="col-span-12 flex justify-end">
         <button class="ui-btn ui-btn-primary" type="submit" [disabled]="submitting() || !f.form.valid">
           <i class="bi bi-save mr-1"></i>{{ submitting() ? 'Saving...' : 'Save Changes' }}

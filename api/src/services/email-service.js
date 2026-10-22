@@ -7,6 +7,20 @@ const {
   buildLicenseRevokedTemplate,
 } = require('../templates/emails/license-revoked-template');
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Subjects are a header, not HTML: strip line breaks so user-supplied values cannot inject headers
+function headerSafe(value) {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
 async function sendViaSmtp2go({ toEmail, subject, html, text }) {
   const apiKey = String(process.env.SMTP2GO_API_KEY || '').trim();
   if (!apiKey) {
@@ -172,19 +186,19 @@ async function sendQuarterlyExpenseReportReadyEmail({
   const safeOrganization = organizationName || 'your organization';
   const safeQuarter = String(quarter || '').trim() || 'Q?';
   const safeYear = String(year || '').trim() || '';
-  const subject = `${brandName} ${safeQuarter} ${safeYear} Expense Report Ready`;
+  const subject = headerSafe(`${brandName} ${safeQuarter} ${safeYear} Expense Report Ready`);
 
   const html = `
-<p>Hi ${safeRecipient},</p>
+<p>Hi ${escapeHtml(safeRecipient)},</p>
 <p>
-  The quarterly expense report for <strong>${safeOrganization}</strong>
-  (${safeQuarter} ${safeYear}) has been generated.
+  The quarterly expense report for <strong>${escapeHtml(safeOrganization)}</strong>
+  (${escapeHtml(safeQuarter)} ${escapeHtml(safeYear)}) has been generated.
 </p>
 <p>
-  <a href="${reportUrl}" style="color:#2563eb;">Open report preview</a>
+  <a href="${escapeHtml(reportUrl)}" style="color:#2563eb;">Open report preview</a>
 </p>
 <p>If the link does not work, copy and open this URL:</p>
-<p>${reportUrl}</p>
+<p>${escapeHtml(reportUrl)}</p>
 `.trim();
 
   const text = [
@@ -215,19 +229,19 @@ async function sendOrderCreatedEmail({
   const safeOrganization = organizationName || 'your organization';
   const safeOrderNumber = String(orderNumber || '').trim() || 'N/A';
   const safeOrderUrl = String(orderUrl || '').trim();
-  const subject = `${brandName} Order Created: ${safeOrderNumber}`;
+  const subject = headerSafe(`${brandName} Order Created: ${safeOrderNumber}`);
 
   const html = `
-<p>Hi ${safeRecipient},</p>
+<p>Hi ${escapeHtml(safeRecipient)},</p>
 <p>
-  A new order <strong>${safeOrderNumber}</strong> was created for
-  <strong>${safeOrganization}</strong>.
+  A new order <strong>${escapeHtml(safeOrderNumber)}</strong> was created for
+  <strong>${escapeHtml(safeOrganization)}</strong>.
 </p>
 <p>
-  <a href="${safeOrderUrl}" style="color:#2563eb;">Open order details</a>
+  <a href="${escapeHtml(safeOrderUrl)}" style="color:#2563eb;">Open order details</a>
 </p>
 <p>If the link does not work, copy and open this URL:</p>
-<p>${safeOrderUrl}</p>
+<p>${escapeHtml(safeOrderUrl)}</p>
 `.trim();
 
   const text = [
@@ -285,21 +299,21 @@ async function sendUserCreatedAdminNotificationEmail({
   const safeCreatedUserEmail = String(createdUserEmail || '').trim() || '-';
   const safeUserUrl = String(userUrl || '').trim();
   const roleText = Array.isArray(roleLabels) && roleLabels.length > 0 ? roleLabels.join(', ') : 'N/A';
-  const subject = `${brandName} User Created: ${safeCreatedUserName}`;
+  const subject = headerSafe(`${brandName} User Created: ${safeCreatedUserName}`);
 
   const html = `
-<p>Hi ${safeRecipient},</p>
+<p>Hi ${escapeHtml(safeRecipient)},</p>
 <p>
-  A new user was created under <strong>${safeOrganization}</strong>.
+  A new user was created under <strong>${escapeHtml(safeOrganization)}</strong>.
 </p>
-<p><strong>Name:</strong> ${safeCreatedUserName}</p>
-<p><strong>Email:</strong> ${safeCreatedUserEmail}</p>
-<p><strong>Assigned roles:</strong> ${roleText}</p>
+<p><strong>Name:</strong> ${escapeHtml(safeCreatedUserName)}</p>
+<p><strong>Email:</strong> ${escapeHtml(safeCreatedUserEmail)}</p>
+<p><strong>Assigned roles:</strong> ${escapeHtml(roleText)}</p>
 <p>
-  <a href="${safeUserUrl}" style="color:#2563eb;">Open user details</a>
+  <a href="${escapeHtml(safeUserUrl)}" style="color:#2563eb;">Open user details</a>
 </p>
 <p>If the link does not work, copy and open this URL:</p>
-<p>${safeUserUrl}</p>
+<p>${escapeHtml(safeUserUrl)}</p>
 `.trim();
 
   const text = [

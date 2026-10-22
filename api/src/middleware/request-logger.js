@@ -1,11 +1,16 @@
 const crypto = require('crypto');
 
+// req.ip honours the app's trust-proxy setting; a raw X-Forwarded-For header is client-controlled
 function resolveIp(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').trim();
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
   return req.ip || req.socket?.remoteAddress || '-';
+}
+
+// OAuth callbacks and token links carry one-time secrets in the query string
+const SENSITIVE_QUERY_PATHS = /\/(callback|reset-password|verify-email)(\/|\?|$)/i;
+
+function loggablePath(req) {
+  const url = String(req.originalUrl || '');
+  return SENSITIVE_QUERY_PATHS.test(url) ? url.split('?')[0] : url;
 }
 
 function requestLogger(req, res, next) {
@@ -23,7 +28,7 @@ function requestLogger(req, res, next) {
     const userId = req.auth?.userId || '-';
 
     console.log(
-      `[REQUEST] id=${requestId} ip=${ip} user=${userId} method=${req.method} path=${String(req.originalUrl || '').includes('/tickets/gmail/callback') ? String(req.originalUrl).split('?')[0] : req.originalUrl} status=${res.statusCode} durationMs=${elapsedMs.toFixed(
+      `[REQUEST] id=${requestId} ip=${ip} user=${userId} method=${req.method} path=${loggablePath(req)} status=${res.statusCode} durationMs=${elapsedMs.toFixed(
         2
       )} bytes=${contentLength}`
     );

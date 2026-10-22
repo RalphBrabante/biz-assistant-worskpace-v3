@@ -1,3 +1,8 @@
 node_modules
 npm-debug.log
 .git
+# Never bake runtime data, build output or secrets into the image
+dist
+uploads
+.env
+.env.*

@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { getModels } = require('../sequelize');
@@ -155,21 +156,24 @@ async function updateMyProfile(req, res) {
         ].filter(Boolean)
       )
     );
-    // If the request includes a password change, verify the current password first
+    // Changing a sign-in credential (password or email) needs the current password, so a stolen
+    // session cannot be turned into a permanent takeover via forgot-password on a new address
     const newPassword = String(req.body?.password || '').trim();
-    if (newPassword) {
+    const requestedEmail = String(req.body?.email || '').trim().toLowerCase();
+    const changesEmail = Boolean(requestedEmail) && requestedEmail !== String(user.email || '').trim().toLowerCase();
+    if (newPassword || changesEmail) {
       const currentPassword = String(req.body?.currentPassword || '').trim();
       if (!currentPassword) {
         return res.status(400).json({
           code: 'VALIDATION_ERROR',
-          message: 'Current password is required to set a new password.',
+          message: 'Current password is required to change your email or password.',
         });
       }
       let passwordMatches = false;
       try {
-        passwordMatches = await bcrypt.compare(currentPassword, user.password);
+        passwordMatches = await bcrypt.compare(currentPassword, String(user.password || ''));
       } catch (_err) {
-        passwordMatches = currentPassword === user.password;
+        passwordMatches = false;
       }
       if (!passwordMatches) {
         return res.status(400).json({
@@ -188,6 +192,21 @@ async function updateMyProfile(req, res) {
     }
 
     await user.update(payload);
+    if (payload.password && models.Token) {
+      // Keep this session; end every other session that may have been opened with the old password
+      await models.Token.update(
+        { isActive: false, revokedAt: new Date(), revokedReason: 'password_changed' },
+        {
+          where: {
+            userId: user.id,
+            type: ['access', 'refresh'],
+            isActive: true,
+            revokedAt: null,
+            ...(req.auth?.tokenId ? { id: { [Op.ne]: req.auth.tokenId } } : {}),
+          },
+        }
+      );
+    }
     if (
       payload.profileImageUrl
     ) {

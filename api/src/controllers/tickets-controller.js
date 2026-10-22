@@ -1,3 +1,4 @@
+const {bindToBrowser, isSameBrowser} = require('../services/oauth-browser-binding');
 const crypto = require('crypto');
 const {Op, literal} = require('sequelize');
 const {getModels} = require('../sequelize');
@@ -252,6 +253,7 @@ const attachment = endpoint(async (req, res) => {
   res.type(conversation.contentType(file.contentType));
   return res.send(content);
 });
+const GMAIL_STATE_COOKIE = 'gmail_oauth_state';
 const connect = endpoint(async (req, res) => {
   if (!gmail.configured()) throw fail(400, 'Ask your server administrator to configure Gmail OAuth and the token encryption key.');
   const models = getModels(), {organizationId} = scope(req);
@@ -259,11 +261,15 @@ const connect = endpoint(async (req, res) => {
   const state = crypto.randomBytes(32).toString('hex');
   await models.GmailOAuthState.create({id: crypto.createHash('sha256').update(state).digest('hex'), organizationId, userId: req.auth.userId, expiresAt: new Date(Date.now() + 10 * 60000)});
   const params = new URLSearchParams({client_id: process.env.GMAIL_CLIENT_ID, redirect_uri: gmail.redirectUri(), response_type: 'code', scope: gmail.SCOPES.join(' '), access_type: 'offline', prompt: 'consent', state});
+  bindToBrowser(req, res, GMAIL_STATE_COOKIE, state, gmail.redirectUri());
   return res.json({data: {url: `https://accounts.google.com/o/oauth2/v2/auth?${params}`}});
 });
 const callback = endpoint(async (req, res) => {
   const models = getModels();
   if (typeof req.query.state !== 'string' || !/^[a-f\d]{64}$/.test(req.query.state)) throw fail(400, 'Invalid Gmail connection request.');
+  if (!isSameBrowser(req, res, GMAIL_STATE_COOKIE, req.query.state, gmail.redirectUri())) {
+    throw fail(400, 'This Gmail connection was started from a different browser. Start again from Tickets.');
+  }
   const id = crypto.createHash('sha256').update(req.query.state).digest('hex');
   const state = await models.GmailOAuthState.findByPk(id);
   if (!state || new Date(state.expiresAt) < new Date()) throw fail(400, 'Gmail connection expired. Start again from Tickets.');

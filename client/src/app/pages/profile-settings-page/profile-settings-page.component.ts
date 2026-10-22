@@ -52,9 +52,17 @@ export class ProfileSettingsPageComponent {
     country: getBrowserCountry(),
     password: '',
     confirmPassword: '',
+    currentPassword: '',
   };
 
   selectedFile: File | null = null;
+  private loadedEmail = '';
+
+  // The server asks for the current password before changing either sign-in credential
+  get needsCurrentPassword(): boolean {
+    const emailChanged = String(this.form['email'] || '').trim().toLowerCase() !== this.loadedEmail;
+    return Boolean(String(this.form['password'] || '').trim()) || emailChanged;
+  }
   previewUrl = '';
 
   get initials(): string {
@@ -80,6 +88,7 @@ export class ProfileSettingsPageComponent {
       next: (response) => {
         this.loading.set(false);
         const profile: ProfileResponse = response.data || {};
+        this.loadedEmail = String(profile.email || '').trim().toLowerCase();
         this.form = {
           firstName: String(profile.firstName || ''),
           lastName: String(profile.lastName || ''),
@@ -93,6 +102,7 @@ export class ProfileSettingsPageComponent {
           country: String(profile.country || getBrowserCountry()),
           password: '',
           confirmPassword: '',
+          currentPassword: '',
         };
         this.previewUrl = String(profile.profileImageCdnUrl || profile.profileImageUrl || '').trim();
 
@@ -146,6 +156,11 @@ export class ProfileSettingsPageComponent {
       this.error.set('Password and confirm password do not match.');
       return;
     }
+    const currentPassword = String(this.form['currentPassword'] || '');
+    if (this.needsCurrentPassword && !currentPassword) {
+      this.error.set('Enter your current password to change your email or password.');
+      return;
+    }
 
     const confirmed = await this.confirmDialog.confirm({
       title: 'Update Profile',
@@ -174,6 +189,9 @@ export class ProfileSettingsPageComponent {
     if (password) {
       payload.set('password', password);
     }
+    if (this.needsCurrentPassword) {
+      payload.set('currentPassword', currentPassword);
+    }
     if (this.selectedFile) {
       payload.set('profileImage', this.selectedFile);
     }
@@ -187,6 +205,8 @@ export class ProfileSettingsPageComponent {
         this.message.set(response.message || 'Profile updated successfully.');
         this.form['password'] = '';
         this.form['confirmPassword'] = '';
+        this.form['currentPassword'] = '';
+        this.loadedEmail = String(updated.email || this.form['email'] || '').trim().toLowerCase();
         this.selectedFile = null;
         this.previewUrl = String(updated.profileImageCdnUrl || updated.profileImageUrl || this.previewUrl || '');
 

@@ -1,4 +1,6 @@
 const { isAccountant } = require('../../../services/accountant-access');
+const { createUploadsStatic } = require('../../../middleware/uploads-static');
+const { trustProxySetting } = require('../../../services/trust-proxy');
 const { effectiveRoleAccess, resolveTokenOrganizationId } = require('../../../services/role-access');
 const {startQuarterlyTaxReminderJob, stopQuarterlyTaxReminderJob} = require('../../../jobs/quarterly-tax-reminder-job');
 const {startDebtReminderJob, stopDebtReminderJob} = require('../../../jobs/debt-reminder-job');
@@ -21,7 +23,6 @@ const { registerChatPresence } = require('../../../services/chat-presence');
 const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('../../../jobs/order-upload-cleanup-job');
 const { startLicenseExpiryJob, stopLicenseExpiryJob } = require('../../../jobs/license-expiry-job');
 
-const { getUploadDirectory } = require('../../../services/upload-paths');
 const { installFrontend } = require('../../../middleware/frontend');
 const { serviceEnabled, servicesHealthy } = require('../../../services/runtime-services');
 
@@ -34,6 +35,7 @@ export class LegacyApiService {
   private redisClient: Redis | null = null;
   private amqpConn: any = null;
   private io: Server | null = null;
+  private socketSessionSweep: NodeJS.Timeout | null = null;
   private readonly status: { mysql: boolean; redis: boolean | 'disabled'; amqp: boolean | 'disabled' } = {
     mysql: false,
     redis: false,
@@ -43,8 +45,9 @@ export class LegacyApiService {
   setup(app: INestApplication): void {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.locals.serviceStatus = this.status;
+    expressApp.set('trust proxy', trustProxySetting());
     expressApp.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
-    expressApp.use('/uploads', express.static(getUploadDirectory()));
+    expressApp.use('/uploads', createUploadsStatic());
     expressApp.use(requestLogger);
     expressApp.get('/healthz', async (_req: any, res: any) => {
       try {
@@ -80,6 +83,10 @@ export class LegacyApiService {
     stopLicenseExpiryJob();
     stopOrderUploadCleanupJob();
     await stopGmailTicketJob();
+    if (this.socketSessionSweep) {
+      clearInterval(this.socketSessionSweep);
+      this.socketSessionSweep = null;
+    }
     if (this.io) {
       await this.io.close();
       this.io = null;
@@ -218,6 +225,11 @@ export class LegacyApiService {
             return next(new Error('Organization has no active license.'));
           }
 
+          const organization = await models.Organization.findByPk(effectiveOrganizationId, { attributes: ['id', 'isActive'] });
+          if (!organization || organization.isActive === false) {
+            return next(new Error('This organization has been deactivated.'));
+          }
+
           const now = new Date();
           const activeLicense = await models.License.findOne({
             where: {
@@ -241,6 +253,7 @@ export class LegacyApiService {
             : effectiveOrganizationId || null;
 
         socket.data.auth = {
+          tokenId: tokenRecord.id,
           userId: user.id,
           roleCodes,
           organizationId: socketOrganizationId,
@@ -266,7 +279,31 @@ export class LegacyApiService {
       }
     });
 
+    // Sockets are authenticated once at handshake; re-check their sessions so logout, revocation,
+    // deactivation or expiry also ends real-time access instead of lasting until the client disconnects.
+    this.socketSessionSweep = setInterval(() => {
+      this.disconnectStaleSockets().catch((err) => console.error('Socket session sweep failed:', err));
+    }, Number(process.env.SOCKET_SESSION_SWEEP_MS || 60 * 1000));
+    this.socketSessionSweep.unref();
+
     setSocketServer(this.io);
+  }
+
+  private async disconnectStaleSockets(): Promise<void> {
+    const models = getModels();
+    if (!this.io || !models?.Token) return;
+    const sockets = await this.io.fetchSockets();
+    const tokenIds = Array.from(new Set(sockets.map((socket) => socket.data?.auth?.tokenId).filter(Boolean)));
+    if (tokenIds.length === 0) return;
+    const liveTokens = await models.Token.findAll({
+      where: { id: tokenIds, type: 'access', isActive: true, revokedAt: null, expiresAt: { [Op.gt]: new Date() } },
+      attributes: ['id'],
+      include: [{ model: models.User, as: 'user', required: true, attributes: ['id'], where: { isActive: true, status: 'active' } }],
+    });
+    const live = new Set(liveTokens.map((token: any) => token.id));
+    for (const socket of sockets) {
+      if (!live.has(socket.data?.auth?.tokenId)) socket.disconnect(true);
+    }
   }
 
   private async connectMysql(): Promise<void> {

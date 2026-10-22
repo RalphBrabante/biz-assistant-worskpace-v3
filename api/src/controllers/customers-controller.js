@@ -45,8 +45,6 @@ function pickCustomerPayload(body = {}) {
     paymentTermsDays: body.paymentTermsDays,
     status: body.status,
     notes: body.notes,
-    createdBy: body.createdBy,
-    updatedBy: body.updatedBy,
     isActive: body.isActive,
   };
 }
@@ -71,7 +69,11 @@ function csvValue(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Spreadsheet apps execute cells starting with these as formulas; numbers (incl. negatives) are left as-is
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -491,6 +493,7 @@ async function updateCustomer(req, res) {
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ ok: false, message: 'No valid fields provided for update.' });
     }
+    payload.updatedBy = req.auth?.user?.id || req.auth?.userId || null;
 
     if (!isPrivilegedRequest(req)) {
       delete payload.organizationId;
