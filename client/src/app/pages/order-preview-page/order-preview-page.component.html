@@ -150,8 +150,8 @@
         <div class="flex items-start justify-between gap-4 flex-wrap">
           <div class="flex items-start gap-4">
             <span
-              class="rounded-full inline-flex items-center justify-center border"
-              style="width: 2.25rem; height: 2.25rem;"
+              class="rounded-full inline-flex items-center justify-center border h-9 w-9"
+             
             >
               <i class="bi" [ngClass]="activityIcon(activity.actionType)"></i>
             </span>
@@ -335,9 +335,9 @@
               <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="decrease(row.item.id)" [disabled]="isOrderedItemsLocked">-</button>
               <input
                 type="number"
-                class="ui-form-control ui-form-control-sm text-center"
+                class="ui-form-control ui-form-control-sm text-center max-w-[90px]"
                 [class.is-invalid]="!isOrderedItemsLocked && exceedsStock(row)"
-                style="max-width: 90px"
+               
                 min="1"
                 step="1"
                 [max]="row.item.type === 'product' ? maxStock(row.item) : null"
@@ -375,9 +375,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show no-print" *ngIf="showCompleteModal"></div>
+<div class="ui-modal-backdrop no-print" *ngIf="showCompleteModal"></div>
 <div
-  appModal class="ui-modal fade show no-print"
+  appModal class="ui-modal no-print"
   tabindex="-1"
   [style.display]="showCompleteModal ? 'block' : 'none'"
   [attr.aria-hidden]="!showCompleteModal"
@@ -511,7 +511,7 @@
     </div>
 
     <div class="flex justify-end">
-      <div style="min-width: 300px">
+      <div class="min-w-[300px]">
         <div class="flex justify-between text-xs mb-1"><span>Subtotal</span><strong>{{ formatMoney(printSubtotal, orderCurrency) }}</strong></div>
         <div class="flex justify-between text-xs mb-1"><span>VAT Rate</span><strong>{{ organizationVatRate | number: '1.2-2' }}%</strong></div>
         <div class="flex justify-between text-xs mb-1"><span>Taxable Amount</span><strong>{{ formatMoney(printTaxable, orderCurrency) }}</strong></div>
@@ -529,7 +529,7 @@
   </div>
 </section>
 
-<div class="fixed bottom-0 right-0 p-4 md:p-6 no-print" style="z-index: 1045;" *ngIf="!isFinalized">
+<div class="fixed bottom-0 right-0 p-4 md:p-6 no-print z-[1045]" *ngIf="!isFinalized">
   <button
     class="ui-btn ui-btn-primary ui-btn-lg rounded-full shadow-panel inline-flex items-center gap-2"
     type="button"

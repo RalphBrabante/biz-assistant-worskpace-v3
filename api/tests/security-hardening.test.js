@@ -1,4 +1,5 @@
 const { test } = require('node:test');
+const { addOrganizationRoleFakes } = require('./helpers/organization-role-fakes');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -42,7 +43,10 @@ function roleFixture(role) {
     User: { findOne: async () => ({ id: 'target', organizationId: 'org' }) },
     Role: { findOne: async () => role, findByPk: async () => role },
     UserRole: { findOrCreate: async ({ where }) => { grants.push(where); return [where]; } },
+    OrganizationUser: { findOne: async ({ where }) => ({ userId: where.userId, isActive: true, role: 'member', update: async () => {} }) },
   };
+  // Everything except superuser is granted through the organization's own copy of the role.
+  addOrganizationRoleFakes(models, { onAssign: (payload) => grants.push(payload) });
   return grants;
 }
 
@@ -82,6 +86,8 @@ test('role grants are capped at the requester’s own level', async () => {
     [['administrator'], 'superuser', false],
     [['administrator'], 'custom-global-role', false],
     [['superuser'], 'superuser', true],
+    // Changing roles is an administrator action, so nobody can promote themselves with users.update.
+    [['enduser'], 'enduser', false],
   ]) {
     const grants = roleFixture({ id: 'role', code, isActive: true });
     const res = response();

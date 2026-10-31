@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
+const { addOrganizationRoleFakes } = require('./helpers/organization-role-fakes');
 
 function setup({ existing = false, failAt, emailFailure = false } = {}) {
   const filename = require.resolve('../src/controllers/users-controller');
@@ -33,11 +34,14 @@ function setup({ existing = false, failAt, emailFailure = false } = {}) {
     },
     OrganizationUser: {
       findOrCreate: async options => { check(options, 'membership'); writes.push({ step: 'membership', payload: options.defaults }); return [{}, true]; },
+      findOne: async ({ where }) => ({ userId: where.userId, isActive: true, role: 'enduser', update: async () => {} }),
       update: async (_payload, options) => check(options, 'primary-membership'),
     },
-    UserRole: { bulkCreate: async (payload, options) => { check(options, 'roles'); assert.equal(options.ignoreDuplicates, undefined); writes.push({ step: 'roles', payload }); } },
+    UserRole: { bulkCreate: () => assert.fail('Organization roles must not create global assignments') },
     Token: { update: async () => {}, create: async () => {} },
   };
+  // The role assignment is the last write in the same transaction as the account.
+  addOrganizationRoleFakes(models, { onAssign: (payload, options) => { check(options, 'roles'); writes.push({ step: 'roles', payload: [payload] }); } });
   const mocks = {
     '../sequelize': { getModels: () => models },
     '../services/email-service': { sendOrganizationUserInviteEmail: async payload => {
@@ -100,4 +104,22 @@ test('database field lengths and text types are validated before any write', asy
 test('an invitation delivery failure reports a created account and keeps the committed access', async () => {
   const f = setup({ emailFailure: true }); await f.run();
   assert.equal(f.res.statusCode, 201); assert.equal(f.writes.length, 3); assert.equal(f.res.body.data.inviteEmail.sent, false);
+});
+
+test('only administrators can hand out an administrator or custom organization role', async () => {
+  const { ensureOrganizationRoles } = require('../src/services/organization-role-service');
+  for (const [requester, role, allowed] of [
+    ['enduser', 'administrator', false], ['enduser', 'cashier', false], ['enduser', 'inventorymanager', true],
+    ['administrator', 'administrator', true], ['administrator', 'cashier', true], ['superuser', 'cashier', true],
+  ]) {
+    const f = setup();
+    await ensureOrganizationRoles(f.models, 'org');
+    await f.models.OrganizationRole.create({ organizationId: 'org', code: 'cashier', name: 'Cashier' });
+    f.req.auth.roleCodes = [requester];
+    f.req.body.roleIds = [`org:${role}`];
+    await f.run();
+    assert.equal(f.res.statusCode === 201, allowed, `${requester} granting ${role}: ${f.res.statusCode}`);
+    assert.equal(f.res.statusCode, allowed ? 201 : 403, `${requester} granting ${role}`);
+    assert.equal(f.emails.length, allowed ? 1 : 0);
+  }
 });

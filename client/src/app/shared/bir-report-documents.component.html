@@ -89,7 +89,7 @@
     </div>
     <div class="mt-4" *ngIf="preview() as url">
       <div class="text-sm font-semibold mb-2">Preview · {{ doc.title }} · {{ doc.periodLabel }}</div>
-      <iframe #pdfFrame [src]="url" [title]="doc.title + ' PDF ' + doc.periodLabel" (load)="loaded.set(true)" class="w-full border rounded-lg" style="height: 780px"></iframe>
+      <iframe #pdfFrame [src]="url" [title]="doc.title + ' PDF ' + doc.periodLabel" (load)="loaded.set(true)" class="w-full border rounded-lg h-[780px]"></iframe>
     </div>
   </ng-container>
 </section>

@@ -28,3 +28,7 @@ This API now boots with NestJS (`src/main.ts`) and keeps existing business endpo
 3. Migrate one domain at a time into full Nest implementation (`controllers/services/repositories/entities/dto`).
 3. Remove legacy route registrations per domain after migration.
 4. Keep Sequelize models/migrations compatible during migration.
+
+## Roles and tenancy
+
+Roles belong to organizations. `services/role-access.js` resolves a member's access per request from `organization_user_roles`, and all changes go through `services/organization-role-service.js`. Composite foreign keys on that table make a cross-organization assignment impossible at the database level. Only the global `superuser` role grants access outside an organization. See "RBAC" in the root `CLAUDE.md`.

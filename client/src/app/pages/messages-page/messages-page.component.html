@@ -92,7 +92,7 @@
       <p class="text-muted">{{ hasActiveFilters ? 'Try another search or clear your filters.' : 'Updates will appear here as activity happens in your organization.' }}</p>
       <button *ngIf="hasActiveFilters" type="button" class="ui-btn ui-btn-outline-primary" (click)="clearFilters()">Clear filters</button>
     </div>
-    <div *ngIf="!loading() && viewMode === 'card'" class="ui-list-group ui-list-group-flush rounded-xl">
+    <div *ngIf="!loading() && viewMode === 'card'" class="ui-list-group rounded-xl">
       <article *ngFor="let row of rows(); trackBy: trackById" class="ui-list-group-item p-6 message-card" [class.message-unread]="!row.isRead">
         <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
           <div class="flex flex-wrap gap-2 items-center">

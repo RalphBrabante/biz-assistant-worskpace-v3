@@ -21,7 +21,7 @@ async function setup({ administrator = false, superuser = false } = {}) {
   const module = { exports: {} };
   vm.runInNewContext(code, { module, exports: module.exports, require: name => mocks[name] || {} });
   const api = { create(url, payload) { const stream = new rx.Subject(); requests.push({ url, payload, stream }); return stream; },
-    list: url => rx.of({ data: url.includes('/roles') ? [{ id: 'role', code: 'accountant', name: 'Accountant' }, { id: 'global', code: 'superuser' }] : [{ id: 'org', name: 'Current Company' }, { id: 'other', name: 'Other Company' }] }),
+    list: url => rx.of({ data: url.includes('roles') ? [{ id: 'role', code: 'accountant', name: 'Accountant' }, { id: 'global', code: 'superuser' }] : [{ id: 'org', name: 'Current Company' }, { id: 'other', name: 'Other Company' }] }),
   };
   const auth = { currentUser: () => ({ organizationId: 'org', organizationName: 'Current Company', roleCodes: superuser ? ['superuser'] : administrator ? ['administrator'] : [] }) };
   const page = new module.exports.UsersPageComponent(api, auth);

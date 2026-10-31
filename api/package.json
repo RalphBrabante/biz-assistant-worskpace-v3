@@ -20,7 +20,9 @@
     "test:schema:mysql": "node scripts/verify-schema-indexes.js",
     "test:expenses:mysql": "node scripts/verify-expense-transfers.js",
     "test:banks": "node --test tests/banks-routes.test.js",
-    "test:banks:mysql": "node scripts/verify-banks.js"
+    "test:banks:mysql": "node scripts/verify-banks.js",
+    "test:roles": "node --test tests/organization-roles.test.js tests/accountant-access.test.js",
+    "test:roles:mysql": "node scripts/verify-organization-roles.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",

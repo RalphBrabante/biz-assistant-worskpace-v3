@@ -14,19 +14,16 @@ function reminderPeriod(now = new Date()) {
   return {year, quarter, end};
 }
 
+// Each organization's own administrators, so nobody is reminded about a company they only belong to elsewhere.
 const RECIPIENTS_SQL = `
 SELECT DISTINCT o.id AS organizationId, o.name AS organizationName,
        u.email, u.first_name AS firstName
 FROM organizations o
-JOIN users u ON u.is_active = 1 AND u.status = 'active'
-LEFT JOIN organization_users ou ON ou.organization_id = o.id AND ou.user_id = u.id
+JOIN organization_roles r ON r.organization_id = o.id AND r.preset_code = 'administrator' AND r.is_active = 1
+JOIN organization_user_roles our ON our.organization_id = o.id AND our.role_id = r.id
+JOIN organization_users ou ON ou.organization_id = o.id AND ou.user_id = our.user_id AND ou.is_active = 1
+JOIN users u ON u.id = our.user_id AND u.is_active = 1 AND u.status = 'active'
 WHERE o.is_active = 1
-  AND (ou.is_active = 1 OR (ou.id IS NULL AND u.organization_id = o.id))
-  AND (LOWER(u.role) = 'administrator' OR LOWER(ou.role) = 'administrator' OR EXISTS (
-    SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-    WHERE ur.user_id = u.id AND ur.is_active = 1 AND r.is_active = 1
-      AND LOWER(r.code) = 'administrator'
-  ))
 ORDER BY o.id, u.email`;
 
 async function administratorRecipients(sequelize) {

@@ -114,16 +114,10 @@ function resolveOrganizationIdForRead(req) {
   return authOrgId;
 }
 
+// Roles belong to one organization, so only the member's role there decides who is notified.
 function hasRoleCode(user, roleCodes = []) {
   const allowed = roleCodes.map((value) => String(value || '').toLowerCase());
-  const primaryRole = String(user?.role || '').toLowerCase();
-  if (primaryRole && allowed.includes(primaryRole)) {
-    return true;
-  }
-  const memberships = Array.isArray(user?.roles) ? user.roles : [];
-  return memberships.some((role) =>
-    allowed.includes(String(role?.code || '').toLowerCase())
-  );
+  return allowed.includes(String(user?.OrganizationUser?.role || '').toLowerCase());
 }
 
 async function notifyQuarterlyExpenseReportGenerated(models, report) {
@@ -140,18 +134,8 @@ async function notifyQuarterlyExpenseReportGenerated(models, report) {
     attributes: ['id', 'email', 'firstName', 'lastName', 'role', 'isActive'],
     through: {
       where: { isActive: true },
-      attributes: [],
+      attributes: ['role'],
     },
-    include: models.Role
-      ? [
-          {
-            model: models.Role,
-            as: 'roles',
-            through: { attributes: [] },
-            required: false,
-          },
-        ]
-      : [],
   });
 
   const recipients = [];

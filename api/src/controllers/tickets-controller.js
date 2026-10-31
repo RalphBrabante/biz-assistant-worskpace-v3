@@ -1,4 +1,5 @@
 const {bindToBrowser, isSameBrowser} = require('../services/oauth-browser-binding');
+const { effectiveRoleAccess } = require('../services/role-access');
 const crypto = require('crypto');
 const {Op, literal} = require('sequelize');
 const {getModels} = require('../sequelize');
@@ -275,8 +276,8 @@ const callback = endpoint(async (req, res) => {
   if (!state || new Date(state.expiresAt) < new Date()) throw fail(400, 'Gmail connection expired. Start again from Tickets.');
   if (!await models.GmailOAuthState.destroy({where: {id}})) throw fail(400, 'Gmail connection request was already used.');
   if (req.query.error || typeof req.query.code !== 'string') throw fail(400, 'Gmail consent was cancelled. Return to Tickets to reconnect.');
-  const user = await models.User.findOne({where: {id: state.userId, isActive: true}, include: [{association: 'roles'}]});
-  const roles = (user?.roles || []).map(role => role.code);
+  const user = await models.User.findOne({where: {id: state.userId, isActive: true}});
+  const roles = user ? (await effectiveRoleAccess(models, user, state.organizationId)).roleCodes : [];
   if (!user || (!roles.includes('superuser') && (!roles.includes('administrator') || !await member(models, state.organizationId, user.id)))) throw fail(403, 'Administrator access is no longer available.');
   const token = await gmail.tokenRequest({grant_type: 'authorization_code', code: req.query.code, redirect_uri: gmail.redirectUri()});
   if (!token.refresh_token || !gmail.SCOPES.every(scope => (token.scope || '').split(' ').includes(scope))) throw fail(400, 'Grant both Gmail read and send permissions, then reconnect.');

@@ -131,9 +131,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen() || isEditModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen() || isEditModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -152,7 +152,7 @@
         <div *ngIf="createModalError()" class="ui-alert ui-alert-danger mb-4">
           {{ createModalError() }}
         </div>
-        <form [formGroup]="createOrganizationForm" (ngSubmit)="createOrganization()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form [formGroup]="createOrganizationForm" (ngSubmit)="createOrganization()" novalidate [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <app-organization-form-fields [form]="createOrganizationForm" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onCreateTaxIdInput($event)"></app-organization-form-fields>
         </form>
       </div>
@@ -167,7 +167,7 @@
 </div>
 
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isEditModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isEditModalOpen()"
@@ -186,7 +186,7 @@
         <div *ngIf="editModalError()" class="ui-alert ui-alert-danger mb-4">
           {{ editModalError() }}
         </div>
-        <form [formGroup]="editOrganizationForm" (ngSubmit)="saveEdit()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form [formGroup]="editOrganizationForm" (ngSubmit)="saveEdit()" novalidate [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <app-organization-form-fields [form]="editOrganizationForm" [currencyOptions]="currencyOptions" [taxTypes]="taxTypes()" (taxIdInput)="onEditTaxIdInput($event)"></app-organization-form-fields>
         </form>
       </div>

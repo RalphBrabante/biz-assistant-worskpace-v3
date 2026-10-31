@@ -28,7 +28,7 @@ Tax and calculation work must start with `TAX-CALCULATION-REQUEST-INTENT.md`, th
 
 | Layer | Technology |
 |---|---|
-| Frontend | Angular 18, Bootstrap 5, Chart.js, Socket.io client |
+| Frontend | Angular 18, Tailwind CSS 3 (Bootstrap Icons font only — no Bootstrap CSS/JS), Chart.js, Socket.io client |
 | Backend | Node.js + Express (legacy), NestJS (migration in progress) |
 | ORM | Sequelize with MySQL 8.4 |
 | Cache | Redis 7 |
@@ -107,11 +107,15 @@ API connects to:
 |---|---|---|
 | User | id, name, email, password (hashed), isActive, isEmailVerified | Core user entity |
 | Organization | id, name, slug, isActive, settings | Tenant root |
-| OrganizationUser | userId, organizationId, isPrimary | Many-to-many; `isPrimary` marks default org |
-| Role | id, name, organizationId, isSystem | System roles cannot be deleted |
-| UserRole | userId, roleId, organizationId | User-to-role assignment scoped to org |
+| OrganizationUser | userId, organizationId, role, isPrimary | Many-to-many; `isPrimary` marks default org. `role` is a display label derived from assignments, never a source of access |
+| OrganizationRole | id, organizationId, name, code, presetCode, legacyRoleId, isActive | The roles an organization owns. `presetCode` set = system role; NULL = custom role |
+| OrganizationRolePermission | roleId, permissionId | Permissions of an organization's role |
+| OrganizationUserRole | organizationId, roleId, userId, assignedByUserId | The source of a member's access. Composite foreign keys keep role and member in the same organization |
+| OrganizationRoleAuditLog | organizationId, actorUserId, action, roleId, roleName, targetUserId, details | Append-only history of role changes |
+| Role | id, name, code, isSystem | Global: the `superuser` role, plus templates new organizations copy. Grants nothing else |
+| UserRole | userId, roleId | Global assignment. Only `superuser` has any effect |
 | Permission | id, name, resource, action | e.g., `orders.create`, `reports.read` |
-| RolePermission | roleId, permissionId | |
+| RolePermission | roleId, permissionId | Permissions of a global role or template |
 | Token | userId, token (sha256), type, expiresAt | Password reset, email verification |
 | InvalidLoginAttempt | userId, ip, count, lockedUntil | Brute-force protection |
 | License | organizationId, planType, expiresAt, isActive | Drives feature availability |
@@ -182,9 +186,20 @@ POST   /auth/verify-email
 /vendors/:id          GET, PUT, DELETE
 /customers            GET, POST
 /customers/:id        GET, PUT, DELETE
-/roles                GET, POST
-/roles/:id            GET, PUT, DELETE
+/roles                GET, POST                (global templates)
+/roles/:id            GET, PUT, DELETE         (global templates)
 /permissions          GET
+/organization-roles                   GET, POST
+/organization-roles/options           GET
+/organization-roles/audit             GET
+/organization-roles/members/:userId   GET, PUT
+/organization-roles/:id               PUT, DELETE
+/organization-roles/:id/clone         POST
+/organization-roles/:id/reset         POST
+/organization-roles/:id/permissions   PUT, POST
+/organization-roles/:id/permissions/:permissionId   DELETE
+/organization-roles/:id/members       POST
+/organization-roles/:id/members/:userId   DELETE
 /licenses             GET, POST
 /license/:id          GET, PUT
 ```
@@ -237,8 +252,9 @@ POST /messages
 /organizations/:id     [organizations.read]
 /users                 [users.read]
 /users/:id             [users.read]
-/roles                 [roles.read]
-/roles/:id             [roles.read]
+/organization-roles    (administrators and superusers)
+/roles                 [roles.manage, superuser only: role templates]
+/roles/:id             [roles.manage, superuser only: role templates]
 /permissions           [permissions.read]
 /items                 [items.read]
 /orders                [orders.read]
@@ -274,10 +290,26 @@ Guards: `authGuard` (JWT validation) + `permissionGuard` (resource.action checks
 - Users see only data belonging to their active organization.
 
 ### RBAC
-- Roles are defined per organization; system roles (`isSystem=true`) cannot be deleted.
-- Permissions follow `resource.action` pattern (e.g., `orders.create`, `reports.read`).
-- Superuser role bypasses all permission checks.
-- Role changes take effect immediately (no re-login required).
+- **Each organization owns its roles.** Changing a role in one organization cannot affect another. A person can hold different roles in each organization they belong to.
+- Every organization has four system roles (`administrator`, `accountant`, `inventorymanager`, `enduser`) plus any custom roles it creates. New organizations copy theirs from the global templates in `roles`, so a template change affects only organizations created later.
+- Only `superuser` is global. It is the one role that applies outside an organization.
+- A member's access comes only from `organization_user_roles`, resolved per request by `effectiveRoleAccess`, so changes apply immediately without signing in again. Never grant access from `organization_users.role`, `users.role` or a non-superuser `user_roles` row.
+- All role changes go through `api/src/services/organization-role-service.js`, which keeps the membership label in sync and writes the audit log.
+- Permissions follow the `resource.action` pattern (e.g., `orders.create`, `reports.read`).
+
+Rules the service and database enforce:
+- Administrators manage their own organization's roles. Superusers manage any organization, but must name it.
+- `administrator` and `accountant` have locked permissions. Administrators bypass permission checks; accountants are capped to a fixed read-only set (`ACCOUNTANT_PERMISSIONS`) and that role cannot be combined with others.
+- System roles cannot be deleted or disabled, and their codes cannot change. Custom roles cannot use reserved codes (`RESERVED_ROLE_CODES`).
+- Custom roles cannot hold platform-only permissions (roles, permissions, organizations, licenses, settings, banks).
+- An organization keeps at least one administrator, and administrators cannot remove their own role.
+- Only administrators and superusers change roles. Someone with `users.create` can assign a non-administrator system role when creating an account, but never an administrator or custom role.
+- A membership in a new organization starts with no role: a role held elsewhere never carries over.
+- People in other organizations stay private: administrators find an existing account only by its exact email, and cannot see a member's other organizations.
+
+**Adding a permission:** a new permission does not reach existing organizations automatically, because their roles are theirs to control. Administrators are covered by their bypass. If other system roles should have it, add it to the template and, deliberately, to the organization copies in the same migration.
+
+**Verifying:** `npm run test:roles` (no database). `npm run test:roles:mysql` runs the backfill, tenancy and API scenarios against an empty disposable database (`ROLE_TEST_DATABASE=role_test_*`, `ROLE_TEST_HOST=role-test-*`, `ROLE_TEST_PASSWORD`).
 
 ### Orders & Invoicing Flow
 1. Order created as `draft` → progresses through: `pending → confirmed → processing → completed`
@@ -465,9 +497,21 @@ Cloudflare handles public HTTPS termination; Nginx uses origin certs for the Clo
 
 When the user says **"data pages"**, they mean any page that displays a filterable data table — i.e., the listing/index pages where records can be searched, filtered, sorted, and paginated. This includes:
 
-`/orders`, `/items`, `/expenses`, `/customers`, `/vendors`, `/users`, `/sales-invoices`, `/roles`, `/permissions`, `/reports`, `/licenses`
+`/orders`, `/items`, `/expenses`, `/customers`, `/vendors`, `/users`, `/sales-invoices`, `/organization-roles`, `/roles`, `/permissions`, `/reports`, `/licenses`
 
 Any future listing page with a data table is also a data page by definition.
+
+---
+
+## UI Standard: Styling
+
+The client uses **Tailwind CSS 3**. Bootstrap's CSS and JavaScript are not installed, so Bootstrap class names (`btn`, `form-control`, `col-md-4`, `d-flex`, `pe-none`, `text-bg-danger`, `fade`) do nothing. See `client/DESIGN-SYSTEM.md` for tokens and shared components.
+
+- Use the shared `ui-*` component classes from `client/src/styles.css` plus Tailwind utilities.
+- Use semantic color tokens (`bg-surface`, `text-ink`, `text-muted`, `border-line`, `bg-brand-fill`, `text-danger`, `bg-chrome`) so light and dark themes both work. Do not put hex values in class names.
+- Do not add static `style="..."` attributes; use utilities (arbitrary values such as `max-h-[280px]` are fine). Dynamic `[style.x]` bindings are fine.
+- The smallest text is `text-2xs` (11px).
+- `client/tests/design-system.test.cjs` enforces these rules.
 
 ---
 
@@ -478,31 +522,31 @@ Every data listing page (`/orders`, `/items`, `/expenses`, `/customers`, `/vendo
 ### Structure
 
 ```
-<section class="card border-0 shadow-sm rounded-4 mb-4">
-  <div class="card-body p-4">
+<section class="ui-card shadow-panel rounded-2xl mb-6">
+  <div class="ui-card-body p-6">
 
     <!-- Row 1: Primary filters -->
-    <div class="row g-3 align-items-end">
-      <!-- Search (always first, col-12 col-md-4 or col-md-5) -->
-      <!-- Additional filter selects: col-6 col-md-2 each -->
-      <!-- Date range (when applicable): col-12 col-md-4 using input-group with "to" separator -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <!-- Search (always first, col-span-12 md:col-span-4 or md:col-span-5) -->
+      <!-- Additional filter selects: col-span-6 md:col-span-2 each -->
+      <!-- Date range (when applicable): col-span-12 md:col-span-4 using ui-input-group with "to" separator -->
     </div>
 
     <!-- Row 2: Secondary controls -->
-    <div class="row g-3 align-items-center mt-1">
-      <!-- "Show" rows-per-page input-group: col-6 col-md-2 -->
-      <!-- View toggle (table/card): col-6 col-md-2 -->
-      <!-- Stats + Clear button: col-12 col-md-4 d-flex justify-content-md-end -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+      <!-- "Show" rows-per-page input group: col-span-6 md:col-span-2 -->
+      <!-- View toggle (table/card): col-span-6 md:col-span-2 -->
+      <!-- Stats + Clear button: col-span-12 md:col-span-4 flex md:justify-end -->
     </div>
 
     <!-- Active filter chips (conditional on hasActiveFilters) -->
-    <div *ngIf="hasActiveFilters" class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
       <!-- One dismissible badge pill per active filter -->
     </div>
 
     <!-- Alerts -->
-    <div *ngIf="message()" class="alert alert-success mt-3 mb-0">...</div>
-    <div *ngIf="error()" class="alert alert-danger mt-3 mb-0">...</div>
+    <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">...</div>
+    <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">...</div>
   </div>
 </section>
 ```
@@ -511,35 +555,35 @@ Every data listing page (`/orders`, `/items`, `/expenses`, `/customers`, `/vendo
 
 **Search field** — always uses inline search icon + inline clear (×) button:
 ```html
-<div class="position-relative">
-  <i class="bi bi-search position-absolute text-secondary" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
-  <input type="text" class="form-control ps-5" [class.pe-5]="searchQuery" placeholder="..." />
-  <button *ngIf="searchQuery" class="btn position-absolute p-0 border-0 bg-transparent text-secondary"
-    style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="clearSearch()">
+<div class="relative">
+  <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+  <input type="text" class="ui-form-control pl-10" [class.pr-10]="searchQuery" placeholder="..." />
+  <button *ngIf="searchQuery" class="absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2"
+    type="button" (click)="clearSearch()" aria-label="Clear search">
     <i class="bi bi-x-circle-fill"></i>
   </button>
 </div>
 ```
 
-**Filter selects** — use `[class.border-primary]="filterValue"` to highlight active state. Options use friendly Title Case labels, never raw snake_case values.
+**Filter selects** — use `[class.border-brand]="filterValue"` to highlight active state. Options use friendly Title Case labels, never raw snake_case values.
 
-**Date range** — inline `input-group` with a `<span class="input-group-text ...">to</span>` separator between the two date inputs.
+**Date range** — inline `ui-input-group` with a `<span class="ui-input-group-text">to</span>` separator between the two date inputs.
 
-**Rows per page** — always an `input-group` with a `"Show"` prefix span:
+**Rows per page** — always a `ui-input-group` with a `"Show"` prefix span:
 ```html
-<div class="input-group">
-  <span class="input-group-text border-end-0 text-secondary small px-2">Show</span>
-  <select class="form-select border-start-0" ...>...</select>
+<div class="ui-input-group">
+  <span class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</span>
+  <select class="ui-form-select border-l-0" ...>...</select>
 </div>
 ```
 
-**View toggle** — always `btn-group view-toggle-group` with table and card buttons using `[class.active]="viewMode === 'table/card'"`.
+**View toggle** — always `ui-btn-group view-toggle-group` with table and card buttons using `[class.active]="viewMode === 'table/card'"`.
 
 **Stats + Clear button** — right-aligned in a flex container:
-- Stats text: `<span class="fw-semibold text-body">{{ total }}</span> items · Page X / Y`
-- Clear button: `btn-outline-secondary` when no filters active, `btn-outline-danger` when active, `[disabled]="!hasActiveFilters"`, shows `badge text-bg-danger` with count when `activeFilterCount > 0`
+- Stats text: `<span class="font-semibold text-ink">{{ total }}</span> items · Page X / Y`
+- Clear button: `ui-btn-outline-secondary` when no filters active, `ui-btn-outline-danger` when active, `[disabled]="!hasActiveFilters"`, shows `ui-badge ui-badge-danger` with count when `activeFilterCount > 0`
 
-**Active filter chips** — shown only when `hasActiveFilters` is true. Each chip is a `badge rounded-pill border fw-normal text-body bg-body` with an icon, label text, and a `btn-close` that removes only that filter.
+**Active filter chips** — shown only when `hasActiveFilters` is true. Each chip is a `ui-badge rounded-full border font-normal text-ink bg-surface` with an icon, label text, and a `ui-btn-close` labelled `aria-label="Remove filter"` that removes only that filter.
 
 ### Required TypeScript properties (every data page must have)
 
@@ -566,6 +610,7 @@ orderStatusLabel(value: string): string   // maps raw value → "Friendly Label"
 | `/customers` | search |
 | `/vendors` | search |
 | `/users` | search |
+| `/organization-roles` | search, type, status |
 | `/sales-invoices` | search, status, payment status, date range, sort |
 
 ---
@@ -577,26 +622,26 @@ Every create/edit modal form **must** show a loading overlay and disable fields 
 ### Required pattern for every modal-body containing a form
 
 ```html
-<div class="modal-body pt-3 position-relative">
+<div class="ui-modal-body pt-4 relative">
   <!-- Loading overlay — shown while submitting -->
   <div *ngIf="submitting()" class="modal-loading-overlay">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">Loading...</span>
+    <div class="ui-spinner-border text-brand" role="status">
+      <span class="sr-only">Loading...</span>
     </div>
   </div>
 
   <!-- Error alert (if applicable) -->
-  <div *ngIf="someError()" class="alert alert-danger ...">{{ someError() }}</div>
+  <div *ngIf="someError()" class="ui-alert ui-alert-danger ...">{{ someError() }}</div>
 
   <!-- Form — dims and blocks interaction during submission -->
-  <form ... [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+  <form ... [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
     ...fields...
   </form>
 </div>
 ```
 
 - Use `creatingVendor()` or the relevant signal if the form uses a different submission signal than `submitting()`
-- For modals without a `<form>` tag (ngModel-based), apply `[class.pe-none]` and `[class.opacity-50]` to the outer wrapper `<div class="row g-3">`
+- For modals without a `<form>` tag (ngModel-based), apply `[class.pointer-events-none]` and `[class.opacity-50]` to the outer wrapper `<div class="ui-grid grid grid-cols-12 gap-4">`
 - The CSS for `.modal-loading-overlay` lives in `client/src/styles.css`
 - The submit button is already disabled via `[disabled]="submitting()"` — do not remove that
 
@@ -606,17 +651,17 @@ Every create/edit modal form **must** show a loading overlay and disable fields 
 
 When adding validation to form fields, follow this pattern:
 
-- **Error/warning icon**: place a Bootstrap Icon inside the field at the right edge using `position-absolute` (right side of the input)
+- **Error/warning icon**: place a Bootstrap Icon inside the field at the right edge using `absolute` positioning (right side of the input)
 - **Error message**: display as a tooltip-style popup (not inline text below the field)
-- Use `is-invalid` class on the input to trigger Bootstrap's red border
+- Use `is-invalid` class on the input to trigger the red border
 - The icon should be `bi-exclamation-circle-fill text-danger` for errors, `bi-exclamation-triangle-fill text-warning` for warnings
 - Show the icon only when the field has been touched and is invalid
 
 ### Pattern
 
 ```html
-<div class="position-relative">
-  <input class="form-control pe-5" [class.is-invalid]="isFieldInvalid('fieldName')"
+<div class="relative">
+  <input class="ui-form-control pr-10" [class.is-invalid]="isFieldInvalid('fieldName')"
          formControlName="fieldName" />
   <div *ngIf="isFieldInvalid('fieldName')" class="field-validation-icon"
        [title]="getFieldError('fieldName')" appTooltip>
@@ -625,21 +670,10 @@ When adding validation to form fields, follow this pattern:
 </div>
 ```
 
-```css
-/* In styles.css */
-.field-validation-icon {
-  position: absolute;
-  right: 0.65rem;
-  top: 50%;
-  transform: translateY(-50%);
-  cursor: default;
-  pointer-events: auto;
-  z-index: 5;
-}
-```
+`.field-validation-icon` is defined in `client/src/styles.css`.
 
 ### Rules
-- Always use `pe-5` on the input so text doesn't overlap the icon
+- Always use `pr-10` on the input so text doesn't overlap the icon
 - Use `appTooltip` directive with `[title]="errorMessage"` for the popup
-- Never show raw `<div class="invalid-feedback">` text below the field — use the tooltip pattern instead
+- Never show raw error text below the field — use the tooltip pattern instead
 - Validate on `touched` state, not `dirty` (so errors show after user leaves the field, not while typing)

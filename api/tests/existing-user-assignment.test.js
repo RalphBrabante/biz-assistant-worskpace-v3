@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
+const { addOrganizationRoleFakes } = require('./helpers/organization-role-fakes');
 const { createRequire } = require('node:module');
 const { Op } = require('sequelize');
 function fixture() {
@@ -29,11 +30,12 @@ function fixture() {
     UserRole: { create: () => assert.fail('Never assign global roles'), bulkCreate: () => assert.fail('Never assign global roles') },
     Token: { create: () => assert.fail('Never reset credentials'), update: () => assert.fail('Never revoke existing sessions') },
   };
+  const roleTables = addOrganizationRoleFakes(models);
   const filename = require.resolve('../src/controllers/users-controller'), actual = createRequire(filename), module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(filename,'utf8'),{ module,exports:module.exports,process,Date,console:{error: (...args) => errors.push(args)},require: name => name === '../sequelize' ? {getModels:() => models} : name === '../services/email-service' ? {sendOrganizationUserInviteEmail:() => assert.fail('Assignment sends no email')} : actual(name) });
   const req = { body: { email:' SHARED@example.test ',userId:user.id,organizationId:'b',roleId:'accountant' },query:{},auth:{roleCodes:['administrator'],user:{id:'actor',organizationId:'b'}} };
   const response = () => ({statusCode:200,status(n){this.statusCode=n;return this;},json(body){this.body=body;return this;},set(){}});
-  return {user,memberships,models,req,calls,errors,controller:module.exports,response, failCreate:()=>{failCreate=true;}};
+  return {user,memberships,models,roleTables,req,calls,errors,controller:module.exports,response, failCreate:()=>{failCreate=true;}};
 }
 test('exact normalized email lookup suggests a minimal identity and reports membership only in the selected organization',async()=>{
   const f=fixture(),res=f.response();await f.controller.lookupExistingUser(f.req,res);
@@ -47,6 +49,7 @@ test('assignment adds organization access without altering credentials, global r
   assert.equal(res.statusCode,201);assert.equal(f.memberships.length,2);
   assert.deepEqual(f.memberships[1],{userId:'person',organizationId:'b',role:'accountant',isActive:true,isPrimary:false});
   assert.deepEqual(f.user,before);assert.equal(f.memberships[0].role,'administrator');
+  assert.deepEqual(f.roleTables.assignments.map(a=>[a.organizationId,a.roleId,a.userId]),[['b','b:accountant','person']]);
   f.req.auth.roleCodes=['superuser'];f.req.body.organizationId='c';await f.controller.assignExistingUser(f.req,f.response());assert.equal(f.memberships.length,3);assert.equal(f.user.organizationId,'a');
 });
 test('simultaneous and repeated assignment is idempotent and never changes an existing organization role',async()=>{

@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { addOrganizationRoleFakes } = require('./helpers/organization-role-fakes');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -62,6 +63,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
     async findAll({ where }) { return where.id.map((id) => organizations.get(id)).filter(Boolean); },
   };
   models.Role = { findAll: async () => [{ id: 'role', code: 'enduser' }] };
+  addOrganizationRoleFakes(models);
   models.UserRole = { bulkCreate: async () => {} };
   models.Token = { update: async () => {}, create: async () => {} };
   models.Vendor.findOne = async ({ where }) => where.id === 'vendor' && where.organizationId === 'org'
@@ -70,7 +72,7 @@ function setup(route, { body = {}, privileged = true, userIdOnly = false } = {})
     ? { id: 'ewt', percentage: 2 } : null;
   models.OrganizationUser = {
     findOrCreate: async () => [{}, true], update: async () => {},
-    findOne: async () => null,
+    findOne: async ({ where } = {}) => (where?.userId ? { userId: where.userId, isActive: true, role: 'enduser', update: async () => {} } : null),
   };
   models.VendorOrganization.findOrCreate = async ({ defaults }) => {
     if (!organizations.has(defaults.organizationId)) throw new Error('Invalid shared organization');

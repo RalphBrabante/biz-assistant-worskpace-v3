@@ -98,8 +98,8 @@
           <img
             [src]="fileUrl"
             alt="Expense attachment preview"
-            class="w-full block bg-subtle"
-            style="max-height: 520px; object-fit: contain;"
+            class="w-full block bg-subtle max-h-[520px] object-contain"
+           
             (error)="onAttachmentImageError()"
           />
           <div class="px-4 py-2 text-xs bg-subtle">
@@ -159,9 +159,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="previewImageUrl()" (click)="closeImagePreview()"></div>
+<div class="ui-modal-backdrop" *ngIf="previewImageUrl()" (click)="closeImagePreview()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="previewImageUrl() ? 'block' : 'none'"
   [attr.aria-hidden]="!previewImageUrl()"
@@ -177,8 +177,8 @@
         <img
           [src]="imageUrl"
           alt="Expense attachment"
-          class="max-w-full h-auto rounded-md border"
-          style="max-height: 75vh; object-fit: contain;"
+          class="max-w-full h-auto rounded-md border max-h-[75vh] object-contain"
+         
         />
       </div>
       <div class="ui-modal-footer border-0 pt-0">

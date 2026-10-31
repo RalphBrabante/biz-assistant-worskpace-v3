@@ -517,13 +517,13 @@ export class DashboardPageComponent implements OnInit, OnDestroy {
           },
         },
         scales: {
-          x: { grid: { display: false }, border: { display: false }, ticks: { color: '#8993a5', font: { family: 'Inter', size: 11 } } },
+          x: { grid: { display: false }, border: { display: false }, ticks: { color: '#7c8799', font: { family: 'Inter', size: 11 } } },
           y: {
             beginAtZero: true,
             border: { display: false },
             grid: { color: '#8993a518' },
             ticks: {
-              color: '#8993a5', font: { family: 'Inter', size: 10 }, padding: 12,
+              color: '#7c8799', font: { family: 'Inter', size: 11 }, padding: 12,
               callback: (tickValue: string | number) =>
                 this.toCurrency(Number(tickValue || 0), this.orgCurrency),
             },

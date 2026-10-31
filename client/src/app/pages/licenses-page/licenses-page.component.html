@@ -135,9 +135,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -154,7 +154,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="createModalError()" class="ui-alert ui-alert-danger">{{ createModalError() }}</div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createLicenseForm" (ngSubmit)="createLicense()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createLicenseForm" (ngSubmit)="createLicense()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <div class="col-span-12 md:col-span-6">
             <label class="ui-form-label font-semibold">Assign Organization</label>
             <select class="ui-form-select" formControlName="organizationId">

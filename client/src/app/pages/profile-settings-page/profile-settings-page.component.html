@@ -15,8 +15,8 @@
       <div class="col-span-12 flex items-center gap-4 mb-1">
         <div
           *ngIf="!displayImageUrl"
-          class="rounded-full bg-brand-soft text-brand font-bold inline-flex items-center justify-center"
-          style="width: 64px; height: 64px; font-size: 1.2rem;"
+          class="rounded-full bg-brand-soft text-brand font-bold inline-flex items-center justify-center h-16 w-16 text-[1.2rem]"
+         
         >
           {{ initials }}
         </div>
@@ -24,8 +24,8 @@
           *ngIf="displayImageUrl"
           [src]="displayImageUrl"
           alt="Profile picture"
-          class="rounded-full border"
-          style="width: 64px; height: 64px; object-fit: cover;"
+          class="rounded-full border h-16 w-16 object-cover"
+         
         />
 
         <div class="grow">

@@ -1,5 +1,7 @@
 # Organization role management review
 
+> Superseded. Per-organization roles were implemented directly; do not apply this patch. See "RBAC" in `CLAUDE.md`.
+
 Status: prepared and tested; authentication integration and the management screen have not been applied to the running application. Automatic approval review rejected the broader authentication changes. Approval is required to apply `organization-role-management.patch`.
 
 ## Available changes

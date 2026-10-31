@@ -1,16 +1,16 @@
 <main class="min-h-screen grid lg:grid-cols-2 bg-surface">
   <section class="auth-art hidden lg:flex flex-col justify-between p-12 xl:p-16" aria-label="Biz Assistant workspace">
-    <a routerLink="/" class="flex items-center gap-3 text-white"><span class="brand-mark"><i class="bi bi-grid" aria-hidden="true"></i></span><span class="text-lg font-semibold tracking-tight">biz assistant<span class="text-[#a99fff]">.</span></span></a>
+    <a routerLink="/" class="flex items-center gap-3 text-white"><span class="brand-mark"><i class="bi bi-grid" aria-hidden="true"></i></span><span class="text-lg font-semibold tracking-tight">biz assistant<span class="text-chrome-accent">.</span></span></a>
     <div class="max-w-lg my-12 relative">
-      <div class="text-[10px] uppercase tracking-[.2em] text-[#a79ce9] mb-6">One connected workspace</div>
+      <div class="text-2xs uppercase tracking-[.2em] text-chrome-accent mb-6">One connected workspace</div>
       <h2 class="!text-white text-4xl xl:text-5xl font-medium leading-[1.15] tracking-[-.04em]">Your business.<br />A clearer perspective.</h2>
-      <p class="text-[#929eb4] text-sm leading-7 mt-6 max-w-sm">Bring your sales, expenses, and operations together. Less time managing the details. More room to move forward.</p>
+      <p class="text-chrome-muted text-sm leading-7 mt-6 max-w-sm">Bring your sales, expenses, and operations together. Less time managing the details. More room to move forward.</p>
       <div class="auth-workspace-preview mt-10">
-        <div class="flex items-center justify-between border-b border-white/10 pb-4"><span class="text-xs text-[#c3cadd]">Everything in its place</span><span class="flex gap-1"><span class="w-1 h-1 rounded-full bg-[#7167ee]"></span><span class="w-1 h-1 rounded-full bg-white/20"></span><span class="w-1 h-1 rounded-full bg-white/20"></span></span></div>
-        <div class="grid grid-cols-3 gap-4 pt-5"><div><i class="bi bi-receipt text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Sales & orders</p></div><div><i class="bi bi-bar-chart-line text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Financial clarity</p></div><div><i class="bi bi-people text-[#a79ce9] text-lg" aria-hidden="true"></i><p class="text-xs text-[#d3d9e6] mt-3">Connected teams</p></div></div>
+        <div class="flex items-center justify-between border-b border-white/10 pb-4"><span class="text-xs text-chrome-ink">Everything in its place</span><span class="flex gap-1"><span class="w-1 h-1 rounded-full bg-brand-mark"></span><span class="w-1 h-1 rounded-full bg-white/20"></span><span class="w-1 h-1 rounded-full bg-white/20"></span></span></div>
+        <div class="grid grid-cols-3 gap-4 pt-5"><div><i class="bi bi-receipt text-chrome-accent text-lg" aria-hidden="true"></i><p class="text-xs text-chrome-ink mt-3">Sales & orders</p></div><div><i class="bi bi-bar-chart-line text-chrome-accent text-lg" aria-hidden="true"></i><p class="text-xs text-chrome-ink mt-3">Financial clarity</p></div><div><i class="bi bi-people text-chrome-accent text-lg" aria-hidden="true"></i><p class="text-xs text-chrome-ink mt-3">Connected teams</p></div></div>
       </div>
     </div>
-    <p class="text-[10px] text-[#6f7c94]">BIZ ASSISTANT · YOUR BUSINESS, ORGANIZED.</p>
+    <p class="text-2xs text-chrome-muted">BIZ ASSISTANT · YOUR BUSINESS, ORGANIZED.</p>
   </section>
   <section class="relative flex flex-col min-h-screen p-6 sm:p-10">
     <div class="flex justify-between items-center"><span class="text-sm font-semibold lg:invisible">biz assistant.</span><button type="button" class="topbar-icon" (click)="toggleTheme()" [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"><i class="bi" [class.bi-moon-stars]="!theme.isDark()" [class.bi-sun]="theme.isDark()" aria-hidden="true"></i></button></div>
@@ -76,28 +76,28 @@
             </div>
             <div class="text-center mt-4 pt-2 border-t">
               <a
-                class="no-underline text-muted mr-4"
-                style="font-size: 0.8rem;"
+                class="no-underline text-muted mr-4 text-[0.8rem]"
+               
                 routerLink="/privacy-policy"
               >
                 Privacy Policy
               </a>
               <a
-                class="no-underline text-muted"
-                style="font-size: 0.8rem;"
+                class="no-underline text-muted text-[0.8rem]"
+               
                 routerLink="/terms-of-service"
               >
                 Terms of Service
               </a>
             </div>
 
-    </div><p class="text-center text-[10px] text-muted">A focused space for the work that matters.</p>
+    </div><p class="text-center text-2xs text-muted">A focused space for the work that matters.</p>
   </section>
 </main>
 
-<div class="ui-modal-backdrop fade show" *ngIf="forgotModalVisible"></div>
+<div class="ui-modal-backdrop" *ngIf="forgotModalVisible"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="forgotModalVisible ? 'block' : 'none'"
   [attr.aria-hidden]="!forgotModalVisible"
@@ -144,9 +144,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="organizationSelectionVisible"></div>
+<div class="ui-modal-backdrop" *ngIf="organizationSelectionVisible"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="organizationSelectionVisible ? 'block' : 'none'"
   [attr.aria-hidden]="!organizationSelectionVisible"

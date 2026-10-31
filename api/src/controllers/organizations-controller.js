@@ -2,7 +2,15 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
 const { fail } = require('../services/debt-amounts');
-const { ORGANIZATION_PRESET_ROLES } = require('../services/accountant-access');
+const {
+  ensureOrganizationRoles,
+  resolveAssignableRole,
+  addMemberRole,
+  memberAssignments,
+  assertAdministratorRemains,
+  memberRoleSummaries,
+  recordRoleAudit,
+} = require('../services/organization-role-service');
 const { getSocketServer } = require('../services/socket-service');
 const { sendOrganizationUserInviteEmail } = require('../services/email-service');
 const {
@@ -233,6 +241,13 @@ async function createOrganization(req, res) {
     }
 
     const organization = await Organization.create(payload);
+    // Every organization starts with its own roles. Listing or assigning roles provisions any
+    // that are missing, so a failure here delays the catalogue rather than the organization.
+    try {
+      await ensureOrganizationRoles(getModels(), organization.id, { actorUserId: req.auth?.userId });
+    } catch (err) {
+      console.error('Provision organization roles error:', { name: err.name });
+    }
     const created = await Organization.findByPk(organization.id, {
       include: [
         {
@@ -370,9 +385,10 @@ async function listOrganizationUsers(req, res) {
       order: [['createdAt', 'DESC']],
     });
 
+    const roleSummaries = await memberRoleSummaries(getModels(), organization.id, users.map((user) => user.id));
     return res.status(200).json({
       ok: true,
-      data: users.map((user) => sanitizeUser(user)),
+      data: users.map((user) => ({ ...sanitizeUser(user), organizationRoles: roleSummaries.get(user.id) || [] })),
       meta: {
         total: users.length,
       },
@@ -414,6 +430,17 @@ async function searchAssignableUsers(req, res) {
       where.id = { [Op.notIn]: existingUserIds };
     }
 
+    // People in other organizations stay private: only platform staff can browse accounts.
+    // An administrator must already know the exact email, and learns only who it belongs to.
+    if (!isPrivilegedRequest(req)) {
+      const email = q.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(200).json({ ok: true, data: [], meta: { total: 0 } });
+      }
+      const matches = await User.findAll({ where: { ...where, email }, attributes: ['id', 'firstName', 'lastName', 'email'], limit: 1 });
+      return res.status(200).json({ ok: true, data: matches.map(({ id, firstName, lastName, email: address }) => ({ id, firstName, lastName, email: address })), meta: { total: matches.length } });
+    }
+
     if (q) {
       where[Op.or] = [
         { firstName: { [Op.like]: `%${q}%` } },
@@ -443,12 +470,12 @@ async function searchAssignableUsers(req, res) {
 
 async function listOrganizationAssignableRoles(req, res) {
   try {
-    const models = getOrganizationMembershipModels();
-    if (!models || !models.Role) {
+    const models = getModels();
+    if (!models?.Organization || !models?.OrganizationRole) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
 
-    const { Organization, Role } = models;
+    const { Organization, OrganizationRole } = models;
     if (!assertOrganizationAccess(req, req.params.id)) {
       return res.status(404).json({ ok: false, message: 'Organization not found.' });
     }
@@ -457,9 +484,10 @@ async function listOrganizationAssignableRoles(req, res) {
       return res.status(404).json({ ok: false, message: 'Organization not found.' });
     }
 
-    const roles = await Role.findAll({
-      where: { isActive: true, code: { [Op.in]: ORGANIZATION_PRESET_ROLES } },
-      attributes: ['id', 'name', 'code', 'description'],
+    await ensureOrganizationRoles(models, organization.id, { actorUserId: req.auth?.userId });
+    const roles = await OrganizationRole.findAll({
+      where: { organizationId: organization.id, isActive: true },
+      attributes: ['id', 'name', 'code', 'description', 'presetCode'],
       order: [['name', 'ASC']],
     });
 
@@ -490,14 +518,25 @@ async function removeUserFromOrganization(req, res) {
     // Remove membership, fallback access and token scope together. A concurrent
     // session must not regain access through a stale primary organization.
     await User.sequelize.transaction(async transaction => {
+      // The organization first, in the same order as other role changes, so two administrators
+      // removing each other queue instead of deadlocking.
+      await Organization.findByPk(organization.id,{attributes:['id'],transaction,lock:transaction.LOCK.UPDATE});
       const user = await User.findByPk(req.params.userId, {transaction,lock:transaction.LOCK.UPDATE});
       if (!user) throw fail(404, 'User not found.');
       const where = {organizationId:organization.id,userId:user.id};
       const membership = await OrganizationUser.findOne({where,transaction});
       if (!membership) throw fail(404, 'User is not a member of this organization.');
+      // Platform staff may close out an organization; its own administrators must leave someone in charge.
+      if (!isPrivilegedRequest(req) && getModels().OrganizationRole) await assertAdministratorRemains(getModels(), organization.id, user.id, transaction);
       // Keep the membership key referenced by retained chat history while
       // immediately removing access. Reinvitations reactivate this same row.
       await OrganizationUser.update({isActive:false,isPrimary:false},{where,transaction});
+      const allModels = getModels();
+      if (OrganizationUserRole && allModels.OrganizationRoleAuditLog) {
+        const held = await memberAssignments(allModels,organization.id,user.id,transaction);
+        await recordRoleAudit(allModels,{organizationId:organization.id,actorUserId:req.auth?.userId,action:'member.removed',targetUserId:user.id,
+          details:{roles:held.map(assignment => assignment.role.name)}},transaction);
+      }
       if (OrganizationUserRole) await OrganizationUserRole.destroy({where,transaction});
       if (Token) {
         const tokens = await Token.findAll({where:{userId:user.id,type:'access',isActive:true},transaction});
@@ -540,20 +579,18 @@ async function inviteOrganizationUserWithRole(req, res, forcedRole) {
       return res.status(403).json({ok:false,message:'Only administrators or superusers can invite organization users.'});
     }
     const models = getOrganizationMembershipModels();
-    if (!models?.Token || !models?.Role) return res.status(503).json({ok:false,message:'Database models are not ready yet.'});
-    const {Organization, User, OrganizationUser, Token, Role} = models;
+    if (!models?.Token) return res.status(503).json({ok:false,message:'Database models are not ready yet.'});
+    const {Organization, User, OrganizationUser, Token} = models;
     if (!assertOrganizationAccess(req, req.params.id)) return res.status(404).json({ok:false,message:'Organization not found.'});
     const organization = await Organization.findByPk(req.params.id);
     if (!organization?.isActive) return res.status(404).json({ok:false,message:'Active organization not found.'});
-    let roleCode = forcedRole || String(req.body?.role || 'enduser').trim().toLowerCase();
-    if (!forcedRole && req.body?.roleId) {
-      const role = Role && await Role.findByPk(req.body.roleId);
-      if (!role?.isActive) return res.status(400).json({ok:false,message:'Select an active organization role.'});
-      roleCode = String(role.code).toLowerCase();
-    }
-    if (!ORGANIZATION_PRESET_ROLES.includes(roleCode)) return res.status(400).json({ok:false,message:'Select an organization role. Global superuser access cannot be assigned through an organization invitation.'});
-    const invitationRole = await Role.findOne({where:{code:roleCode,isActive:true}});
-    if (!invitationRole) return res.status(400).json({ok:false,message:'Select an active organization role.'});
+    const allModels = getModels();
+    const request = forcedRole ? {code:forcedRole} : req.body?.roleId ? {roleId:req.body.roleId} : {code:String(req.body?.role || 'enduser').trim().toLowerCase()};
+    // Invitations grant this organization's own role, so they apply here and nowhere else.
+    const invitationRole = await resolveAssignableRole(allModels, organization.id, request);
+    if (!invitationRole?.isActive) return res.status(400).json({ok:false,message:'Select an active organization role. Global superuser access cannot be assigned through an organization invitation.'});
+    const roleCode = invitationRole.presetCode || invitationRole.code;
+    const roleLabel = invitationRole.presetCode || 'member';
     const email = String(req.body?.email || '').trim().toLowerCase();
     const firstName = String(req.body?.firstName || '').trim();
     const lastName = String(req.body?.lastName || '').trim();
@@ -572,13 +609,19 @@ async function inviteOrganizationUserWithRole(req, res, forcedRole) {
       }
       if (!user.isActive || user.status === 'suspended') throw fail(409,'This account is inactive or suspended.');
       const existing = await OrganizationUser.findOne({where:{organizationId:organization.id,userId:user.id},transaction});
-      if (existing && existing.role !== roleCode) throw fail(409,'This user already has another role in this organization. Manage their existing assignment first.');
+      // A current member is matched against what they hold; a removed member against the label kept on their membership.
+      const sameRole = existing && (existing.isActive
+        ? (await memberAssignments(allModels,organization.id,user.id,transaction)).some(assignment => assignment.roleId === invitationRole.id)
+        : existing.role === roleLabel);
+      if (existing && !sameRole) throw fail(409,'This user already has another role in this organization. Manage their existing assignment first.');
       const hasPrimary = Boolean(user.organizationId) || await OrganizationUser.count({where:{userId:user.id,isPrimary:true,isActive:true},transaction});
       const isPrimary = user.organizationId === organization.id || !hasPrimary;
       const membership = existing || await OrganizationUser.create({organizationId:organization.id,userId:user.id,
-        role:roleCode,isActive:true,isPrimary},{transaction});
+        role:roleLabel,isActive:true,isPrimary},{transaction});
       if (existing && !existing.isActive) await existing.update({isActive:true},{transaction});
       if (!hasPrimary) await user.update({organizationId:organization.id},{transaction});
+      await addMemberRole(allModels,{organizationId:organization.id,userId:user.id,roleId:invitationRole.id,
+        actor:{userId:req.auth.userId,isSuperuser:isPrivilegedRequest(req)},transaction});
       const expiresInMinutes = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
       let setPasswordUrl;
       if (!user.isEmailVerified || user.status !== 'active') {

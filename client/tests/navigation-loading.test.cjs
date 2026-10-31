@@ -9,16 +9,21 @@ const rx = require('rxjs');
 function environment() {
   const events = new rx.Subject(), timers = new Map(); let timerId = 0;
   const router = { url: '/dashboard', events };
+  // Mirrors Angular 18: writing to a signal inside an effect throws NG0600 unless untracked.
+  let effectDepth = 0, untrackedDepth = 0;
+  const guard = () => { if (effectDepth && !untrackedDepth) throw new Error('NG0600'); };
   const signal = initial => {
     let value = initial; const read = () => value;
-    read.set = next => { value = next; }; read.update = fn => { value = fn(value); }; return read;
+    read.set = next => { guard(); value = next; }; read.update = fn => { guard(); value = fn(value); }; return read;
   };
+  const untracked = fn => { untrackedDepth++; try { return fn(); } finally { untrackedDepth--; } };
+  const inEffect = fn => { effectDepth++; try { return fn(); } finally { effectDepth--; } };
   const routing = { Router: 'router' };
   for (const name of ['NavigationStart', 'NavigationEnd', 'NavigationCancel', 'NavigationError', 'NavigationSkipped']) {
     routing[name] = class { constructor(id, url, urlAfterRedirects = url) { Object.assign(this, { id, url, urlAfterRedirects }); } };
   }
   const mocks = {
-    '@angular/core': { Injectable: () => value => value, inject: key => key === 'router' ? router : navigation, signal, computed: fn => fn },
+    '@angular/core': { Injectable: () => value => value, inject: key => key === 'router' ? router : navigation, signal, computed: fn => fn, untracked },
     '@angular/router': routing, '@angular/common/http': {}, rxjs: rx,
     './navigation-loading.service': { NavigationLoadingService: 'navigation' },
   };
@@ -31,7 +36,7 @@ function environment() {
     return module.exports;
   }
   const navigation = new (load('navigation-loading.service').NavigationLoadingService)();
-  return { navigation, router, load, emit: (kind, id, url, destination) => events.next(new routing[kind](id, url, destination)),
+  return { navigation, router, load, inEffect, emit: (kind, id, url, destination) => events.next(new routing[kind](id, url, destination)),
     tick: () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(fn => fn()); } };
 }
 
@@ -91,4 +96,14 @@ test('the HTTP interceptor finishes tracked reads on success, failure and unsubs
     e.emit('NavigationEnd', 3, '/expenses'); e.tick(); assert.equal(n.loading(), true);
     if (fails) pending.error({ status: 500 }); else pending.complete(); assert.equal(n.loading(), false);
   }
+});
+
+test('pages can start and cancel initial reads from inside an effect', () => {
+  const e = environment(), n = e.navigation;
+  e.emit('NavigationStart', 1, '/banks');
+  e.emit('NavigationEnd', 1, '/banks');
+  const complete = e.inEffect(() => n.trackRead());
+  assert.equal(n.loading(), true);
+  e.inEffect(() => complete());
+  assert.equal(n.loading(), false);
 });

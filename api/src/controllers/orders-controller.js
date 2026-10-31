@@ -22,20 +22,10 @@ function buildOrderPreviewUrl(orderId) {
   return `${appBaseUrl.replace(/\/+$/, '')}/orders/${encodeURIComponent(orderId)}`;
 }
 
-function hasRoleCode(user, roleCodes = [], membershipRole = '') {
+// Roles belong to one organization, so only the member's role there decides who is notified.
+function hasRoleCode(roleCodes = [], membershipRole = '') {
   const allowed = roleCodes.map((value) => String(value || '').toLowerCase());
-  const primaryRole = String(user?.role || '').toLowerCase();
-  if (primaryRole && allowed.includes(primaryRole)) {
-    return true;
-  }
-  const orgMembershipRole = String(membershipRole || '').toLowerCase();
-  if (orgMembershipRole && allowed.includes(orgMembershipRole)) {
-    return true;
-  }
-  const memberships = Array.isArray(user?.roles) ? user.roles : [];
-  return memberships.some((role) =>
-    allowed.includes(String(role?.code || '').toLowerCase())
-  );
+  return allowed.includes(String(membershipRole || '').toLowerCase());
 }
 
 async function notifyOrderCreated(models, order) {
@@ -54,44 +44,17 @@ async function notifyOrderCreated(models, order) {
       where: { isActive: true },
       attributes: ['role', 'isActive'],
     },
-    include: [
-      {
-        model: models.Role,
-        as: 'roles',
-        through: { attributes: [] },
-        required: false,
-      },
-    ],
-  });
-
-  // Some legacy/current records are scoped only by users.organizationId and may not exist in organization_users.
-  // Include them so notifications still reach eligible roles.
-  const primaryUsers = await models.User.findAll({
-    where: {
-      organizationId: order.organizationId,
-      isActive: true,
-    },
-    attributes: ['id', 'email', 'firstName', 'lastName', 'role', 'isActive'],
-    include: [
-      {
-        model: models.Role,
-        as: 'roles',
-        through: { attributes: [] },
-        required: false,
-      },
-    ],
   });
 
   const recipients = [];
   const seenEmails = new Set();
-  const candidates = [...(orgUsers || []), ...(primaryUsers || [])];
-  for (const user of candidates) {
+  for (const user of orgUsers || []) {
     const email = String(user?.email || '').toLowerCase().trim();
     if (!user?.isActive || !email || seenEmails.has(email)) {
       continue;
     }
     const membershipRole = String(user?.OrganizationUser?.role || '').toLowerCase();
-    if (!hasRoleCode(user, ['administrator', 'inventorymanager', 'inventory_manager'], membershipRole)) {
+    if (!hasRoleCode(['administrator', 'inventorymanager'], membershipRole)) {
       continue;
     }
     seenEmails.add(email);

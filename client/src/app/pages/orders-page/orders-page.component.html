@@ -26,9 +26,9 @@
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input type="text" class="ui-form-control pl-12" [class.pr-12]="searchQuery" [disabled]="boardBusy" placeholder="Order #, customer, PO reference..." [ngModel]="searchQuery" (ngModelChange)="onSearchChange($event)" name="orderSearch" />
-          <button *ngIf="searchQuery" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onSearchChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+          <button *ngIf="searchQuery" class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="onSearchChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
         </div>
       </div>
       <div class="col-span-6 md:col-span-2">
@@ -96,15 +96,15 @@
       <span *ngIf="queueFilter" class="ui-badge rounded-full border font-normal">{{ stateLabel(queueFilter) | titlecase }}</span>
       <span *ngIf="searchQuery.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i> "{{ searchQuery.trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onSearchChange('')" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="onSearchChange('')" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-tag text-xs text-muted"></i> {{ orderStatusLabel(statusFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="statusFilter=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="statusFilter=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="paymentFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-credit-card text-xs text-muted"></i> {{ orderPaymentLabel(paymentFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="paymentFilter=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="paymentFilter=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
     </div>
 

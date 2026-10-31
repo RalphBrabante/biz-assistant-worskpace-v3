@@ -70,7 +70,7 @@
           <input
             type="text"
             class="ui-form-control"
-            placeholder="Search by name or email"
+            [placeholder]="isSuperuser ? 'Search by name or email' : 'Enter their exact email'"
             [(ngModel)]="userSearchQuery"
             name="userSearchQuery"
             (keyup.enter)="searchUsers()"

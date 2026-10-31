@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal, untracked } from '@angular/core';
 import { NavigationCancel, NavigationEnd, NavigationError, NavigationSkipped, NavigationStart, Router } from '@angular/router';
 
 /** Tracks navigation and the new page's initial reads, independently of the menu. */
@@ -47,11 +47,12 @@ export class NavigationLoadingService {
     if (!this.captureReads) return () => {};
     const id = this.navigationId;
     let completed = false;
-    this.pendingReads.update(count => count + 1);
+    // Pages may start or cancel reads inside an effect, where Angular forbids signal writes.
+    untracked(() => this.pendingReads.update(count => count + 1));
     return () => {
       if (completed) return;
       completed = true;
-      if (id === this.navigationId) this.pendingReads.update(count => Math.max(0, count - 1));
+      if (id === this.navigationId) untracked(() => this.pendingReads.update(count => Math.max(0, count - 1)));
     };
   }
 }

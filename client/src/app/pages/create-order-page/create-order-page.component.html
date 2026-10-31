@@ -32,7 +32,7 @@
         <label class="ui-form-label">Customer <span class="text-danger">*</span></label>
         <div class="relative">
           <div class="relative">
-            <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+            <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             <input
               class="ui-form-control pl-12"
               [class.pr-12]="customerSearchQuery"
@@ -45,8 +45,8 @@
             />
             <button
               *ngIf="customerSearchQuery"
-              class="ui-btn absolute p-0 border-0 bg-transparent text-muted"
-              style="right:0.75rem;top:50%;transform:translateY(-50%);"
+              class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2"
+             
               type="button"
               (click)="clearCustomer()"
             >
@@ -56,7 +56,7 @@
 
           <!-- Dropdown results -->
           <div *ngIf="customerDropdownOpen || (!searchingCustomers && customerSearchQuery.trim().length >= 1 && customerResults.length === 0 && !selectedCustomer)"
-            class="absolute w-full bg-surface border rounded-lg shadow-dialog mt-1 overflow-auto" style="z-index:1060;max-height:280px;">
+            class="absolute w-full bg-surface border rounded-lg shadow-dialog mt-1 overflow-auto z-[1060] max-h-[280px]">
             <button
               *ngFor="let customer of customerResults; trackBy: trackByCustomerId"
               class="ui-btn ui-btn-link text-left no-underline block w-full px-4 py-2 border-0"
@@ -89,7 +89,7 @@
           </div>
 
           <!-- Searching indicator -->
-          <div *ngIf="searchingCustomers" class="absolute w-full bg-surface border rounded-lg shadow-panel mt-1 px-4 py-2 text-muted text-xs" style="z-index:1060;">
+          <div *ngIf="searchingCustomers" class="absolute w-full bg-surface border rounded-lg shadow-panel mt-1 px-4 py-2 text-muted text-xs z-[1060]">
             <span class="ui-spinner-border ui-spinner-border-sm mr-1" role="status"></span> Searching...
           </div>
         </div>
@@ -101,7 +101,7 @@
             <span class="font-semibold">{{ selectedCustomer.name }}</span>
             <span class="text-muted ml-2">TIN: {{ selectedCustomer.taxId || '-' }}</span>
           </div>
-          <button type="button" class="ui-btn-close" style="font-size:0.6rem;" (click)="clearCustomer()" aria-label="Remove customer"></button>
+          <button type="button" class="ui-btn-close text-[0.6rem]" (click)="clearCustomer()" aria-label="Remove customer"></button>
         </div>
       </div>
 
@@ -250,9 +250,9 @@
               <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" (click)="decrease(row.item.id)">-</button>
               <input
                 type="number"
-                class="ui-form-control ui-form-control-sm text-center"
+                class="ui-form-control ui-form-control-sm text-center max-w-[90px]"
                 [class.is-invalid]="exceedsStock(row)"
-                style="max-width: 90px"
+               
                 min="1"
                 step="1"
                 [max]="row.item.type === 'product' ? maxStock(row.item) : null"
@@ -311,7 +311,7 @@
   </div>
 </div>
 
-<div class="fixed bottom-0 right-0 p-4 md:p-6 no-print" style="z-index: 1045;">
+<div class="fixed bottom-0 right-0 p-4 md:p-6 no-print z-[1045]">
   <button
     class="ui-btn ui-btn-primary ui-btn-lg rounded-full shadow-panel inline-flex items-center gap-2"
     type="button"
@@ -325,9 +325,9 @@
 </div>
 
 <!-- Create Customer Modal -->
-<div class="ui-modal-backdrop fade show" *ngIf="isCustomerCreateModalOpen"></div>
+<div class="ui-modal-backdrop" *ngIf="isCustomerCreateModalOpen"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCustomerCreateModalOpen ? 'block' : 'none'"
   *ngIf="isCustomerCreateModalOpen"
@@ -343,7 +343,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="customerCreateError" class="ui-alert ui-alert-danger py-2 mb-4">{{ customerCreateError }}</div>
-        <div class="ui-grid grid grid-cols-12 gap-4" [class.pe-none]="creatingCustomer" [class.opacity-50]="creatingCustomer">
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pointer-events-none]="creatingCustomer" [class.opacity-50]="creatingCustomer">
           <div class="col-span-12 md:col-span-6">
             <label class="ui-form-label font-semibold">Name <span class="text-danger">*</span></label>
             <input class="ui-form-control" [(ngModel)]="newCustomer['name']" placeholder="Customer name" />

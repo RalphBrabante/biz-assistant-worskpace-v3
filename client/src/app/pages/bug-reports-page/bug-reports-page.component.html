@@ -39,8 +39,8 @@
 </div>
 <p class="mt-4 text-xs text-muted"><i class="bi bi-shield-lock mr-1" aria-hidden="true"></i>Only superusers and administrators can view this board.</p>
 
-<div *ngIf="columnModalOpen" class="ui-modal-backdrop fade show" (click)="closeColumnModal()"></div>
-<div *ngIf="columnModalOpen" appModal class="ui-modal fade show" tabindex="-1" aria-labelledby="add-column-title">
+<div *ngIf="columnModalOpen" class="ui-modal-backdrop" (click)="closeColumnModal()"></div>
+<div *ngIf="columnModalOpen" appModal class="ui-modal" tabindex="-1" aria-labelledby="add-column-title">
   <div class="ui-modal-dialog ui-modal-dialog-centered"><div class="ui-modal-content">
     <div class="ui-modal-header"><h2 id="add-column-title" class="ui-modal-title">Add status column</h2><button type="button" class="ui-btn-close" [disabled]="creatingColumn" (click)="closeColumnModal()" aria-label="Close add column"></button></div>
     <form (ngSubmit)="createColumn()" #columnForm="ngForm">
@@ -52,8 +52,8 @@
   </div></div>
 </div>
 
-<div *ngIf="selected" class="ui-modal-backdrop fade show" (click)="close()"></div>
-<div *ngIf="selected as report" appModal class="ui-modal fade show" tabindex="-1" aria-labelledby="review-bug-title" [attr.aria-busy]="saving">
+<div *ngIf="selected" class="ui-modal-backdrop" (click)="close()"></div>
+<div *ngIf="selected as report" appModal class="ui-modal" tabindex="-1" aria-labelledby="review-bug-title" [attr.aria-busy]="saving">
   <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable"><div class="ui-modal-content">
     <div class="ui-modal-header"><h2 id="review-bug-title" class="ui-modal-title">{{ reportKey(report) }}</h2><button type="button" class="ui-btn-close" aria-label="Close report" [disabled]="saving" (click)="close()"></button></div>
     <div class="ui-modal-body space-y-4">

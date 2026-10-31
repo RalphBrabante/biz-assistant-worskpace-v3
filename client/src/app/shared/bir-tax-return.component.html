@@ -74,6 +74,6 @@
       </ng-container>
     </div>
     <p class="text-xs text-muted mt-3" *ngIf="prep.individual && details['incomeTaxElection'] === 'eight_percent'">An eligible individual who elected 8% does not owe Section 116 percentage tax. Confirm the election and required income-tax filings.</p>
-    <iframe #pdfFrame *ngIf="preview() as url" [src]="url" title="Populated quarterly BIR return PDF" (load)="loaded.set(true)" class="w-full border rounded-lg mt-4" style="height: 780px"></iframe>
+    <iframe #pdfFrame *ngIf="preview() as url" [src]="url" title="Populated quarterly BIR return PDF" (load)="loaded.set(true)" class="w-full border rounded-lg mt-4 h-[780px]"></iframe>
   </ng-container>
 </section>

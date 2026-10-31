@@ -2,9 +2,9 @@ import { ModalDirective } from '../shared/modal.directive';
 import { BugReportComponent } from '../shared/bug-report.component';
 import { ChatPanelComponent } from '../shared/chat-panel.component';
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, ViewChild, HostListener, computed, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild, HostListener, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { EMPTY, Subscription, expand, reduce } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
@@ -42,10 +42,11 @@ interface BeforeInstallPromptEvent extends Event {
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.css',
 })
-export class AppShellComponent {
+export class AppShellComponent implements AfterViewInit {
   private readonly api = inject(ApiService);
   private readonly messages = inject(OrganizationMessagesService);
   private messageReadSub?: Subscription;
+  private navigationEndSub?: Subscription;
   private notificationListSub?: Subscription;
   private unreadCountSub?: Subscription;
   readonly pendingNotificationReadIds = new Set<string>();
@@ -94,7 +95,8 @@ export class AppShellComponent {
         { label: 'Bug reports', path: '/bug-reports', icon: 'bi-bug', adminOnly: true },
         { label: 'Organizations', path: '/organizations', icon: 'bi-buildings', permissions: ['organizations.read'] },
         { label: 'Users', path: '/users', icon: 'bi-people', permissions: ['users.read'] },
-        { label: 'Roles', path: '/roles', icon: 'bi-shield-check', permissions: ['roles.manage'] },
+        { label: 'Roles', path: '/organization-roles', icon: 'bi-shield-check', adminOnly: true },
+        { label: 'Role templates', path: '/roles', icon: 'bi-files', permissions: ['roles.manage'], superuserOnly: true },
         { label: 'Permissions', path: '/permissions', icon: 'bi-key', permissions: ['permissions.manage'] },
         { label: 'Licenses', path: '/licenses', icon: 'bi-patch-check', permissions: ['licenses.read'] },
         { label: 'Settings', path: '/settings', icon: 'bi-sliders', permissions: ['settings.update'], superuserOnly: true },
@@ -237,6 +239,19 @@ export class AppShellComponent {
     this.mobileMenuButton?.nativeElement.focus();
   }
 
+  // Scrolls only the sidebar's own list so a long menu never hides the current page.
+  private revealActiveNavItem(): void {
+    requestAnimationFrame(() => {
+      const nav = this.sidebarPanel?.nativeElement.querySelector<HTMLElement>('.sidebar-nav');
+      const link = nav?.querySelector<HTMLElement>('.ui-nav-link.active');
+      if (!nav || !link) return;
+      const navBox = nav.getBoundingClientRect();
+      const linkBox = link.getBoundingClientRect();
+      if (linkBox.top < navBox.top) nav.scrollTop -= navBox.top - linkBox.top + 8;
+      else if (linkBox.bottom > navBox.bottom) nav.scrollTop += linkBox.bottom - navBox.bottom + 8;
+    });
+  }
+
   closeSidebarAfterNav(): void {
     this.sidebarOpen = false;
   }
@@ -289,6 +304,13 @@ export class AppShellComponent {
     return this.organizationContext.ALL_ORGANIZATIONS;
   }
 
+  ngAfterViewInit(): void {
+    this.revealActiveNavItem();
+    this.navigationEndSub = this.router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) this.revealActiveNavItem();
+    });
+  }
+
   ngOnInit(): void {
     this.messageReadSub = this.messages.readChanges$.subscribe((change) => {
       const activeId = this.organizationContext.getActiveOrganizationId();
@@ -324,6 +346,7 @@ export class AppShellComponent {
 
   ngOnDestroy(): void {
     this.closeNotifications();
+    this.navigationEndSub?.unsubscribe();
     this.messageReadSub?.unsubscribe();
     this.notificationListSub?.unsubscribe();
     this.unreadCountSub?.unsubscribe();

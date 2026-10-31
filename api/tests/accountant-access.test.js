@@ -4,6 +4,8 @@ const {effectiveRoleAccess,resolveTokenOrganizationId}=require('../src/services/
 const {ACCOUNTANT_PERMISSIONS}=require('../src/services/accountant-access');
 const {authorize}=require('../src/middleware/authz');
 const {assertOrganizationAccess,applyOrganizationWhereScope}=require('../src/services/request-scope');
+const {addOrganizationRoleFakes}=require('./helpers/organization-role-fakes');
+const {ensureOrganizationRoles}=require('../src/services/organization-role-service');
 function load(file,models,overrides={}) {
  const filename=require.resolve(file),real=createRequire(filename),module={exports:{}};
  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{module,exports:module.exports,console,process,Date,require(name){return name==='../sequelize'?{getModels:()=>models}:overrides[name]||real(name);}});
@@ -13,20 +15,35 @@ function response(){return {statusCode:200,status(n){this.statusCode=n;return th
 function fixture(){
  const user={id:'person',organizationId:'a',isActive:true,status:'active',isEmailVerified:true,email:'accountant@example.test',firstName:'A',lastName:'Person',password:'test',roles:[],async update(p){Object.assign(this,p);},toJSON(){return {...this};}};
  const memberships=[{id:'a-member',userId:user.id,organizationId:'a',role:'administrator',isActive:true,isPrimary:true},{id:'b-member',userId:user.id,organizationId:'b',role:'accountant',isActive:true,isPrimary:false}];
+ // Global rows keep their old write grants: they must not reach any organization.
  const roles=[{role:{code:'administrator',permissions:[{code:'expenses.update'},{code:'banks.read'}]}},{role:{code:'accountant',permissions:[{code:'expenses.delete'},{code:'reports.delete'}]}}];
+ const organizationRoles={a:[{role:{presetCode:'administrator',code:'administrator',permissions:[{code:'expenses.update'},{code:'banks.read'}]}}],b:[{role:{presetCode:'accountant',code:'accountant',permissions:[{code:'expenses.delete'},{code:'reports.delete'}]}}]};
  const licenses=[],tokens=[],token={id:'token',expiresAt:new Date(Date.now()+60000),metadata:{organizationId:'b'},user};
- const models={Role:{findOne:async({where})=>roles.find(a=>a.role.code===where.code)?.role},Permission:{},User:{findByPk:async()=>user,findOne:async()=>user},UserRole:{findAll:async()=>roles},OrganizationUser:{findOne:async({where})=>memberships.find(m=>(!where.organizationId||m.organizationId===where.organizationId)&&(where.isActive===undefined||m.isActive===where.isActive)&&(where.isPrimary===undefined||m.isPrimary===where.isPrimary)),findAll:async()=>memberships.filter(m=>m.isActive)},OrganizationUserRole:{findAll:async()=>[]},OrganizationRole:{},Token:{findOne:async(options)=>{assert.equal(options.where.type,'access');return token;},create:async(p)=>tokens.push(p)},License:{findOne:async({where})=>{licenses.push(where.organizationId);return {};},findAll:async()=>[{organizationId:'a'},{organizationId:'b'}]},Organization:{findAll:async()=>[{id:'a',name:'Alpha'},{id:'b',name:'Beta'}],findByPk:async id=>({id,isActive:true})},InvalidLoginAttempt:{findOne:async()=>null,destroy:async()=>{}}};
- return {models,user,memberships,roles,licenses,tokens,token};
+ const models={Role:{findOne:async({where})=>roles.find(a=>a.role.code===where.code)?.role},Permission:{},User:{findByPk:async()=>user,findOne:async()=>user},UserRole:{findAll:async()=>roles},OrganizationUser:{findOne:async({where})=>memberships.find(m=>(!where.organizationId||m.organizationId===where.organizationId)&&(where.isActive===undefined||m.isActive===where.isActive)&&(where.isPrimary===undefined||m.isPrimary===where.isPrimary)),findAll:async()=>memberships.filter(m=>m.isActive)},OrganizationUserRole:{findAll:async({where})=>organizationRoles[where.organizationId]||[]},OrganizationRole:{},Token:{findOne:async(options)=>{assert.equal(options.where.type,'access');return token;},create:async(p)=>tokens.push(p)},License:{findOne:async({where})=>{licenses.push(where.organizationId);return {};},findAll:async()=>[{organizationId:'a'},{organizationId:'b'}]},Organization:{findAll:async()=>[{id:'a',name:'Alpha'},{id:'b',name:'Beta'}],findByPk:async id=>({id,isActive:true})},InvalidLoginAttempt:{findOne:async()=>null,destroy:async()=>{}}};
+ return {models,user,memberships,roles,organizationRoles,licenses,tokens,token};
 }
 test('selected accountant membership caps global write grants and administrator rights from another organization',async()=>{
  const f=fixture(),access=await effectiveRoleAccess(f.models,f.user,'b');
  assert.deepEqual(access.roleCodes,['accountant']);assert.deepEqual([...access.permissions].sort(),[...ACCOUNTANT_PERMISSIONS].sort());
  assert.deepEqual((await effectiveRoleAccess(f.models,f.user,'a')).roleCodes,['administrator']);assert.equal((await effectiveRoleAccess(f.models,f.user,'c')).permissions.size,0);
 });
-test('legacy global accountant has read-only primary access and no access through ordinary membership elsewhere',async()=>{
- const f=fixture();f.roles.splice(0,1);f.memberships.splice(0,1);
+test('a global accountant row grants nothing by itself; the organization assignment grants the capped preset',async()=>{
+ const f=fixture();f.roles.splice(0,1);f.memberships.splice(0,1);delete f.organizationRoles.a;
+ assert.equal((await effectiveRoleAccess(f.models,f.user,'a')).permissions.size,0);
+ f.organizationRoles.a=[{role:{presetCode:'accountant',code:'accountant',permissions:[{code:'expenses.delete'}]}}];
  assert.deepEqual([...(await effectiveRoleAccess(f.models,f.user,'a')).permissions].sort(),[...ACCOUNTANT_PERMISSIONS].sort());
  f.memberships.push({organizationId:'c',role:'member',isActive:true});assert.equal((await effectiveRoleAccess(f.models,f.user,'c')).permissions.size,0);
+});
+test('holding the accountant role caps a member who also holds roles with write grants',async()=>{
+ const f=fixture();f.organizationRoles.b.push({role:{presetCode:'enduser',code:'enduser',permissions:[{code:'orders.create'}]}},{role:{code:'approver',permissions:[{code:'expenses.approve'}]}});
+ const access=await effectiveRoleAccess(f.models,f.user,'b');assert.deepEqual(access.roleCodes,['accountant']);assert.deepEqual([...access.permissions].sort(),[...ACCOUNTANT_PERMISSIONS].sort());
+});
+test('two organizations can give the same system role different permissions',async()=>{
+ const f=fixture();f.roles.length=0;f.memberships[0].role='enduser';f.memberships[1].role='enduser';
+ f.organizationRoles.a=[{role:{presetCode:'enduser',code:'enduser',permissions:[{code:'orders.read'}]}}];
+ f.organizationRoles.b=[{role:{presetCode:'enduser',code:'enduser',permissions:[{code:'expenses.read'},{code:'items.read'}]}}];
+ assert.deepEqual([...(await effectiveRoleAccess(f.models,f.user,'a')).permissions],['orders.read']);
+ assert.deepEqual([...(await effectiveRoleAccess(f.models,f.user,'b')).permissions].sort(),['expenses.read','items.read']);
 });
 test('session enforces selected license, allowed reads/report generation, and denies all writes and unrelated modules',async()=>{
  const f=fixture(),{authenticateRequest}=load('../src/middleware/authz',f.models),req={method:'GET',path:'/expenses',get:()=> 'Bearer test'},res=response();let proceeded=false;
@@ -66,14 +83,16 @@ function invitationFixture(existingUser=false){
   UserRole:{findOrCreate:async()=>assert.fail('Accountant invitation must not assign global roles')},
   Token:{create:async(p,options)=>{assert.equal(options.transaction,transaction);tokens.push(p);},update:async()=>assert.fail('Do not invalidate existing password-reset requests')},
  };
+ const roleTables=addOrganizationRoleFakes(models);
  const controller=load('../src/controllers/organizations-controller',models,{'../services/email-service':{sendOrganizationUserInviteEmail:async payload=>sent.push(payload)}});
  const req={auth:{roleCodes:['administrator'],userId:'admin',user:{organizationId:'b'}},params:{id:'b'},body:{email:' ACCOUNTANT@example.test ',firstName:'A',lastName:'Person'},get:()=>'',ip:'127.0.0.1'};
- return {controller,req,sent,tokens,memberships,updates,models,get user(){return user;}};
+ return {controller,req,sent,tokens,memberships,updates,models,roleTables,get user(){return user;}};
 }
 test('email invitation creates an unverified account and an organization-only accountant membership with a hashed expiring setup token',async()=>{
  const f=invitationFixture(),res=response();await f.controller.inviteAccountant(f.req,res);assert.equal(res.statusCode,201);
  assert.equal(f.user.status,'invited');assert.equal(f.user.role,'member');assert.equal(f.user.isEmailVerified,false);assert.equal(f.user.email,'accountant@example.test');
  assert.equal(f.memberships[0].role,'accountant');assert.equal(f.memberships[0].organizationId,'b');assert.equal(f.memberships[0].isPrimary,true);
+ assert.deepEqual(f.roleTables.assignments.map(a=>[a.organizationId,a.roleId]),[['b','b:accountant']]);assert.equal(f.roleTables.audit.at(-1).action,'member.role_assigned');
  assert.equal(f.tokens[0].type,'reset_password');assert.equal(f.tokens[0].scope,'organization_invite');assert.equal(f.tokens[0].metadata.organizationId,'b');assert.ok(f.tokens[0].expiresAt > new Date());
  const raw=new URL(f.sent[0].setPasswordUrl).searchParams.get('token');assert.notEqual(raw,f.tokens[0].tokenHash);assert.equal(require('crypto').createHash('sha256').update(raw).digest('hex'),f.tokens[0].tokenHash);assert.equal(f.sent[0].loginUrl,undefined);
 });
@@ -103,9 +122,9 @@ test('removing membership revokes its access tokens and disconnects its sockets 
  f.models.OrganizationUser.update=async(payload,options)=>{assert.ok(options.transaction);Object.assign(f.memberships[0],payload);};
  let revoked=0,disconnected=0,deletedRoles=0;
  f.models.Token.findAll=async()=>[{metadata:{organizationId:'b'},update:async()=>revoked++},{metadata:{organizationId:'a'},update:async()=>assert.fail('Must preserve tokens for the other organization')}];
- f.models.OrganizationUserRole={destroy:async options=>{assert.equal(options.where.organizationId,'b');deletedRoles++;}};
+ f.models.OrganizationUserRole.destroy=async options=>{assert.equal(options.where.organizationId,'b');deletedRoles++;};
  const controller=load('../src/controllers/organizations-controller',f.models,{'../services/socket-service':{getSocketServer:()=>({in:()=>({fetchSockets:async()=>[{data:{auth:{organizationId:'b'}},disconnect:()=>disconnected++},{data:{auth:{organizationId:'a'}},disconnect:()=>assert.fail('Other organization socket must stay connected')}]})})}});
- const res=response();await controller.removeUserFromOrganization(f.req,res);assert.equal(res.statusCode,200);assert.equal(revoked,1);assert.equal(disconnected,1);assert.equal(deletedRoles,1);assert.equal(f.user.organizationId,'a');
+ const res=response();await controller.removeUserFromOrganization(f.req,res);assert.equal(res.statusCode,200);assert.equal(revoked,1);assert.equal(disconnected,1);assert.equal(deletedRoles,1);assert.equal(f.user.organizationId,'a');assert.equal(f.roleTables.audit.at(-1).action,'member.removed');
  assert.equal(f.memberships.length,1);assert.equal(f.memberships[0].isActive,false);assert.equal(f.memberships[0].isPrimary,false);
 });
 test('invitation emails preserve escaping and use the correct existing/new account action',()=>{
@@ -152,7 +171,7 @@ test('administrators and superusers can invite standard users to their authorize
 test('organization invitation rejects staff, other organizations, inactive roles and global superuser assignment',async()=>{
  for(const variant of ['staff','other-organization','superuser-role','inactive-role']){
   const f=invitationFixture(true),res=response();f.req.body.roleId='enduser-role';
-  if(variant==='staff')f.req.auth.roleCodes=['enduser'];if(variant==='other-organization')f.req.auth.user.organizationId='a';if(variant==='superuser-role')f.req.body.roleId='super-role';if(variant==='inactive-role')f.models.Role.findByPk=async()=>({code:'enduser',isActive:false});
+  if(variant==='staff')f.req.auth.roleCodes=['enduser'];if(variant==='other-organization')f.req.auth.user.organizationId='a';if(variant==='superuser-role')f.req.body.roleId='super-role';if(variant==='inactive-role'){const catalogue=await ensureOrganizationRoles(f.models,'b');catalogue.get('enduser').isActive=false;}
   await f.controller.inviteOrganizationUser(f.req,res);assert.equal(res.statusCode,variant==='staff'?403:variant==='other-organization'?404:400,variant);assert.equal(f.memberships.length,0);assert.equal(f.sent.length,0);
  }
 });
@@ -170,12 +189,12 @@ test('new user completes the invitation password setup and becomes verified and 
  assert.equal(res.statusCode,200);assert.equal(f.user.isEmailVerified,true);assert.equal(f.user.status,'active');assert.equal(f.user.organizationId,'b');assert.equal(consumed,true);
 });
 test('organization administrator preset is scoped to the selected membership and grants no inherited access elsewhere',async()=>{
- const f=fixture();f.roles.length=0;f.memberships[1].role='administrator';f.models.Role.findOne=async()=>({code:'administrator',permissions:[{code:'organizations.update'}]});
+ const f=fixture();f.roles.length=0;f.memberships[1].role='administrator';f.organizationRoles.b=[{role:{presetCode:'administrator',code:'administrator',permissions:[{code:'organizations.update'}]}}];
  const b=await effectiveRoleAccess(f.models,f.user,'b');assert.deepEqual(b.roleCodes,['administrator']);assert.ok(b.permissions.has('organizations.update'));
  assert.equal((await effectiveRoleAccess(f.models,f.user,'c')).permissions.size,0);
 });
 test('standard membership cannot inherit global administrator rights from another organization',async()=>{
- const f=fixture();f.memberships[1].role='enduser';f.models.Role.findOne=async()=>({code:'enduser',permissions:[{code:'orders.read'}]});
+ const f=fixture();f.memberships[1].role='enduser';f.organizationRoles.b=[{role:{presetCode:'enduser',code:'enduser',permissions:[{code:'orders.read'}]}}];
  const b=await effectiveRoleAccess(f.models,f.user,'b');assert.deepEqual(b.roleCodes,['enduser']);assert.deepEqual([...b.permissions],['orders.read']);assert.ok(!(b.roleCodes.includes('administrator')));
 });
 test('removing the last primary membership clears the legacy organization fallback in the same transaction',async()=>{

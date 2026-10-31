@@ -21,7 +21,7 @@
           >
             <i class="bi bi-three-dots-vertical"></i>
           </button>
-          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+          <ul class="ui-dropdown-menu shadow-panel">
             <li>
               <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading()">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -60,7 +60,7 @@
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input
             type="text"
             class="ui-form-control pl-12"
@@ -71,8 +71,8 @@
           />
           <button
             *ngIf="searchQuery"
-            class="ui-btn absolute p-0 border-0 bg-transparent text-muted"
-            style="right:0.75rem;top:50%;transform:translateY(-50%);"
+            class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2"
+           
             type="button"
             (click)="searchQuery=''; onFilterChange()"
             title="Clear search"
@@ -235,25 +235,25 @@
       <span *ngIf="searchQuery.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i>
         "{{ searchQuery.trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="searchQuery=''; onFilterChange()" aria-label="Remove search filter"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="searchQuery=''; onFilterChange()" aria-label="Remove search filter"></button>
       </span>
 
       <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-tag text-xs text-muted"></i>
         {{ invoiceStatusLabel(statusFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="statusFilter=''; onFilterChange()" aria-label="Remove status filter"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="statusFilter=''; onFilterChange()" aria-label="Remove status filter"></button>
       </span>
 
       <span *ngIf="paymentStatusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-credit-card text-xs text-muted"></i>
         {{ paymentStatusLabel(paymentStatusFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="paymentStatusFilter=''; onFilterChange()" aria-label="Remove payment filter"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="paymentStatusFilter=''; onFilterChange()" aria-label="Remove payment filter"></button>
       </span>
 
       <span *ngIf="issueDateFrom || issueDateTo" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-calendar3 text-xs text-muted"></i>
         {{ issueDateFrom || '…' }} → {{ issueDateTo || '…' }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="issueDateFrom=''; issueDateTo=''; onFilterChange()" aria-label="Remove date filter"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="issueDateFrom=''; issueDateTo=''; onFilterChange()" aria-label="Remove date filter"></button>
       </span>
     </div>
 
@@ -319,7 +319,7 @@
               <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Invoice actions">
                 <i class="bi bi-three-dots-vertical"></i>
               </button>
-              <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+              <ul class="ui-dropdown-menu shadow-panel">
                 <li>
                   <a class="ui-dropdown-item flex items-center gap-2" [routerLink]="['/sales-invoices', row.id]">
                     <i class="bi bi-eye"></i> View Details
@@ -342,8 +342,8 @@
           <td>
             <span class="inline-flex items-center gap-1">
               {{ customerName(row) }}
-              <i *ngIf="row.order?.customer" class="bi bi-info-circle text-muted text-xs opacity-50"
-                style="cursor:pointer;"
+              <i *ngIf="row.order?.customer" class="bi bi-info-circle text-muted text-xs opacity-50 cursor-pointer"
+               
                 (mouseenter)="showCustomerPopover($event, row)"
                 (mouseleave)="hideCustomerPopover()"></i>
             </span>
@@ -387,9 +387,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -405,7 +405,7 @@
         <div *ngIf="submitting()" class="modal-loading-overlay">
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createInvoiceForm" (ngSubmit)="createInvoice()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createInvoiceForm" (ngSubmit)="createInvoice()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Organization</label>
             <input class="ui-form-control" [value]="currentOrganizationId || 'No organization on logged in user'" readonly />
@@ -597,9 +597,9 @@
 </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isImportModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isImportModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isImportModalOpen()"
@@ -648,7 +648,7 @@
       <i class="bi bi-receipt text-brand text-xs"></i>
       <span class="text-xs font-semibold uppercase tracking-wider text-muted">Tax Breakdown</span>
     </div>
-    <div class="ui-grid grid grid-cols-12 gap-1 text-xs" style="min-width: 300px;">
+    <div class="ui-grid grid grid-cols-12 gap-1 text-xs min-w-[300px]">
       <div class="col-span-7 text-muted">
         Gross Sales
         <span *ngIf="!isPercentageTaxRow(r)">(VAT-inclusive)</span>
@@ -702,7 +702,7 @@
       <i class="bi bi-person-vcard text-brand text-xs"></i>
       <span class="text-xs font-semibold uppercase tracking-wider text-muted">Customer Details</span>
     </div>
-    <div class="text-xs" style="min-width: 240px; max-width: 320px;">
+    <div class="text-xs min-w-[240px] max-w-[320px]">
       <div class="font-semibold mb-1">{{ c.name }}</div>
       <div *ngIf="c.contactPerson" class="text-muted mb-1"><i class="bi bi-person mr-1"></i>{{ c.contactPerson }}</div>
       <div *ngIf="c.phone" class="text-muted mb-1"><i class="bi bi-telephone mr-1"></i>{{ c.phone }}</div>

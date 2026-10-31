@@ -1,0 +1,331 @@
+<app-organization-required *ngIf="!organizationId" />
+
+<div [attr.inert]="organizationId ? null : ''" [class.opacity-50]="!organizationId">
+<section class="page-heading ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6 lg:p-12 role-hero">
+    <div class="flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Access Control</div>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">Roles</h1>
+        <p class="text-muted mb-0">These roles belong to this organization. Changes apply here only, and take effect immediately.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button class="ui-btn ui-btn-outline-dark" type="button" (click)="load()" [disabled]="loading">{{ loading ? 'Refreshing...' : 'Refresh' }}</button>
+        <button class="ui-btn ui-btn-primary" type="button" (click)="openCreate()"><i class="bi bi-plus-lg mr-1" aria-hidden="true"></i>Create Role</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ui-btn-group mb-4" role="group" aria-label="Roles or activity">
+  <button class="ui-btn ui-btn-sm" type="button" [class.active]="tab === 'roles'" (click)="setTab('roles')"><i class="bi bi-shield-check" aria-hidden="true"></i>Roles</button>
+  <button class="ui-btn ui-btn-sm" type="button" [class.active]="tab === 'activity'" (click)="setTab('activity')"><i class="bi bi-clock-history" aria-hidden="true"></i>Activity</button>
+</div>
+
+<ng-container *ngIf="tab === 'roles'">
+<section class="ui-card shadow-panel rounded-2xl mb-6">
+  <div class="ui-card-body p-6">
+    <!-- Row 1: Primary filters -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <div class="col-span-12 md:col-span-4">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="role-search">Search</label>
+        <div class="relative">
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true"></i>
+          <input id="role-search" type="text" class="ui-form-control pl-10" [class.pr-10]="searchQuery" placeholder="Name, code, description..." [(ngModel)]="searchQuery" (ngModelChange)="page = 1" />
+          <button *ngIf="searchQuery" class="absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="clearSearch()" aria-label="Clear search"><i class="bi bi-x-circle-fill" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="role-type">Type</label>
+        <select id="role-type" class="ui-form-select" [class.border-brand]="typeFilter" [(ngModel)]="typeFilter" (ngModelChange)="page = 1">
+          <option value="">All Types</option>
+          <option value="system">{{ typeLabel('system') }}</option>
+          <option value="custom">{{ typeLabel('custom') }}</option>
+        </select>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="role-status">Status</label>
+        <select id="role-status" class="ui-form-select" [class.border-brand]="statusFilter" [(ngModel)]="statusFilter" (ngModelChange)="page = 1">
+          <option value="">All Statuses</option>
+          <option value="active">{{ statusLabel('active') }}</option>
+          <option value="disabled">{{ statusLabel('disabled') }}</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Row 2: Secondary controls -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</span>
+          <select class="ui-form-select border-l-0" aria-label="Rows per page" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+            <option *ngFor="let option of pageSizeOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view"><i class="bi bi-table" aria-hidden="true"></i></button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view"><i class="bi bi-grid-3x2-gap" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-center justify-between md:justify-end gap-4">
+        <div class="text-xs text-muted leading-snug">
+          <span class="font-semibold text-ink">{{ filteredRows.length }}</span> roles &nbsp;&middot;&nbsp;
+          Page <span class="font-semibold text-ink">{{ page }}</span> / <span class="font-semibold text-ink">{{ totalPages }}</span>
+        </div>
+        <button class="ui-btn ui-btn-sm flex items-center gap-2" [class.ui-btn-outline-secondary]="!hasActiveFilters" [class.ui-btn-outline-danger]="hasActiveFilters" type="button" (click)="clearFilters()" [disabled]="!hasActiveFilters">
+          <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+          <span *ngIf="activeFilterCount > 0" class="ui-badge ui-badge-danger rounded-full leading-none">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active filter chips -->
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+      <span class="text-xs text-muted font-semibold mr-1">Active:</span>
+      <span *ngIf="searchQuery.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-search text-xs text-muted" aria-hidden="true"></i> "{{ searchQuery.trim() }}"
+        <button type="button" class="ui-btn-close ml-1" (click)="clearSearch()" aria-label="Remove filter"></button>
+      </span>
+      <span *ngIf="typeFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-tag text-xs text-muted" aria-hidden="true"></i> {{ typeLabel(typeFilter) }}
+        <button type="button" class="ui-btn-close ml-1" (click)="typeFilter = ''; page = 1" aria-label="Remove filter"></button>
+      </span>
+      <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-toggle-on text-xs text-muted" aria-hidden="true"></i> {{ statusLabel(statusFilter) }}
+        <button type="button" class="ui-btn-close ml-1" (click)="statusFilter = ''; page = 1" aria-label="Remove filter"></button>
+      </span>
+    </div>
+
+    <div *ngIf="message" class="ui-alert ui-alert-success mt-4 mb-0" role="status">{{ message }}</div>
+    <div *ngIf="error" class="ui-alert ui-alert-danger mt-4 mb-0" role="alert">{{ error }}</div>
+  </div>
+</section>
+
+<section class="ui-card shadow-panel rounded-xl overflow-hidden">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+    <table class="ui-table ui-table-hover align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr>
+          <th class="row-actions-cell" scope="col">Actions</th>
+          <th scope="col">Role</th>
+          <th scope="col">Type</th>
+          <th scope="col">Members</th>
+          <th scope="col">Permissions</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="loading && rows.length === 0">
+          <td colspan="6"><span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>Loading roles...</td>
+        </tr>
+        <tr *ngIf="!loading && filteredRows.length === 0">
+          <td colspan="6">{{ hasActiveFilters ? 'No roles match your filters.' : 'No roles yet.' }}</td>
+        </tr>
+        <tr *ngFor="let row of pagedRows; trackBy: trackById">
+          <td class="row-actions-cell card-actions-cell"><app-row-actions [label]="'Actions for ' + row.name">
+            <button type="button" class="ui-dropdown-item" (click)="openEdit(row)"><i class="bi bi-pencil" aria-hidden="true"></i>{{ row.permissionsLocked ? 'View' : 'Edit' }}</button>
+            <button type="button" class="ui-dropdown-item" (click)="openMembers(row)"><i class="bi bi-people" aria-hidden="true"></i>Members</button>
+            <button type="button" class="ui-dropdown-item" (click)="openCopy(row)"><i class="bi bi-copy" aria-hidden="true"></i>Copy</button>
+            <button *ngIf="row.canReset" type="button" class="ui-dropdown-item" (click)="resetRole(row)"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Reset to defaults</button>
+            <button *ngIf="!row.isSystem" type="button" class="ui-dropdown-item" (click)="toggleActive(row)"><i class="bi" [ngClass]="row.isActive ? 'bi-slash-circle' : 'bi-check-circle'" aria-hidden="true"></i>{{ row.isActive ? 'Disable' : 'Enable' }}</button>
+            <button *ngIf="!row.isSystem" type="button" class="ui-dropdown-item text-danger" [disabled]="row.memberCount > 0" [title]="row.memberCount > 0 ? 'Remove its members first' : ''" (click)="deleteRole(row)"><i class="bi bi-trash" aria-hidden="true"></i>Delete</button>
+          </app-row-actions></td>
+          <td data-label="Role">
+            <div class="font-semibold">{{ row.name }}</div>
+            <div *ngIf="row.description" class="text-xs text-muted">{{ row.description }}</div>
+          </td>
+          <td data-label="Type"><span class="ui-badge" [ngClass]="row.isSystem ? 'ui-badge-primary' : 'ui-badge-secondary'">{{ row.isSystem ? typeLabel('system') : typeLabel('custom') }}</span></td>
+          <td data-label="Members">{{ row.memberCount }}</td>
+          <td data-label="Permissions">
+            <span *ngIf="row.presetCode === 'administrator'">Full access</span>
+            <span *ngIf="row.presetCode === 'accountant'">Read-only (fixed)</span>
+            <span *ngIf="!row.permissionsLocked">{{ row.permissions.length }}</span>
+          </td>
+          <td data-label="Status"><span class="ui-badge" [ngClass]="row.isActive ? 'ui-badge-success' : 'ui-badge-secondary'">{{ row.isActive ? statusLabel('active') : statusLabel('disabled') }}</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div *ngIf="totalPages > 1" class="flex justify-end gap-2 p-4 border-t">
+    <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" [disabled]="page <= 1" (click)="page = page - 1">Previous</button>
+    <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" [disabled]="page >= totalPages" (click)="page = page + 1">Next</button>
+  </div>
+</section>
+</ng-container>
+
+<section *ngIf="tab === 'activity'" class="ui-card shadow-panel rounded-xl overflow-hidden">
+  <div class="p-5 border-b">
+    <h2 class="text-base font-semibold mb-1">Role activity</h2>
+    <p class="text-xs text-muted mb-0">A permanent record of every role change in this organization.</p>
+  </div>
+  <div *ngIf="auditError" class="ui-alert ui-alert-danger m-4" role="alert">{{ auditError }}</div>
+  <div class="ui-table-responsive">
+    <table class="ui-table align-middle mb-0">
+      <thead class="ui-table-light">
+        <tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Role</th><th scope="col">Details</th></tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="auditLoading && audit.length === 0"><td colspan="5">Loading activity...</td></tr>
+        <tr *ngIf="!auditLoading && !auditError && audit.length === 0"><td colspan="5">No role changes recorded yet.</td></tr>
+        <tr *ngFor="let entry of audit; trackBy: trackById">
+          <td class="whitespace-nowrap text-xs">{{ entry.createdAt | date: 'medium' }}</td>
+          <td>{{ personName(entry.actor) }}</td>
+          <td>{{ actionLabel(entry) }}</td>
+          <td>{{ entry.roleName || '-' }}</td>
+          <td class="text-xs text-muted break-words">{{ auditSummary(entry) || '-' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex items-center justify-between gap-2 p-4 border-t">
+    <span class="text-xs text-muted"><span class="font-semibold text-ink">{{ auditTotal }}</span> changes &nbsp;&middot;&nbsp; Page {{ auditPage }} / {{ auditTotalPages }}</span>
+    <div class="flex gap-2">
+      <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" [disabled]="auditPage <= 1 || auditLoading" (click)="loadAudit(-1)">Previous</button>
+      <button class="ui-btn ui-btn-sm ui-btn-outline-secondary" type="button" [disabled]="auditPage >= auditTotalPages || auditLoading" (click)="loadAudit(1)">Next</button>
+    </div>
+  </div>
+</section>
+</div>
+
+<!-- Create or edit -->
+<div class="ui-modal-backdrop" *ngIf="editorOpen" (click)="closeEditor()"></div>
+<div appModal class="ui-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="role-editor-title" *ngIf="editorOpen">
+  <div class="ui-modal-dialog ui-modal-lg ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content">
+      <div class="ui-modal-header">
+        <h2 id="role-editor-title" class="ui-modal-title">{{ editor.id ? (editor.locked ? editor.name : 'Edit ' + editor.name) : 'Create role' }}</h2>
+        <button type="button" class="ui-btn-close" (click)="closeEditor()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Saving...</span></div>
+        </div>
+        <div *ngIf="editorError" class="ui-alert ui-alert-danger mb-4" role="alert">{{ editorError }}</div>
+        <div *ngIf="editor.lockedNote" class="ui-alert ui-alert-info mb-4" role="status">{{ editor.lockedNote }}</div>
+
+        <form id="role-editor-form" (ngSubmit)="saveEditor()" novalidate [class.pointer-events-none]="submitting" [class.opacity-50]="submitting">
+          <div class="ui-grid grid grid-cols-12 gap-4 mb-4">
+            <div class="col-span-12 md:col-span-6">
+              <label class="ui-form-label font-semibold" for="role-name">Name <span class="text-danger">*</span></label>
+              <div class="relative">
+                <input id="role-name" name="name" class="ui-form-control pr-10" [class.is-invalid]="touched.name && nameError()" [ngModel]="editor.name" (ngModelChange)="onNameChange($event)" (blur)="touched.name = true" maxlength="100" />
+                <div *ngIf="touched.name && nameError()" class="field-validation-icon" appTooltip [title]="nameError()"><i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i></div>
+              </div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+              <label class="ui-form-label font-semibold" for="role-code">Code <span class="text-danger">*</span></label>
+              <div class="relative">
+                <input id="role-code" name="code" class="ui-form-control pr-10" [class.is-invalid]="touched.code && codeError()" [ngModel]="editor.code" (ngModelChange)="onCodeChange($event)" (blur)="touched.code = true" [readOnly]="editor.isSystem" maxlength="100" />
+                <div *ngIf="touched.code && codeError()" class="field-validation-icon" appTooltip [title]="codeError()"><i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i></div>
+              </div>
+            </div>
+            <div class="col-span-12">
+              <label class="ui-form-label font-semibold" for="role-description">Description</label>
+              <textarea id="role-description" name="description" class="ui-form-control" rows="2" [(ngModel)]="editor.description" maxlength="2000"></textarea>
+            </div>
+            <div *ngIf="!editor.isSystem" class="col-span-12">
+              <label class="ui-form-check"><input class="ui-form-check-input" type="checkbox" name="isActive" [(ngModel)]="editor.isActive" /><span class="ui-form-check-label">Active</span></label>
+            </div>
+          </div>
+
+          <fieldset [disabled]="editor.locked">
+            <legend class="text-sm font-semibold mb-1">Permissions</legend>
+            <p class="ui-form-text mt-0 mb-3">Platform settings, licenses, banks and role management stay with administrators, so they are not listed here.</p>
+            <div class="grid gap-3 md:grid-cols-2">
+              <div *ngFor="let group of permissionGroups; trackBy: trackByGroup" class="border rounded-lg p-3">
+                <label class="ui-form-check font-semibold mb-1">
+                  <input class="ui-form-check-input" type="checkbox" [name]="'group-' + group.resource" [checked]="isGroupSelected(group)" (change)="toggleGroup(group, $any($event.target).checked)" />
+                  <span class="ui-form-check-label">{{ group.label }}</span>
+                </label>
+                <label *ngFor="let permission of group.permissions; trackBy: trackById" class="ui-form-check ml-6">
+                  <input class="ui-form-check-input" type="checkbox" [name]="'permission-' + permission.id" [checked]="selectedPermissionIds.has(permission.id)" (change)="togglePermission(permission.id, $any($event.target).checked)" />
+                  <span class="ui-form-check-label text-xs" [title]="permission.description || permission.code">{{ titleCase(permission.action) }}</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+      </div>
+      <div class="ui-modal-footer">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeEditor()" [disabled]="submitting">{{ editor.locked ? 'Close' : 'Cancel' }}</button>
+        <button *ngIf="!editor.locked || editor.isSystem" class="ui-btn ui-btn-primary" type="submit" form="role-editor-form" [disabled]="submitting">{{ submitting ? 'Saving...' : (editor.id ? 'Save changes' : 'Create role') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Members -->
+<div class="ui-modal-backdrop" *ngIf="membersRole" (click)="closeMembers()"></div>
+<div appModal class="ui-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="role-members-title" *ngIf="membersRole as role">
+  <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-dialog-scrollable">
+    <div class="ui-modal-content">
+      <div class="ui-modal-header">
+        <h2 id="role-members-title" class="ui-modal-title">{{ role.name }} members</h2>
+        <button type="button" class="ui-btn-close" (click)="closeMembers()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Saving...</span></div>
+        </div>
+        <div *ngIf="membersError" class="ui-alert ui-alert-danger mb-4" role="alert">{{ membersError }}</div>
+        <div *ngIf="!role.isActive" class="ui-alert ui-alert-warning mb-4" role="status">This role is disabled. Enable it before adding members.</div>
+        <div [class.pointer-events-none]="submitting" [class.opacity-50]="submitting">
+          <div class="flex gap-2 mb-4">
+            <label class="sr-only" for="role-member-add">Add member</label>
+            <select id="role-member-add" class="ui-form-select" name="memberToAdd" [(ngModel)]="memberToAdd" [disabled]="!role.isActive">
+              <option value="">{{ availableMembers.length ? 'Select a member' : 'Everyone already has this role' }}</option>
+              <option *ngFor="let member of availableMembers; trackBy: trackById" [value]="member.id">{{ personName(member) }} ({{ member.email }})</option>
+            </select>
+            <button class="ui-btn ui-btn-primary shrink-0" type="button" (click)="addMember()" [disabled]="!memberToAdd">Add</button>
+          </div>
+          <div *ngIf="role.members.length === 0" class="text-center text-muted py-6">Nobody has this role yet.</div>
+          <ul class="list-none m-0 p-0 border rounded-lg" *ngIf="role.members.length">
+            <li *ngFor="let member of role.members; trackBy: trackById" class="flex items-center justify-between gap-3 p-3 border-b last:border-b-0">
+              <span class="min-w-0"><span class="block font-medium truncate">{{ personName(member) }}</span><span class="block text-xs text-muted truncate">{{ member.email }}</span></span>
+              <button class="ui-btn ui-btn-sm ui-btn-outline-danger shrink-0" type="button" (click)="removeMember(member)" [attr.aria-label]="'Remove ' + personName(member) + ' from ' + role.name">Remove</button>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="ui-modal-footer">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeMembers()" [disabled]="submitting">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Copy -->
+<div class="ui-modal-backdrop" *ngIf="copySource" (click)="closeCopy()"></div>
+<div appModal class="ui-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="role-copy-title" *ngIf="copySource as source">
+  <div class="ui-modal-dialog ui-modal-dialog-centered">
+    <div class="ui-modal-content">
+      <div class="ui-modal-header">
+        <h2 id="role-copy-title" class="ui-modal-title">Copy {{ source.name }}</h2>
+        <button type="button" class="ui-btn-close" (click)="closeCopy()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Saving...</span></div>
+        </div>
+        <div *ngIf="copyError" class="ui-alert ui-alert-danger mb-4" role="alert">{{ copyError }}</div>
+        <p class="ui-form-text mt-0 mb-4">The copy is a custom role with no members. Its permissions start the same, without any that only administrators can hold.</p>
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pointer-events-none]="submitting" [class.opacity-50]="submitting">
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold" for="copy-name">Name</label>
+            <input id="copy-name" class="ui-form-control" name="copyName" [ngModel]="copyName" (ngModelChange)="copyName = $event; copyCode = codeFromName($event)" maxlength="100" />
+          </div>
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold" for="copy-code">Code</label>
+            <input id="copy-code" class="ui-form-control" name="copyCode" [(ngModel)]="copyCode" maxlength="100" />
+          </div>
+        </div>
+      </div>
+      <div class="ui-modal-footer">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeCopy()" [disabled]="submitting">Cancel</button>
+        <button class="ui-btn ui-btn-primary" type="button" (click)="saveCopy()" [disabled]="submitting">{{ submitting ? 'Copying...' : 'Copy role' }}</button>
+      </div>
+    </div>
+  </div>
+</div>

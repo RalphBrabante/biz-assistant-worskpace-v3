@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { administratorGuard } from './core/administrator.guard';
+import { superuserGuard } from './core/superuser.guard';
 import { BugReportsPageComponent } from './pages/bug-reports-page/bug-reports-page.component';
 import { authGuard } from './core/auth.guard';
 import { permissionGuard } from './core/permission.guard';
@@ -63,8 +64,9 @@ export const routes: Routes = [
       { path: 'users', component: UsersPageComponent, canActivate: [permissionGuard], data: { permissions: ['users.read'] } },
       { path: 'users/:id', component: UserDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['users.read'] } },
       { path: 'profile', component: ProfileSettingsPageComponent },
-      { path: 'roles', component: RolesPageComponent, canActivate: [permissionGuard], data: { permissions: ['roles.manage'] } },
-      { path: 'roles/:id', component: RoleDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['roles.manage'] } },
+      { path: 'organization-roles', loadComponent: () => import('./pages/organization-roles-page/organization-roles-page.component').then(m => m.OrganizationRolesPageComponent), canActivate: [administratorGuard] },
+      { path: 'roles', component: RolesPageComponent, canActivate: [superuserGuard, permissionGuard], data: { permissions: ['roles.manage'] } },
+      { path: 'roles/:id', component: RoleDetailPageComponent, canActivate: [superuserGuard, permissionGuard], data: { permissions: ['roles.manage'] } },
       { path: 'permissions', component: PermissionsPageComponent, canActivate: [permissionGuard], data: { permissions: ['permissions.manage'] } },
       { path: 'reports', component: ReportsPageComponent, canActivate: [permissionGuard], data: { permissions: ['reports.*'] } },
       { path: 'messages', component: MessagesPageComponent, canActivate: [permissionGuard], data: { permissions: ['profile.manage'] } },

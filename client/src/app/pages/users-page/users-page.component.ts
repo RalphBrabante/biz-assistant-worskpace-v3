@@ -36,6 +36,7 @@ interface UserRow {
   postalCode?: string;
   country?: string;
   role?: string;
+  organizationRoles?: { id: string; name: string; code: string; presetCode: string | null }[];
   status?: string;
   isEmailVerified?: boolean;
   emailVerifiedAt?: string;
@@ -54,8 +55,6 @@ interface ExistingUserSuggestion {
   id: string; firstName: string; lastName: string; email: string;
   alreadyAssigned: boolean; canAssign: boolean; inactiveMembership: boolean; membershipRole?: string;
 }
-const ORGANIZATION_ROLES = ['administrator', 'enduser', 'accountant', 'inventorymanager'];
-
 interface RoleOption {
   id: string;
   name?: string;
@@ -120,6 +119,7 @@ export class UsersPageComponent {
 
   createUserForm: FormGroup = this.newCreateUserForm();
   createSelectedRoleIds: string[] = [];
+  private createRolesOrganizationId = '';
 
   readonly filteredRows = computed(() => {
     const q = this.filter().trim().toLowerCase();
@@ -151,7 +151,7 @@ export class UsersPageComponent {
   }
 
   get existingRoleOptions(): RoleOption[] {
-    return this.createRoleOptions().filter(role => ORGANIZATION_ROLES.includes(String(role.code).toLowerCase()));
+    return this.createRoleOptions().filter(role => String(role.code).toLowerCase() !== 'superuser');
   }
 
   get createOrganizationId(): string {
@@ -220,7 +220,10 @@ export class UsersPageComponent {
     this.formChangesSub = this.createUserForm.valueChanges.pipe(
       map(() => `${this.asString(this.createUserForm.getRawValue()['email']).toLowerCase()}|${this.createOrganizationId}`),
       distinctUntilChanged(),
-    ).subscribe(() => this.checkExistingEmail());
+    ).subscribe(() => {
+      if (this.createOrganizationId !== this.createRolesOrganizationId) this.loadCreateModalOptions();
+      this.checkExistingEmail();
+    });
     this.loadCreateModalOptions();
   }
 
@@ -480,24 +483,30 @@ export class UsersPageComponent {
   }
 
   loadCreateModalOptions(): void {
+    this.createRolesOrganizationId = this.createOrganizationId;
     this.createOptionsLoading.set(true);
     this.createRoleOptions.set([]);
     this.createOrganizationOptions.set([]);
 
-    const rolesRequest = this.api.list<RoleOption>('/api/v1/roles?limit=500&isActive=true');
+    // Each organization owns its roles, so the choices depend on the organization selected.
+    const organizationId = this.createOrganizationId;
+    const rolesRequest = organizationId
+      ? this.api.list<RoleOption>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/assignable-roles`)
+      : of({ ok: true, data: [] } as ApiResponse<RoleOption[]>);
+    const platformRolesRequest = this.isSuperuser
+      ? this.api.list<RoleOption>('/api/v1/roles?limit=500&isActive=true')
+      : of({ ok: true, data: [] } as ApiResponse<RoleOption[]>);
     const organizationsRequest = this.isSuperuser
       ? this.api.list<OrganizationOption>('/api/v1/organizations?limit=500')
       : of({ ok: true, data: [] } as ApiResponse<OrganizationOption[]>);
 
     this.createOptionsSub?.unsubscribe();
-    this.createOptionsSub = forkJoin([rolesRequest, organizationsRequest]).subscribe({
-      next: ([rolesResponse, organizationsResponse]: [ApiResponse<RoleOption[]>, ApiResponse<OrganizationOption[]>]) => {
+    this.createOptionsSub = forkJoin([rolesRequest, organizationsRequest, platformRolesRequest]).subscribe({
+      next: ([rolesResponse, organizationsResponse, platformResponse]: [ApiResponse<RoleOption[]>, ApiResponse<OrganizationOption[]>, ApiResponse<RoleOption[]>]) => {
         this.createOptionsLoading.set(false);
-        const roleRows = (rolesResponse.data || []).filter(
-          (role: RoleOption) =>
-            this.isSuperuser || String(role.code || '').toLowerCase() !== 'superuser'
-        );
-        this.createRoleOptions.set(roleRows);
+        const platformRows = (platformResponse.data || []).filter((role: RoleOption) => String(role.code || '').toLowerCase() === 'superuser');
+        this.createRoleOptions.set([...(rolesResponse.data || []), ...platformRows]);
+        this.createSelectedRoleIds = this.createSelectedRoleIds.filter(id => this.createRoleOptions().some(role => role.id === id));
         this.createOrganizationOptions.set(organizationsResponse.data || []);
         this.selectExistingRole();
       },
@@ -512,6 +521,12 @@ export class UsersPageComponent {
     if (row.primaryOrganization?.name) return row.primaryOrganization.name;
     if (row.primaryOrganization?.legalName) return row.primaryOrganization.legalName;
     return row.organizationId || '-';
+  }
+
+  // A member's roles in this organization. Accounts outside it show their stored label.
+  memberRoleLabels(row: UserRow): string[] {
+    const names = (row.organizationRoles || []).map(role => role.name);
+    return names.length ? names : [row.role || '-'];
   }
 
   userRoleBadgeClass(role: unknown): string {

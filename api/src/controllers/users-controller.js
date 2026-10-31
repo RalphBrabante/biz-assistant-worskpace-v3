@@ -12,6 +12,15 @@ const {
 const { deleteRemoteFileByUrl } = require('../services/storage-service');
 const { fail } = require('../services/debt-amounts');
 const { ORGANIZATION_PRESET_ROLES } = require('../services/accountant-access');
+const { membershipLabel } = require('../services/organization-role-presets');
+const {
+  assignPresetRole,
+  addMemberRole,
+  removeMemberRole,
+  resolveAssignableRole,
+  memberRoleSummaries,
+  refreshMemberSockets,
+} = require('../services/organization-role-service');
 const {
   isPrivilegedRequest,
   getAuthenticatedOrganizationId,
@@ -110,6 +119,19 @@ function roleGrantDenial(req, role) {
     return 'Only administrators can assign the ADMINISTRATOR role.';
   }
   return null;
+}
+
+// The same rule for roles an organization owns: an administrator role or a custom role can carry
+// anything the organization has given it, so only administrators hand those out.
+function organizationRoleGrantDenial(req, role) {
+  if (isRequesterSuperuser(req) || isRequesterAdministrator(req)) return null;
+  return role.presetCode && role.presetCode !== 'administrator'
+    ? null
+    : 'Only administrators can assign this role.';
+}
+
+function isRoleAdministrator(req) {
+  return isRequesterSuperuser(req) || isRequesterAdministrator(req);
 }
 
 // Credential and identity changes on another account are limited to users the requester fully controls.
@@ -240,22 +262,14 @@ async function setPrimaryOrganizationMembership(models, userId, organizationId, 
   }
 }
 
-function hasRoleCode(user, roleCodes = [], membershipRole = '') {
+// Roles belong to one organization, so only the member's role there decides who is notified.
+function hasRoleCode(roleCodes = [], membershipRole = '') {
   const allowed = roleCodes.map((value) => String(value || '').toLowerCase());
-  const primaryRole = String(user?.role || '').toLowerCase();
-  if (primaryRole && allowed.includes(primaryRole)) {
-    return true;
-  }
-  const orgMembershipRole = String(membershipRole || '').toLowerCase();
-  if (orgMembershipRole && allowed.includes(orgMembershipRole)) {
-    return true;
-  }
-  const memberships = Array.isArray(user?.roles) ? user.roles : [];
-  return memberships.some((role) => allowed.includes(String(role?.code || '').toLowerCase()));
+  return allowed.includes(String(membershipRole || '').toLowerCase());
 }
 
 async function collectOrganizationAdministratorRecipients(models, organizationId) {
-  if (!models?.Organization || !models?.User || !models?.Role || !organizationId) {
+  if (!models?.Organization || !organizationId) {
     return { organization: null, recipients: [] };
   }
 
@@ -270,42 +284,17 @@ async function collectOrganizationAdministratorRecipients(models, organizationId
       where: { isActive: true },
       attributes: ['role', 'isActive'],
     },
-    include: [
-      {
-        model: models.Role,
-        as: 'roles',
-        through: { attributes: [] },
-        required: false,
-      },
-    ],
-  });
-
-  const primaryUsers = await models.User.findAll({
-    where: {
-      organizationId,
-      isActive: true,
-    },
-    attributes: ['id', 'email', 'firstName', 'lastName', 'role', 'isActive'],
-    include: [
-      {
-        model: models.Role,
-        as: 'roles',
-        through: { attributes: [] },
-        required: false,
-      },
-    ],
   });
 
   const recipients = [];
   const seenEmails = new Set();
-  const candidates = [...(orgUsers || []), ...(primaryUsers || [])];
-  for (const user of candidates) {
+  for (const user of orgUsers || []) {
     const email = String(user?.email || '').toLowerCase().trim();
     if (!user?.isActive || !email || seenEmails.has(email)) {
       continue;
     }
     const membershipRole = String(user?.OrganizationUser?.role || '').toLowerCase();
-    if (!hasRoleCode(user, ['administrator'], membershipRole)) {
+    if (!hasRoleCode(['administrator'], membershipRole)) {
       continue;
     }
 
@@ -332,7 +321,7 @@ async function createUser(req, res) {
     ) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
-    const { User, Role, UserRole, OrganizationUser, Token, Organization } = models;
+    const { User, Role, UserRole, OrganizationUser, OrganizationRole, Token, Organization } = models;
 
     const payload = cleanUndefined(pickUserPayload(req.body));
     const requesterIsSuper = isRequesterSuperuser(req);
@@ -385,15 +374,24 @@ async function createUser(req, res) {
     const requestedRoleIds = parseRoleIds(req.body?.roleIds);
     const requestedRoleCodes = parseRoleCodes(req.body?.role);
     const resolvedRoles = [];
+    // Roles the requester picked from this organization's own catalogue.
+    const organizationRoles = [];
 
     if (requestedRoleIds.length > 0) {
-      const rolesById = await Role.findAll({
-        where: {
-          id: requestedRoleIds,
-          isActive: true,
-        },
-      });
-      if (rolesById.length !== requestedRoleIds.length) {
+      const ownRoles = OrganizationRole
+        ? await OrganizationRole.findAll({ where: { id: requestedRoleIds, organizationId: payload.organizationId, isActive: true } })
+        : [];
+      organizationRoles.push(...ownRoles);
+      const remainingRoleIds = requestedRoleIds.filter((id) => !ownRoles.some((role) => role.id === id));
+      const rolesById = remainingRoleIds.length
+        ? await Role.findAll({
+          where: {
+            id: remainingRoleIds,
+            isActive: true,
+          },
+        })
+        : [];
+      if (rolesById.length !== remainingRoleIds.length) {
         return res.status(400).json({ ok: false, message: 'Some selected roles are invalid or inactive.' });
       }
       resolvedRoles.push(...rolesById);
@@ -413,22 +411,28 @@ async function createUser(req, res) {
       }
     }
 
-    const roleDenial = resolvedRoles.map((role) => roleGrantDenial(req, role)).find(Boolean);
+    const roleDenial = [
+      ...resolvedRoles.map((role) => roleGrantDenial(req, role)),
+      ...organizationRoles.map((role) => organizationRoleGrantDenial(req, role)),
+    ].find(Boolean);
     if (roleDenial) {
       return res.status(403).json({ ok: false, message: roleDenial });
     }
-    if (resolvedRoles.length === 0) {
+    if (resolvedRoles.length === 0 && organizationRoles.length === 0) {
       return res.status(400).json({
         ok: false,
         message: 'At least one role is required.',
       });
     }
 
-    if (resolvedRoles.length > 0) {
-      payload.role = String(resolvedRoles[0].code || payload.role || 'member')
-        .toLowerCase()
-        .trim();
+    const resolvedCodes = resolvedRoles.map((role) => String(role.code || '').toLowerCase());
+    // Only superuser is granted globally. Other global roles are templates that organizations copy.
+    if (resolvedCodes.some((code) => code !== 'superuser' && !ORGANIZATION_PRESET_ROLES.includes(code))) {
+      return res.status(400).json({ ok: false, message: 'Custom global roles no longer grant access. Assign one of the organization’s own roles.' });
     }
+    payload.role = resolvedCodes.includes('superuser')
+      ? 'superuser'
+      : membershipLabel([...resolvedCodes, ...organizationRoles.map((role) => role.presetCode).filter(Boolean)]);
 
     // Commit the account and its access together. A later failure must not leave
     // an orphan account that makes every retry fail on the unique email index.
@@ -446,14 +450,25 @@ async function createUser(req, res) {
         });
         await setPrimaryOrganizationMembership(models, created.id, created.organizationId, transaction);
       }
-      await UserRole.bulkCreate(
-        resolvedRoles.map((role) => ({
-          userId: created.id,
-          roleId: role.id,
-          assignedByUserId: req.auth?.userId || null,
-        })),
-        { transaction }
-      );
+      const platformRoles = resolvedRoles.filter((role) => String(role.code).toLowerCase() === 'superuser');
+      if (platformRoles.length) {
+        await UserRole.bulkCreate(
+          platformRoles.map((role) => ({
+            userId: created.id,
+            roleId: role.id,
+            assignedByUserId: req.auth?.userId || null,
+          })),
+          { transaction }
+        );
+      }
+      const actor = { userId: req.auth?.userId, isSuperuser: requesterIsSuper };
+      const organizationId = created.organizationId;
+      for (const code of resolvedCodes) {
+        await assignPresetRole(models, { organizationId, userId: created.id, code, actor, transaction });
+      }
+      for (const role of organizationRoles) {
+        await addMemberRole(models, { organizationId, userId: created.id, roleId: role.id, actor, transaction });
+      }
       return created;
     });
 
@@ -610,10 +625,19 @@ async function createUser(req, res) {
     if (err.name === 'SequelizeValidationError') {
       return res.status(400).json({ ok: false, message: 'Invalid user details. Check the email address and required fields.' });
     }
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     // Do not log SQL, bound values or a submitted password.
     console.error('Create user error:', { name: err.name, code: err.original?.code || err.parent?.code });
     return res.status(500).json({ ok: false, message: 'Unable to create user.' });
   }
+}
+
+// Administrators act inside their own organization. Platform staff name one, or use the user's primary.
+function roleTargetOrganizationId(req, user) {
+  if (!isRequesterSuperuser(req)) return getAuthenticatedOrganizationId(req);
+  const organizationId = String(req.query?.organizationId || req.body?.organizationId || user.organizationId || '').trim();
+  if (!organizationId) throw fail(400, 'Select an organization.');
+  return organizationId;
 }
 
 async function userAssignmentOrganization(req, models) {
@@ -677,8 +701,9 @@ async function assignExistingUser(req, res) {
     if (!userId) throw fail(400, 'Select the existing user.');
     const roleId = String(req.body?.roleId || '').trim();
     if (!roleId) throw fail(400, 'Select an active organization role.');
-    const role = await models.Role.findByPk(roleId);
-    if (!role?.isActive || !ORGANIZATION_PRESET_ROLES.includes(String(role.code).toLowerCase())) throw fail(400, 'Select an active organization role. Global roles cannot be assigned here.');
+    const role = await resolveAssignableRole(models, organization.id, { roleId });
+    if (!role?.isActive) throw fail(400, 'Select an active organization role. Global roles cannot be assigned here.');
+    const roleLabel = role.presetCode || 'member';
     const result = await models.User.sequelize.transaction(async transaction => {
       // Serialize assignments for this user, preserving every other membership
       // and the current primary organization even for simultaneous requests.
@@ -688,11 +713,15 @@ async function assignExistingUser(req, res) {
       const where = { userId: user.id, organizationId: organization.id };
       const membership = await models.OrganizationUser.findOne({ where, transaction });
       if (membership?.isActive || (!membership && user.organizationId === organization.id)) return { alreadyAssigned: true, userId: user.id };
-      if (membership && membership.role !== role.code) throw fail(409, 'Reactivate this membership with its existing role, or manage its organization assignment separately.');
+      if (membership && membership.role !== roleLabel) throw fail(409, 'Reactivate this membership with its existing role, or manage its organization assignment separately.');
       const hasPrimary = Boolean(user.organizationId) || await models.OrganizationUser.count({ where: { userId: user.id, isPrimary: true, isActive: true }, transaction });
       if (membership) await membership.update({ isActive: true, isPrimary: user.organizationId === organization.id || !hasPrimary }, { transaction });
-      else await models.OrganizationUser.create({ ...where, role: role.code, isActive: true, isPrimary: !hasPrimary }, { transaction });
+      else await models.OrganizationUser.create({ ...where, role: roleLabel, isActive: true, isPrimary: !hasPrimary }, { transaction });
       if (!hasPrimary) await user.update({ organizationId: organization.id }, { transaction });
+      await addMemberRole(models, {
+        organizationId: organization.id, userId: user.id, roleId: role.id,
+        actor: { userId: req.auth?.userId, isSuperuser: isRequesterSuperuser(req) }, transaction,
+      });
       return { alreadyAssigned: false, userId: user.id };
     });
     return res.status(result.alreadyAssigned ? 200 : 201).json({ ok: true,
@@ -767,6 +796,7 @@ async function listUsers(req, res) {
       order: [['createdAt', 'DESC']],
     });
 
+    const roleSummaries = await memberRoleSummaries(models, organizationId, rows.map((user) => user.id));
     return res.status(200).json({
       ok: true,
       data: rows.map(user => {
@@ -777,6 +807,7 @@ async function listUsers(req, res) {
         };
         const membership = memberships.find(m => m.userId === user.id && m.isActive);
         if (membership) result.role = membership.role;
+        if (organizationId) result.organizationRoles = roleSummaries.get(user.id) || [];
         result.canManageAccount = canManageAccount;
         return result;
       }),
@@ -831,7 +862,14 @@ async function getUserById(req, res) {
       return res.status(404).json({ ok: false, message: 'User not found.' });
     }
 
-    return res.status(200).json({ ok: true, data: sanitizeUser(user) });
+    const data = sanitizeUser(user);
+    // What this person does in other organizations is not this organization's business.
+    if (!isPrivilegedRequest(req)) {
+      const scopedOrganizationId = getAuthenticatedOrganizationId(req);
+      data.organizations = (data.organizations || []).filter((organization) => organization.id === scopedOrganizationId);
+      data.roles = [];
+    }
+    return res.status(200).json({ ok: true, data });
   } catch (err) {
     console.error('Get user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to fetch user.' });
@@ -911,6 +949,7 @@ async function updateUser(req, res) {
 
     // Keep multi-organization primary membership in sync when default organization changes.
     if (payload.organizationId && models.OrganizationUser) {
+      // A role held elsewhere never carries over: roles here are assigned deliberately.
       await models.OrganizationUser.findOrCreate({
         where: {
           userId: user.id,
@@ -919,7 +958,7 @@ async function updateUser(req, res) {
         defaults: {
           userId: user.id,
           organizationId: payload.organizationId,
-          role: String(user.role || 'member').toLowerCase(),
+          role: 'member',
           isActive: true,
           isPrimary: true,
         },
@@ -1034,6 +1073,9 @@ async function addRoleToUser(req, res) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
     const { User, Role, UserRole } = models;
+    if (!isRoleAdministrator(req)) {
+      return res.status(403).json({ ok: false, message: 'Only administrators can change roles.' });
+    }
 
     const where = { id: req.params.id };
     if (!isPrivilegedRequest(req)) {
@@ -1061,6 +1103,20 @@ async function addRoleToUser(req, res) {
       return res.status(403).json({ ok: false, message: roleDenial });
     }
 
+    if (String(role.code).toLowerCase() !== 'superuser') {
+      const allModels = getModels();
+      const organizationId = roleTargetOrganizationId(req, user);
+      await allModels.OrganizationRole.sequelize.transaction(async (transaction) => {
+        const assigned = await assignPresetRole(allModels, {
+          organizationId, userId: user.id, code: role.code,
+          actor: { userId: req.auth?.userId, isSuperuser: isRequesterSuperuser(req) }, transaction,
+        });
+        if (!assigned) throw fail(400, 'Assign custom roles from the organization’s role page.');
+      });
+      await refreshMemberSockets(allModels, organizationId, user.id);
+      return res.status(201).json({ ok: true, message: 'Role assigned to user successfully.', data: { organizationId, roleCode: role.code } });
+    }
+
     const [membership] = await UserRole.findOrCreate({
       where: { userId: user.id, roleId: role.id },
       defaults: {
@@ -1074,6 +1130,7 @@ async function addRoleToUser(req, res) {
       data: membership,
     });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     console.error('Add role to user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to assign role to user.' });
   }
@@ -1086,6 +1143,9 @@ async function removeRoleFromUser(req, res) {
       return res.status(503).json({ ok: false, message: 'Database models are not ready yet.' });
     }
     const { User, Role, UserRole } = models;
+    if (!isRoleAdministrator(req)) {
+      return res.status(403).json({ ok: false, message: 'Only administrators can change roles.' });
+    }
 
     const where = { id: req.params.id };
     if (!isPrivilegedRequest(req)) {
@@ -1110,19 +1170,37 @@ async function removeRoleFromUser(req, res) {
         roleId,
       },
     });
+    const role = await Role.findByPk(roleId);
+
+    const roleDenial = roleGrantDenial(req, role);
+    if (roleDenial) {
+      return res.status(403).json({ ok: false, message: roleDenial.replace('assign', 'remove') });
+    }
+
+    if (role && String(role.code).toLowerCase() !== 'superuser') {
+      const allModels = getModels();
+      const organizationId = roleTargetOrganizationId(req, user);
+      await allModels.OrganizationRole.sequelize.transaction(async (transaction) => {
+        const own = await resolveAssignableRole(allModels, organizationId, { code: role.code }, transaction);
+        if (!own) throw fail(404, 'User role assignment not found.');
+        await removeMemberRole(allModels, {
+          organizationId, userId: user.id, roleId: own.id,
+          actor: { userId: req.auth?.userId, isSuperuser: isRequesterSuperuser(req) }, transaction,
+        });
+        if (membership) await membership.destroy({ transaction });
+      });
+      await refreshMemberSockets(allModels, organizationId, user.id);
+      return res.status(200).json({ ok: true, message: 'Role removed from user successfully.' });
+    }
 
     if (!membership) {
       return res.status(404).json({ ok: false, message: 'User role assignment not found.' });
     }
 
-    const roleDenial = roleGrantDenial(req, await Role.findByPk(roleId));
-    if (roleDenial) {
-      return res.status(403).json({ ok: false, message: roleDenial.replace('assign', 'remove') });
-    }
-
     await membership.destroy();
     return res.status(200).json({ ok: true, message: 'Role removed from user successfully.' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     console.error('Remove role from user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to remove role from user.' });
   }
@@ -1244,11 +1322,13 @@ async function addOrganizationToUser(req, res) {
       defaults: {
         userId: user.id,
         organizationId: organization.id,
-        role: String(user.role || 'member').toLowerCase(),
+        // A role held elsewhere never carries over to this organization.
+        role: 'member',
         isActive: true,
         isPrimary: shouldSetPrimary,
       },
     });
+    const reinstated = !created && !membership.isActive;
 
     if (!created) {
       const nextPayload = { isActive: true };
@@ -1256,6 +1336,21 @@ async function addOrganizationToUser(req, res) {
         nextPayload.isPrimary = requestedIsPrimary;
       }
       await membership.update(nextPayload);
+    }
+
+    // A reinstated member gets back the role kept on this membership. A new member starts with
+    // the role named in the request, or none until someone assigns one.
+    const allModels = getModels();
+    if (allModels.OrganizationRole && (reinstated || req.body?.roleId)) {
+      const actor = { userId: req.auth?.userId, isSuperuser: true };
+      await allModels.OrganizationRole.sequelize.transaction(async (transaction) => {
+        if (reinstated) await assignPresetRole(allModels, { organizationId: organization.id, userId: user.id, code: membership.role, actor, transaction });
+        if (req.body?.roleId) {
+          const role = await resolveAssignableRole(allModels, organization.id, { roleId: req.body.roleId }, transaction);
+          if (!role?.isActive) throw fail(400, 'Select an active organization role.');
+          await addMemberRole(allModels, { organizationId: organization.id, userId: user.id, roleId: role.id, actor, transaction });
+        }
+      });
     }
 
     if (shouldSetPrimary || requestedIsPrimary === true) {
@@ -1275,6 +1370,7 @@ async function addOrganizationToUser(req, res) {
       },
     });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     console.error('Add organization to user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to assign organization to user.' });
   }

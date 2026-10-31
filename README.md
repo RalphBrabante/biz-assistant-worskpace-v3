@@ -44,6 +44,18 @@ docker compose up -d
 
 The Docker/VPS deployment files remain available. See [the Docker deployment reference](docs/DEPLOYMENT-DOCKER.md). Those manually triggered GitHub workflows are separate from Hostinger's GitHub deployment integration.
 
+## Organization roles
+
+Each organization owns its roles. Administrators manage them under **Administration → Roles**; superusers do the same after selecting an organization.
+
+- Every organization has Administrator, Accountant, Inventory Manager and End User, and can add custom roles. Changing a role in one organization never affects another.
+- A person can hold different roles in each organization, and role changes apply immediately without signing in again.
+- Administrator and Accountant have locked permissions. Other system roles can be customized and reset to their defaults. Custom roles can be created, copied, disabled and deleted, but cannot hold platform-only permissions.
+- An organization must keep at least one administrator. The **Activity** tab keeps a permanent record of who changed what.
+- **Role templates** (superuser only) set the defaults for organizations created later; existing organizations are unaffected. `superuser` is the only role that applies across organizations.
+
+Upgrading runs three migrations that give each existing organization its own roles and move each member's access into them without changing it. They are reversible with `db:migrate:undo`, which removes any customization made since. Back up the database first. Run the code and migrations together: this code requires the new columns.
+
 ## Dashboard Action Center
 
 Select an organization to see overdue invoices and expenses awaiting approval. Each queue shows five records per page, with links to the existing detail screens. Refresh overview reloads the queues.

@@ -27,6 +27,7 @@ interface UserMembership {
   lastName?: string;
   email?: string;
   role?: string;
+  organizationRoles?: { name: string }[];
   isActive?: boolean;
   OrganizationUser?: {
     id?: string;
@@ -62,6 +63,7 @@ export class OrganizationDetailPageComponent {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   get canManageMembers(): boolean { return this.auth.isPrivileged(); }
+  get isSuperuser(): boolean { return (this.auth.currentUser()?.roleCodes || []).includes('superuser'); }
   private readonly confirmDialog = inject(ConfirmDialogService);
 
   organizationId = '';
@@ -259,7 +261,8 @@ export class OrganizationDetailPageComponent {
   }
 
   memberRole(member: UserMembership): string {
-    return member.OrganizationUser?.role || 'member';
+    const names = (member.organizationRoles || []).map(role => role.name);
+    return names.length ? names.join(', ') : member.OrganizationUser?.role || 'member';
   }
 
   memberActive(member: UserMembership): boolean {
@@ -275,8 +278,7 @@ export class OrganizationDetailPageComponent {
   }
 
   roleLabel(role: RoleOption): string {
-    const labels: Record<string, string> = {administrator: 'Administrator', enduser: 'Standard user', accountant: 'Accountant', inventorymanager: 'Inventory manager'};
-    return labels[role.code] || role.name || role.code;
+    return role.name || role.code;
   }
 
   trackByUserOptionId(index: number, row: UserOption): string {

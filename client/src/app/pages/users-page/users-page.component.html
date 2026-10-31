@@ -24,9 +24,9 @@
       <div class="col-span-12 md:col-span-5">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input type="text" class="ui-form-control pl-12" [class.pr-12]="filter()" placeholder="Name, email, role..." [ngModel]="filter()" (ngModelChange)="onFilterChange($event)" />
-          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
         </div>
       </div>
     </div>
@@ -64,7 +64,7 @@
       <span class="text-xs text-muted font-semibold mr-1">Active:</span>
       <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onFilterChange('')" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="onFilterChange('')" aria-label="Remove filter"></button>
       </span>
     </div>
 
@@ -135,8 +135,8 @@
           <td class="font-semibold">{{ row.firstName }} {{ row.lastName }}</td>
           <td>{{ row.email }}</td>
           <td>
-            <span class="ui-badge rounded-full" [ngClass]="userRoleBadgeClass(row.role)">
-              {{ row.role || '-' }}
+            <span class="inline-flex flex-wrap gap-1">
+              <span *ngFor="let label of memberRoleLabels(row)" class="ui-badge rounded-full" [ngClass]="userRoleBadgeClass(label)">{{ label }}</span>
             </span>
           </td>
           <td>
@@ -170,8 +170,8 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
-<div appModal class="ui-modal fade show" tabindex="-1" role="dialog" aria-labelledby="create-user-title" aria-modal="true" [style.display]="isCreateModalOpen() ? 'block' : 'none'" *ngIf="isCreateModalOpen()">
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
+<div appModal class="ui-modal" tabindex="-1" role="dialog" aria-labelledby="create-user-title" aria-modal="true" [style.display]="isCreateModalOpen() ? 'block' : 'none'" *ngIf="isCreateModalOpen()">
   <div class="ui-modal-dialog ui-modal-dialog-centered ui-modal-xl ui-modal-dialog-scrollable">
     <div class="ui-modal-content border-0 shadow-dialog">
       <div class="ui-modal-header border-0 pb-0">

@@ -8,6 +8,8 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
+import { OrganizationContextService } from '../../core/organization-context.service';
+import { Subscription } from 'rxjs';
 import { ApiResponse } from '../../core/types';
 
 interface RoleRow {
@@ -15,6 +17,14 @@ interface RoleRow {
   name?: string;
   code?: string;
   description?: string;
+}
+
+interface MemberRoleOption {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  isSystem: boolean;
 }
 
 interface UserRoleRow {
@@ -77,6 +87,17 @@ export class UserDetailPageComponent {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly organizationContext = inject(OrganizationContextService);
+  private memberRolesSub?: Subscription;
+
+  readonly memberRolesLoading = signal(false);
+  readonly savingMemberRoles = signal(false);
+  readonly memberRolesError = signal('');
+  readonly memberRolesMessage = signal('');
+  readonly memberRolesIsMember = signal(false);
+  readonly memberRoleOptions = signal<MemberRoleOption[]>([]);
+  selectedMemberRoleIds = new Set<string>();
+  roleOrganizationId = '';
 
   readonly loading = signal(false);
   readonly submitting = signal(false);
@@ -127,6 +148,10 @@ export class UserDetailPageComponent {
         this.loading.set(false);
         const user = response.data || null;
         this.user.set(user);
+        if (!this.roleOrganizationId || (this.isSuperuser && !(user?.organizations || []).some((organization) => organization.id === this.roleOrganizationId))) {
+          this.roleOrganizationId = this.defaultRoleOrganizationId(user);
+          this.loadMemberRoles();
+        }
         this.form = {
           organizationId: user?.organizationId || '',
           firstName: user?.firstName || '',
@@ -157,6 +182,96 @@ export class UserDetailPageComponent {
         this.error.set(err?.error?.message || 'Unable to load user details.');
       },
     });
+  }
+
+  get canManageRoles(): boolean {
+    return this.auth.isPrivileged();
+  }
+
+  userIsSuperuser(row: UserDetail): boolean {
+    return (row.roles || []).some((role) => String(role.code || '').toLowerCase() === 'superuser');
+  }
+
+  private defaultRoleOrganizationId(user: UserDetail | null): string {
+    if (!this.isSuperuser) return String(this.auth.currentUser()?.organizationId || '');
+    const memberships = user?.organizations || [];
+    const selected = this.organizationContext.getActiveOrganizationId();
+    if (selected && memberships.some((organization) => organization.id === selected)) return selected;
+    return memberships.find((organization) => organization.OrganizationUser?.isPrimary)?.id || memberships[0]?.id || '';
+  }
+
+  selectRoleOrganization(organizationId: string): void {
+    this.roleOrganizationId = organizationId;
+    this.loadMemberRoles();
+  }
+
+  loadMemberRoles(): void {
+    this.memberRolesSub?.unsubscribe();
+    this.memberRolesError.set('');
+    this.memberRolesMessage.set('');
+    this.memberRoleOptions.set([]);
+    this.memberRolesIsMember.set(false);
+    if (!this.canManageRoles || !this.roleOrganizationId) return;
+    this.memberRolesLoading.set(true);
+    this.memberRolesSub = this.api.getFresh<{ isMember: boolean; roleIds: string[]; roles: MemberRoleOption[] }>(this.memberRolesUrl()).subscribe({
+      next: (response) => {
+        this.memberRolesLoading.set(false);
+        this.memberRoleOptions.set(response.data?.roles || []);
+        this.memberRolesIsMember.set(Boolean(response.data?.isMember));
+        this.selectedMemberRoleIds = new Set(response.data?.roleIds || []);
+      },
+      error: (err) => {
+        this.memberRolesLoading.set(false);
+        this.memberRolesError.set(err?.error?.message || 'Unable to load this member’s roles.');
+      },
+    });
+  }
+
+  private memberRolesUrl(): string {
+    const params = new URLSearchParams({ organizationId: this.roleOrganizationId });
+    return `/api/v1/organization-roles/members/${encodeURIComponent(this.userId)}?${params}`;
+  }
+
+  toggleMemberRole(roleId: string, checked: boolean): void {
+    if (checked) this.selectedMemberRoleIds.add(roleId);
+    else this.selectedMemberRoleIds.delete(roleId);
+  }
+
+  saveMemberRoles(): void {
+    if (this.savingMemberRoles()) return;
+    this.savingMemberRoles.set(true);
+    this.memberRolesError.set('');
+    this.memberRolesMessage.set('');
+    this.api.put(this.memberRolesUrl(), { roleIds: [...this.selectedMemberRoleIds] }).subscribe({
+      next: (response) => {
+        this.savingMemberRoles.set(false);
+        this.memberRolesMessage.set(response.message || 'Member roles updated.');
+        this.loadMemberRoles();
+        this.memberRolesMessage.set(response.message || 'Member roles updated.');
+      },
+      error: (err) => {
+        this.savingMemberRoles.set(false);
+        this.memberRolesError.set(err?.error?.message || 'Unable to update this member’s roles.');
+        this.loadMemberRoles();
+        this.memberRolesError.set(err?.error?.message || 'Unable to update this member’s roles.');
+      },
+    });
+  }
+
+  superuserRoleId(): string {
+    return this.assignableRoles().find((role) => String(role.code || '').toLowerCase() === 'superuser')?.id || '';
+  }
+
+  async grantSuperuser(): Promise<void> {
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Grant superuser',
+      message: 'This person will be able to see and change every organization on the platform.',
+      confirmText: 'Grant superuser',
+      iconClass: 'bi-shield-exclamation',
+    });
+    if (!confirmed) return;
+    this.selectedRoleId = this.superuserRoleId();
+    this.assignRole();
   }
 
   loadAssignableRoles(): void {
@@ -328,6 +443,10 @@ export class UserDetailPageComponent {
     });
   }
 
+  trackByRoleOptionId(_index: number, role: MemberRoleOption): string {
+    return role.id;
+  }
+
   trackByRoleId(_index: number, role: UserRoleRow): string {
     return role.id;
   }
@@ -371,9 +490,12 @@ export class UserDetailPageComponent {
       .subscribe({
         next: (response) => {
           this.assigningOrganization.set(false);
-          this.message.set(response.message || 'Organization assigned successfully.');
+          this.message.set(response.message || 'Organization assigned successfully. Choose their roles below.');
           this.selectedOrganizationId = '';
           this.addOrganizationAsPrimary = false;
+          // A new membership starts with no roles, so bring that organization's roles into view.
+          this.roleOrganizationId = organizationId;
+          this.loadMemberRoles();
           this.loadUser();
           this.loadAssignableOrganizations();
         },

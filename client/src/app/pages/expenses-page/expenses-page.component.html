@@ -21,7 +21,7 @@
           >
             <i class="bi bi-three-dots-vertical"></i>
           </button>
-          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+          <ul class="ui-dropdown-menu shadow-panel">
             <li>
               <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading()">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -58,9 +58,9 @@
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input type="text" class="ui-form-control pl-12" [class.pr-12]="searchQuery" placeholder="Expense #, vendor, category..." [(ngModel)]="searchQuery" (keyup.enter)="applyFilters()" />
-          <button *ngIf="searchQuery" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="searchQuery=''; applyFilters()" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+          <button *ngIf="searchQuery" class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="searchQuery=''; applyFilters()" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
         </div>
       </div>
       <div class="col-span-6 md:col-span-2">
@@ -134,19 +134,19 @@
       <span class="text-xs text-muted font-semibold mr-1">Active:</span>
       <span *ngIf="searchQuery.trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i> "{{ searchQuery.trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="searchQuery=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="searchQuery=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-tag text-xs text-muted"></i> {{ expenseStatusLabel(statusFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="statusFilter=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="statusFilter=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="paymentMethodFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-credit-card text-xs text-muted"></i> {{ expensePaymentMethodLabel(paymentMethodFilter) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="paymentMethodFilter=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="paymentMethodFilter=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="expenseDateFrom || expenseDateTo" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-calendar3 text-xs text-muted"></i> {{ expenseDateFrom || '…' }} → {{ expenseDateTo || '…' }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="expenseDateFrom=''; expenseDateTo=''; applyFilters()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="expenseDateFrom=''; expenseDateTo=''; applyFilters()" aria-label="Remove filter"></button>
       </span>
     </div>
 
@@ -208,7 +208,7 @@
               <button class="ui-btn ui-btn-sm ui-btn-outline-secondary ui-dropdown-toggle" type="button" appDropdown aria-expanded="false" aria-label="Expense actions">
                 <i class="bi bi-three-dots-vertical"></i>
               </button>
-              <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+              <ul class="ui-dropdown-menu shadow-panel">
                 <li>
                   <a class="ui-dropdown-item flex items-center gap-2" [routerLink]="['/expenses', row.id]">
                     <i class="bi bi-eye"></i> View Details
@@ -241,8 +241,8 @@
           <td>
             <span class="inline-flex items-center gap-1">
               {{ vendorLabel(row) }}
-              <i *ngIf="row.vendor" class="bi bi-info-circle text-muted text-xs opacity-50"
-                style="cursor:pointer;"
+              <i *ngIf="row.vendor" class="bi bi-info-circle text-muted text-xs opacity-50 cursor-pointer"
+               
                 (mouseenter)="showVendorPopover($event, row)"
                 (mouseleave)="hideVendorPopover()"></i>
             </span>
@@ -281,9 +281,9 @@
 
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -305,7 +305,7 @@
         <div *ngIf="taxContextLoading" class="ui-alert ui-alert-info" role="status">Loading organization tax settings…</div>
         <div *ngIf="taxContextError" class="ui-alert ui-alert-danger" role="alert">{{ taxContextError }} <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-danger" (click)="loadOrganizationTaxInfo()">Retry</button></div>
         <div *ngIf="calculationError" class="ui-alert ui-alert-danger" role="alert">{{ calculationError }}</div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createExpenseForm" (ngSubmit)="createExpense()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createExpenseForm" (ngSubmit)="createExpense()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
 
           <!-- ── Vendor & Classification ──────────────────────────── -->
           <div class="col-span-12">
@@ -342,8 +342,8 @@
               <!-- Dropdown panel -->
               <div
                 *ngIf="vendorDropdownOpen() && vendorSearch().trim()"
-                class="absolute w-full bg-surface border rounded-lg shadow-panel mt-1"
-                style="z-index: 1060; top: 100%; left: 0; max-height: 264px; overflow-y: auto;"
+                class="absolute w-full bg-surface border rounded-lg shadow-panel mt-1 z-[1060] top-full left-0 max-h-[264px] overflow-y-auto"
+               
               >
                 <!-- Loading -->
                 <div *ngIf="loadingVendors()" class="flex items-center gap-2 px-4 py-4 text-muted text-xs">
@@ -353,7 +353,7 @@
 
                 <!-- Results -->
                 <ng-container *ngIf="!loadingVendors()">
-                  <div *ngIf="vendors().length > 0" class="ui-list-group ui-list-group-flush rounded-t-lg">
+                  <div *ngIf="vendors().length > 0" class="ui-list-group rounded-t-lg">
                     <button
                       *ngFor="let vendor of vendors()"
                       type="button"
@@ -409,7 +409,7 @@
             <!-- Selected vendor card -->
             <ng-template #selectedVendorBlock>
               <div class="flex items-center gap-4 px-4 py-2 rounded-lg border bg-subtle">
-                <div class="flex items-center justify-center rounded-full bg-brand  shrink-0" style="width:36px;height:36px;">
+                <div class="flex items-center justify-center rounded-full bg-brand  shrink-0 h-9 w-9">
                   <i class="bi bi-building text-brand text-xs"></i>
                 </div>
                 <div class="grow min-w-0">
@@ -652,9 +652,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isTransferModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isTransferModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isTransferModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isTransferModalOpen()"
@@ -745,9 +745,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isVendorCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isVendorCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isVendorCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isVendorCreateModalOpen()"
@@ -764,7 +764,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="vendorCreateError()" class="ui-alert ui-alert-danger py-2 mb-4">{{ vendorCreateError() }}</div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="vendorCreateForm" (ngSubmit)="createVendorFromModal()" [class.pe-none]="creatingVendor()" [class.opacity-50]="creatingVendor()">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="vendorCreateForm" (ngSubmit)="createVendorFromModal()" [class.pointer-events-none]="creatingVendor()" [class.opacity-50]="creatingVendor()">
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Name <span class="text-danger">*</span></label>
             <input class="ui-form-control" formControlName="name" />
@@ -867,9 +867,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isImportModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isImportModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isImportModalOpen()"
@@ -912,7 +912,7 @@
       <i class="bi bi-receipt text-brand text-xs"></i>
       <span class="text-xs font-semibold uppercase tracking-wider text-muted">Tax Breakdown</span>
     </div>
-    <div class="ui-grid grid grid-cols-12 gap-1 text-xs" style="min-width: 300px;">
+    <div class="ui-grid grid grid-cols-12 gap-1 text-xs min-w-[300px]">
       <div class="col-span-7 text-muted">Total on Receipt</div>
       <div class="col-span-5 text-right font-mono">{{ formatMoney(r.amount ?? 0, r.currency || currentOrganizationCurrency) }}</div>
 
@@ -959,7 +959,7 @@
       <i class="bi bi-building text-brand text-xs"></i>
       <span class="text-xs font-semibold uppercase tracking-wider text-muted">Vendor Details</span>
     </div>
-    <div class="text-xs" style="min-width: 240px; max-width: 320px;">
+    <div class="text-xs min-w-[240px] max-w-[320px]">
       <div class="font-semibold mb-1">{{ v.name }}</div>
       <div *ngIf="v.taxId" class="text-muted mb-1"><i class="bi bi-hash mr-1"></i>TIN: {{ v.taxId }}</div>
       <div *ngIf="v.contactPerson" class="text-muted mb-1"><i class="bi bi-person mr-1"></i>{{ v.contactPerson }}</div>

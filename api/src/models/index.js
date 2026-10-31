@@ -2,7 +2,7 @@ const { PricingRequest, PricingRequestLimit, initPricingRequestModels } = requir
 const {Voucher,initVoucherModel}=require('./voucher');
 const { ReportDocument, initReportDocumentModel } = require('./report-document');
 const {Cheque,initChequeModel}=require('./cheque');
-const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,initOrganizationRoleModels}=require('./organization-role');
+const {OrganizationRole,OrganizationRolePermission,OrganizationUserRole,OrganizationRoleAuditLog,initOrganizationRoleModels}=require('./organization-role');
 const {BankAccount,BankOperation,BankEntry,initBankModels} = require('./bank');
 const {Debt, DebtPayment, initDebtModels} = require('./debt');
 const {EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState, initEmailTicketModels} = require('./email-ticket');
@@ -1420,11 +1420,13 @@ function initModels(sequelize) {
   OrganizationRole.belongsToMany(Permission,{through:OrganizationRolePermission,foreignKey:'roleId',otherKey:'permissionId',as:'permissions'});
   OrganizationRole.belongsToMany(User,{through:OrganizationUserRole,foreignKey:'roleId',otherKey:'userId',as:'members'});
   OrganizationUserRole.belongsTo(OrganizationRole,{foreignKey:'roleId',as:'role'});
+  OrganizationRoleAuditLog.belongsTo(User,{foreignKey:'actorUserId',as:'actor',constraints:false});
+  OrganizationRoleAuditLog.belongsTo(User,{foreignKey:'targetUserId',as:'targetUser',constraints:false});
   return {
     PricingRequest,
     PricingRequestLimit,
     ReportDocument,
-    OrganizationRole,OrganizationRolePermission,OrganizationUserRole,
+    OrganizationRole,OrganizationRolePermission,OrganizationUserRole,OrganizationRoleAuditLog,
     BankAccount, BankOperation, BankEntry, Cheque, Voucher,
     Debt, DebtPayment,
     EmailTicket, TicketMessage, TicketAttachment, GmailMailbox, GmailOAuthState,

@@ -19,7 +19,7 @@
           >
             <i class="bi bi-three-dots-vertical"></i>
           </button>
-          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+          <ul class="ui-dropdown-menu shadow-panel">
             <li>
               <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading() || isContextLocked">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -58,9 +58,9 @@
       <div class="col-span-12 md:col-span-5">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input type="text" class="ui-form-control pl-12" [class.pr-12]="filter()" placeholder="Name, legal name, TIN, contact..." [ngModel]="filter()" (ngModelChange)="onFilterChange($event)" [disabled]="isContextLocked" />
-          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onFilterChange('')" title="Clear search" [disabled]="isContextLocked"><i class="bi bi-x-circle-fill"></i></button>
+          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="onFilterChange('')" title="Clear search" [disabled]="isContextLocked"><i class="bi bi-x-circle-fill"></i></button>
         </div>
       </div>
     </div>
@@ -98,7 +98,7 @@
       <span class="text-xs text-muted font-semibold mr-1">Active:</span>
       <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onFilterChange('')" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="onFilterChange('')" aria-label="Remove filter"></button>
       </span>
     </div>
 
@@ -183,9 +183,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -202,7 +202,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="vendorModalError()" class="ui-alert ui-alert-danger py-2">{{ vendorModalError() }}</div>
-        <form id="vendor-create-form" [formGroup]="vendorForm" (ngSubmit)="createVendor()" (input)="onVendorFormInput()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form id="vendor-create-form" [formGroup]="vendorForm" (ngSubmit)="createVendor()" (input)="onVendorFormInput()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <app-vendor-form-fields
             [form]="vendorForm"
             [submitted]="vendorFormSubmitted"
@@ -224,9 +224,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isImportModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isImportModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isImportModalOpen()"
@@ -256,9 +256,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isEditModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isEditModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isEditModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isEditModalOpen()"
@@ -275,7 +275,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="vendorModalError()" class="ui-alert ui-alert-danger py-2">{{ vendorModalError() }}</div>
-        <form id="vendor-edit-form" [formGroup]="vendorForm" (ngSubmit)="saveEdit()" (input)="onVendorFormInput()" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form id="vendor-edit-form" [formGroup]="vendorForm" (ngSubmit)="saveEdit()" (input)="onVendorFormInput()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <app-vendor-form-fields
             [form]="vendorForm"
             [submitted]="vendorFormSubmitted"

@@ -21,7 +21,7 @@
           >
             <i class="bi bi-three-dots-vertical"></i>
           </button>
-          <ul class="ui-dropdown-menu ui-dropdown-menu-end shadow-panel">
+          <ul class="ui-dropdown-menu shadow-panel">
             <li>
               <button class="ui-dropdown-item flex items-center gap-2" type="button" (click)="load()" [disabled]="loading()">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -58,9 +58,9 @@
       <div class="col-span-12 md:col-span-4">
         <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1">Search</label>
         <div class="relative">
-          <i class="bi bi-search absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           <input type="text" class="ui-form-control pl-12" [class.pr-12]="filter()" placeholder="Name, SKU, category..." [ngModel]="filter()" (ngModelChange)="onFilterChange($event)" />
-          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted" style="right:0.75rem;top:50%;transform:translateY(-50%);" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+          <button *ngIf="filter()" class="ui-btn absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="onFilterChange('')" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
         </div>
       </div>
       <div class="col-span-12 md:col-span-4">
@@ -72,10 +72,10 @@
         </div>
         <ng-template #vendorFilterSearchTemplate>
           <div class="relative">
-            <i class="bi bi-truck absolute text-muted" style="left:0.75rem;top:50%;transform:translateY(-50%);pointer-events:none;"></i>
+            <i class="bi bi-truck absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             <input type="text" class="ui-form-control pl-12" [ngModel]="vendorFilterSearch" (ngModelChange)="onVendorFilterSearchChange($event)" placeholder="Search vendor or TIN" />
           </div>
-          <div *ngIf="loadingVendorFilter()" class="ui-form-text"><i class="bi bi-arrow-clockwise spin mr-1"></i>Searching...</div>
+          <div *ngIf="loadingVendorFilter()" class="ui-form-text"><i class="bi bi-arrow-clockwise inline-block animate-spin mr-1"></i>Searching...</div>
           <div class="ui-list-group mt-1 shadow-panel" *ngIf="vendorFilterSearch.trim() && vendorFilterResults().length > 0">
             <button type="button" class="ui-list-group-item ui-list-group-item-action text-xs" *ngFor="let vendor of vendorFilterResults()" (click)="selectVendorFilter(vendor)">{{ vendorOptionLabel(vendor) }}</button>
           </div>
@@ -120,11 +120,11 @@
       <span class="text-xs text-muted font-semibold mr-1">Active:</span>
       <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="onFilterChange('')" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="onFilterChange('')" aria-label="Remove filter"></button>
       </span>
       <span *ngIf="selectedVendorFilter()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
         <i class="bi bi-truck text-xs text-muted"></i> {{ vendorOptionLabel(selectedVendorFilter()!) }}
-        <button type="button" class="ui-btn-close ml-1" style="font-size:0.55rem;" (click)="clearVendorFilter()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close ml-1" (click)="clearVendorFilter()" aria-label="Remove filter"></button>
       </span>
     </div>
 
@@ -249,9 +249,9 @@
   </div>
 </section>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isCreateModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isCreateModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isCreateModalOpen()"
@@ -268,7 +268,7 @@
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="createModalError()" class="ui-alert ui-alert-danger py-2">{{ createModalError() }}</div>
-        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createItemForm" (ngSubmit)="createItem()" novalidate [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createItemForm" (ngSubmit)="createItem()" novalidate [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Name <span *ngIf="isCreateFieldRequired('name')" class="text-danger">*</span></label>
             <div class="relative">
@@ -356,7 +356,7 @@
           <div class="col-span-12 md:col-span-6" *ngIf="createItemForm.get('type')?.value === 'product'">
             <label class="ui-form-label font-semibold" for="create-stock-threshold">Low-stock threshold</label>
             <input id="create-stock-threshold" type="number" min="0" step="1" class="ui-form-control" formControlName="reorderLevel" />
-            <p class="text-xs text-slate-500 mt-1">Notify all organization members at or below this quantity. Set 0 for out-of-stock alerts only.</p>
+            <p class="text-xs text-muted mt-1">Notify all organization members at or below this quantity. Set 0 for out-of-stock alerts only.</p>
           </div>
 
           <div class="col-span-12">
@@ -388,9 +388,9 @@
 </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isEditModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isEditModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isEditModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isEditModalOpen()"
@@ -406,7 +406,7 @@
         <div *ngIf="submitting()" class="modal-loading-overlay">
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
-        <div class="ui-grid grid grid-cols-12 gap-4" [class.pe-none]="submitting()" [class.opacity-50]="submitting()">
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <div class="col-span-12 md:col-span-4">
             <label class="ui-form-label font-semibold">Organization</label>
             <ng-container *ngIf="isSuperuser; else fixedOrgField">
@@ -509,7 +509,7 @@
           <div class="col-span-12 md:col-span-6" *ngIf="editForm['type'] === 'product'">
             <label class="ui-form-label font-semibold" for="edit-stock-threshold">Low-stock threshold</label>
             <input id="edit-stock-threshold" type="number" min="0" step="1" class="ui-form-control" [(ngModel)]="editForm['reorderLevel']" />
-            <p class="text-xs text-slate-500 mt-1">Notify all organization members at or below this quantity. Set 0 for out-of-stock alerts only.</p>
+            <p class="text-xs text-muted mt-1">Notify all organization members at or below this quantity. Set 0 for out-of-stock alerts only.</p>
           </div>
 
           <div class="col-span-12">
@@ -535,9 +535,9 @@
   </div>
 </div>
 
-<div class="ui-modal-backdrop fade show" *ngIf="isImportModalOpen()"></div>
+<div class="ui-modal-backdrop" *ngIf="isImportModalOpen()"></div>
 <div
-  appModal class="ui-modal fade show"
+  appModal class="ui-modal"
   tabindex="-1"
   [style.display]="isImportModalOpen() ? 'block' : 'none'"
   [attr.aria-hidden]="!isImportModalOpen()"

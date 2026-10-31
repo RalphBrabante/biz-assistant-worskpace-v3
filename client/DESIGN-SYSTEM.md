@@ -5,14 +5,19 @@ The application uses Tailwind CSS 3 with Angular 18's existing build pipeline. B
 ## Visual foundations
 
 - A charcoal navigation rail, neutral surfaces, and indigo primary actions establish the application hierarchy.
-- Theme tokens live in `src/styles.css`. Tailwind exposes semantic colors such as `canvas`, `surface`, `ink`, `muted`, `line`, and `brand`.
+- Theme tokens live in `src/styles.css`. Tailwind exposes semantic colors such as `canvas`, `surface`, `ink`, `muted`, `line`, `line-strong`, and `brand`.
+- Colors that stay the same in both themes are named in `tailwind.config.js`: `brand-fill`, `success-fill`, and `danger-fill` for white-on-color buttons, `chrome-*` for the navigation rail and sign-in artwork, and `chart-*` for dashboard legends. Do not put hex values in class names.
+- Theme text and fill tokens meet WCAG AA (4.5:1) on the surfaces they are used on. Re-check contrast when changing a token.
+- The smallest text is `text-2xs` (11px).
 - Light and dark themes share components. `ThemeService` sets `data-theme` on the document root.
 - Use Tailwind spacing, flex, grid, and responsive utilities in templates. The desktop navigation starts at `lg` (1024px); smaller screens use a drawer.
 - Keep complete class names in templates or TypeScript strings so Tailwind's content scanner can discover them.
 
 ## Shared components
 
-Reusable styles are defined in Tailwind's components layer in `src/styles.css`: `ui-btn`, `ui-card`, `ui-form-control`, `ui-form-select`, `ui-table`, `ui-badge`, `ui-alert`, and their variants. Utilities can override these styles without adding page-specific copies.
+Reusable styles are defined in Tailwind's components layer in `src/styles.css`: `ui-btn`, `ui-card`, `ui-form-control`, `ui-form-select`, `ui-table`, `ui-badge`, `ui-alert`, their variants, and the workspace frame. Utilities can override these styles without adding page-specific copies. Component stylesheets remain for layouts specific to one page, such as the order board and chat panel; they should use the theme variables rather than fixed colors, except for printed documents that must stay black on white.
+
+Static `style` attributes are not used in templates; use utilities, including arbitrary values such as `max-h-[280px]`. Tailwind has no effect on Bootstrap class names, so use `pointer-events-none` rather than `pe-none`.
 
 Use `page-heading` for page introductions, with one primary action and secondary controls alongside it. Place dense tables inside `ui-table-responsive` so they scroll inside their panels instead of widening the page.
 
@@ -27,7 +32,7 @@ Import the corresponding directive into each standalone component using it. Do n
 ## Validation
 
 ```sh
-node --test tests/expense-calculation.test.cjs tests/organization-messages.test.cjs tests/ui-interactions.test.cjs
+node --test tests/design-system.test.cjs tests/expense-calculation.test.cjs tests/organization-messages.test.cjs tests/ui-interactions.test.cjs
 NG_BUILD_MAX_WORKERS=2 npm run build -- --progress=false
 ```
 
