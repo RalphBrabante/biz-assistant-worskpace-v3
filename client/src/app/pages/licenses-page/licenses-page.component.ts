@@ -1,9 +1,8 @@
-import {RowActionsComponent} from '../../shared/row-actions.component';
+import { RowActionsComponent } from '../../shared/row-actions.component';
 import { ModalDirective } from '../../shared/modal.directive';
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { AbstractControl, FormBuilder, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import { Component, inject, signal } from '@angular/core';
+import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
@@ -11,116 +10,122 @@ import { OrganizationContextService } from '../../core/organization-context.serv
 import { ApiResponse } from '../../core/types';
 import { loadTablePreferences, saveTablePreferences, toPositiveInt, toTableViewMode, TableViewMode } from '../../core/table-preferences';
 import { TooltipDirective } from '../../shared/tooltip.directive';
+import { LicenseExtendDialogComponent, LicenseExtendedEvent } from '../../shared/license-extend-dialog.component';
+import {
+  LICENSE_PLANS,
+  LICENSE_STATUS_FILTER_OPTIONS,
+  LicenseOrganization,
+  LicenseRow,
+  LicenseState,
+  LicenseSummary,
+  addMonthsLocal,
+  badgeClass,
+  createLicenseForm,
+  generateUuid,
+  licenseFieldError,
+  licensePayload,
+  licenseState,
+  organizationLabel,
+  planOptions,
+  seatSummary,
+  statusFilterLabel,
+  toDateTimeLocal,
+} from '../../shared/license-utils';
 
-interface LicenseRow {
-  id: string;
-  organizationId?: string | null;
-  organization?: {
-    id: string;
-    name?: string;
-    legalName?: string;
-  };
-  key: string;
-  planName?: string;
-  status?: string;
-  startsAt?: string;
-  expiresAt?: string;
-  maxUsers?: number;
-  isActive?: boolean;
-  notes?: string;
-}
-
-interface OrganizationOption {
-  id: string;
-  name?: string;
-  legalName?: string;
-}
+type LicenseListResponse = ApiResponse<LicenseRow[]> & { meta?: ApiResponse<LicenseRow[]>['meta'] & { summary?: LicenseSummary } };
+type LicenseWriteResponse = ApiResponse<LicenseRow> & { meta?: { warnings?: string[] } };
 
 @Component({
   selector: 'app-licenses-page',
   standalone: true,
-  imports: [RowActionsComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective],
+  imports: [RowActionsComponent, ModalDirective, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, TooltipDirective, LicenseExtendDialogComponent],
   templateUrl: './licenses-page.component.html',
 })
 export class LicensesPageComponent {
-  private readonly api: ApiService;
+  private readonly api = inject(ApiService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly organizationContext = inject(OrganizationContextService);
   private readonly fb = inject(FormBuilder);
 
-  constructor(api: ApiService) {
-    this.api = api;
-  }
-
   readonly rows = signal<LicenseRow[]>([]);
-  readonly organizations = signal<OrganizationOption[]>([]);
+  readonly organizations = signal<LicenseOrganization[]>([]);
+  readonly summary = signal<LicenseSummary | null>(null);
   readonly loading = signal(false);
   readonly submitting = signal(false);
-  readonly deletingId = signal('');
+  readonly busyId = signal('');
   readonly isCreateModalOpen = signal(false);
+  readonly extendTarget = signal<LicenseRow | null>(null);
+  readonly copiedId = signal('');
 
   readonly message = signal('');
+  readonly warnings = signal<string[]>([]);
   readonly error = signal('');
   readonly createModalError = signal('');
+  readonly createOverlapWarning = signal('');
+
   readonly filter = signal('');
+  statusFilter = '';
+  planFilter = '';
+  readonly statusOptions = LICENSE_STATUS_FILTER_OPTIONS;
+  readonly planFilterOptions = LICENSE_PLANS;
   readonly pageSizeOptions = [10, 20, 50, 100];
   page = 1;
   pageSize = 20;
   total = 0;
   totalPages = 1;
-    viewMode: TableViewMode = 'table';
+  viewMode: TableViewMode = 'table';
   private readonly tablePrefsKey = 'licenses-page';
 
   createLicenseForm: FormGroup = this.newCreateLicenseForm();
-
-  readonly filteredRows = computed(() => {
-    const q = this.filter().trim().toLowerCase();
-    if (!q) {
-      return this.rows();
-    }
-
-    return this.rows().filter((row) => {
-      return (
-        String(row.key || '').toLowerCase().includes(q) ||
-        String(row.planName || '').toLowerCase().includes(q) ||
-        String(row.status || '').toLowerCase().includes(q) ||
-        String(row.organization?.name || '').toLowerCase().includes(q) ||
-        String(row.organization?.legalName || '').toLowerCase().includes(q)
-      );
-    });
-  });
 
   get isSuperuser(): boolean {
     return this.organizationContext.isSuperuser();
   }
 
+  /** License changes are platform-only; organization administrators see their own licenses read-only. */
+  get canManage(): boolean {
+    return this.isSuperuser;
+  }
+
+  get hasActiveFilters(): boolean {
+    return this.activeFilterCount > 0;
+  }
+
+  get activeFilterCount(): number {
+    return [this.filter().trim(), this.statusFilter, this.planFilter].filter(Boolean).length;
+  }
+
+  get createPlanOptions() {
+    return planOptions(this.createLicenseForm.get('planName')?.value);
+  }
+
   ngOnInit(): void {
     this.restoreTablePreferences();
     this.load();
-    this.loadOrganizations();
+    if (this.canManage) {
+      this.loadOrganizations();
+    }
   }
 
   load(): void {
     this.loading.set(true);
     this.error.set('');
+    const params = new URLSearchParams({ page: String(this.page), limit: String(this.pageSize) });
     const q = this.filter().trim();
-    const params = new URLSearchParams({
-      page: String(this.page),
-      limit: String(this.pageSize),
-    });
-    if (q) {
-      params.set('q', q);
-    }
+    if (q) params.set('q', q);
+    if (this.statusFilter) params.set('status', this.statusFilter);
+    if (this.planFilter) params.set('planName', this.planFilter);
 
     this.api.list<LicenseRow>(`/api/v1/licenses?${params.toString()}`).subscribe({
-      next: (response: ApiResponse<LicenseRow[]>) => {
+      next: (response: LicenseListResponse) => {
         this.loading.set(false);
         this.rows.set(response.data || []);
         const meta = response.meta || {};
+        this.summary.set(meta.summary || null);
         this.total = Number(meta.total || 0);
         this.totalPages = Math.max(1, Number(meta.totalPages || 1));
         this.page = Math.max(1, Number(meta.page || this.page));
-                this.persistTablePreferences();
+        this.persistTablePreferences();
         if (this.page > this.totalPages) {
           this.page = this.totalPages;
           this.load();
@@ -134,102 +139,53 @@ export class LicensesPageComponent {
   }
 
   loadOrganizations(): void {
-    this.api.list<OrganizationOption>('/api/v1/organizations?limit=200').subscribe({
-      next: (response: ApiResponse<OrganizationOption[]>) => {
-        this.organizations.set(response.data || []);
-      },
-      error: () => {
-        this.organizations.set([]);
-      },
+    this.api.list<LicenseOrganization>('/api/v1/organizations?limit=200').subscribe({
+      next: (response: ApiResponse<LicenseOrganization[]>) => this.organizations.set(response.data || []),
+      error: () => this.organizations.set([]),
     });
   }
 
-  openCreateModal(): void {
-    this.createLicenseForm = this.newCreateLicenseForm();
-    this.createModalError.set('');
-    this.error.set('');
-    this.message.set('');
-    this.isCreateModalOpen.set(true);
-  }
-
-  closeCreateModal(): void {
-    this.isCreateModalOpen.set(false);
-  }
-
-  createLicense(): void {
-    if (this.createLicenseForm.invalid) {
-      this.createLicenseForm.markAllAsTouched();
-      this.createModalError.set('Please complete all required license fields.');
-      return;
-    }
-
-    this.submitting.set(true);
-    this.createModalError.set('');
-    this.error.set('');
-    this.message.set('');
-
-    const payload = this.buildPayload(this.createLicenseForm.getRawValue(), true);
-
-    this.api.create<LicenseRow>('/api/v1/licenses', payload).subscribe({
-      next: (response) => {
-        this.submitting.set(false);
-        this.isCreateModalOpen.set(false);
-        this.message.set(response.message || 'License created successfully.');
-        this.load();
-      },
-      error: (err) => {
-        this.submitting.set(false);
-        this.createModalError.set(err?.error?.message || 'Unable to create license.');
-      },
-    });
-  }
-
-  async removeLicense(id: string): Promise<void> {
-    const confirmed = await this.confirmDialog.confirm({
-      title: 'Delete License',
-      message: 'Delete this license? This action cannot be undone.',
-      confirmText: 'Delete License',
-      confirmButtonClass: 'ui-btn-danger',
-      iconClass: 'bi-patch-minus',
-    });
-    if (!confirmed) {
-      return;
-    }
-    this.deletingId.set(id);
-    this.error.set('');
-    this.message.set('');
-
-    this.api.remove('/api/v1/licenses', id).subscribe({
-      next: (response) => {
-        this.deletingId.set('');
-        this.message.set(response.message || 'License deleted successfully.');
-        this.load();
-      },
-      error: (err) => {
-        this.deletingId.set('');
-        this.error.set(err?.error?.message || 'Unable to delete license.');
-      },
-    });
-  }
-
-  setViewMode(mode: TableViewMode): void {
-    this.viewMode = mode;
-    this.persistTablePreferences();
-  }
+  // Filters
 
   onFilterChange(value: string): void {
     this.filter.set(value);
-    this.page = 1;
-    this.persistTablePreferences();
-    this.load();
+    this.reloadFromFirstPage();
+  }
+
+  clearSearch(): void {
+    this.onFilterChange('');
+  }
+
+  onStatusFilterChange(value: string): void {
+    this.statusFilter = value || '';
+    this.reloadFromFirstPage();
+  }
+
+  onPlanFilterChange(value: string): void {
+    this.planFilter = value || '';
+    this.reloadFromFirstPage();
+  }
+
+  /** The overview tiles act as status filters; clicking the active one clears it. */
+  toggleStatusFilter(value: string): void {
+    this.onStatusFilterChange(this.statusFilter === value ? '' : value);
+  }
+
+  clearFilters(): void {
+    this.filter.set('');
+    this.statusFilter = '';
+    this.planFilter = '';
+    this.reloadFromFirstPage();
+  }
+
+  statusFilterLabel(value: string): string {
+    return statusFilterLabel(value);
   }
 
   onPageSizeChange(value: string): void {
     const parsed = Number(value);
     this.pageSize = Number.isFinite(parsed) ? parsed : 20;
-    this.page = 1;
-    this.persistTablePreferences();
-    this.load();
+    this.reloadFromFirstPage();
   }
 
   goToPage(page: number): void {
@@ -239,6 +195,203 @@ export class LicensesPageComponent {
     this.page = page;
     this.persistTablePreferences();
     this.load();
+  }
+
+  setViewMode(mode: TableViewMode): void {
+    this.viewMode = mode;
+    this.persistTablePreferences();
+  }
+
+  private reloadFromFirstPage(): void {
+    this.page = 1;
+    this.persistTablePreferences();
+    this.load();
+  }
+
+  // Create
+
+  openCreateModal(): void {
+    if (!this.canManage) return;
+    this.createLicenseForm = this.newCreateLicenseForm();
+    this.createModalError.set('');
+    this.createOverlapWarning.set('');
+    this.clearNotices();
+    this.isCreateModalOpen.set(true);
+  }
+
+  closeCreateModal(): void {
+    if (!this.submitting()) this.isCreateModalOpen.set(false);
+  }
+
+  onCreatePlanChange(): void {
+    const plan = LICENSE_PLANS.find((option) => option.name === this.createLicenseForm.get('planName')?.value);
+    if (plan) {
+      this.createLicenseForm.patchValue({ maxUsers: plan.includedUsers });
+    }
+  }
+
+  onCreateOrganizationChange(): void {
+    const organizationId = String(this.createLicenseForm.get('organizationId')?.value || '');
+    this.createOverlapWarning.set('');
+    if (!organizationId) return;
+    this.api.list<LicenseRow>(`/api/v1/licenses?organizationId=${encodeURIComponent(organizationId)}&status=active&limit=1`).subscribe({
+      next: (response) => {
+        const current = response.data?.[0];
+        if (current && this.createLicenseForm.get('organizationId')?.value === organizationId) {
+          const until = current.expiresAt ? new Date(current.expiresAt).toLocaleDateString() : 'an open date';
+          this.createOverlapWarning.set(
+            `This organization already has an active ${current.planName || ''} license until ${until}. A new license will apply alongside it. To renew, extend the existing license instead.`
+          );
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  setCreateTerm(months: number): void {
+    const startsAt = String(this.createLicenseForm.get('startsAt')?.value || '');
+    this.createLicenseForm.patchValue({ expiresAt: addMonthsLocal(startsAt, months) });
+    this.createLicenseForm.get('expiresAt')?.markAsTouched();
+  }
+
+  generateKey(): void {
+    this.createLicenseForm.patchValue({ key: generateUuid() });
+  }
+
+  createFieldError(name: string): string {
+    return licenseFieldError(this.createLicenseForm, name);
+  }
+
+  createLicense(): void {
+    if (this.submitting()) return;
+    if (this.createLicenseForm.invalid) {
+      this.createLicenseForm.markAllAsTouched();
+      this.createModalError.set('Please fix the highlighted fields.');
+      return;
+    }
+
+    this.submitting.set(true);
+    this.createModalError.set('');
+    this.clearNotices();
+
+    this.api.create<LicenseRow>('/api/v1/licenses', licensePayload(this.createLicenseForm.getRawValue(), true)).subscribe({
+      next: (response: LicenseWriteResponse) => {
+        this.submitting.set(false);
+        this.isCreateModalOpen.set(false);
+        this.message.set(response.message || 'License created successfully.');
+        this.warnings.set(response.meta?.warnings || []);
+        this.load();
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.createModalError.set(err?.error?.message || 'Unable to create license.');
+      },
+    });
+  }
+
+  // Row actions
+
+  openExtend(row: LicenseRow): void {
+    this.clearNotices();
+    this.extendTarget.set(row);
+  }
+
+  onExtended(event: LicenseExtendedEvent): void {
+    this.extendTarget.set(null);
+    this.message.set(event.message);
+    this.warnings.set(event.warnings);
+    this.load();
+  }
+
+  async revokeLicense(row: LicenseRow): Promise<void> {
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Revoke License',
+      message: `Revoke the ${row.planName || ''} license for ${organizationLabel(row)}? Its members lose access immediately and are notified by email.`,
+      confirmText: 'Revoke License',
+      confirmButtonClass: 'ui-btn-danger',
+      iconClass: 'bi-shield-x',
+    });
+    if (!confirmed) return;
+    this.runRowAction(row.id, this.api.create<LicenseRow>(`/api/v1/licenses/${row.id}/revoke`, {}), 'License revoked successfully.', 'Unable to revoke license.');
+  }
+
+  async removeLicense(row: LicenseRow): Promise<void> {
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete License',
+      message: row.status === 'active'
+        ? 'This license is active. Deleting it removes access for its organization and its history. Revoke it instead to keep a record.'
+        : 'Delete this license and its history? This action cannot be undone.',
+      confirmText: 'Delete License',
+      confirmButtonClass: 'ui-btn-danger',
+      iconClass: 'bi-patch-minus',
+    });
+    if (!confirmed) return;
+    this.runRowAction(row.id, this.api.remove('/api/v1/licenses', row.id), 'License deleted successfully.', 'Unable to delete license.');
+  }
+
+  private runRowAction(id: string, request: ReturnType<ApiService['remove']>, success: string, failure: string): void {
+    this.busyId.set(id);
+    this.clearNotices();
+    request.subscribe({
+      next: (response) => {
+        this.busyId.set('');
+        this.message.set(response.message || success);
+        this.load();
+      },
+      error: (err) => {
+        this.busyId.set('');
+        this.error.set(err?.error?.message || failure);
+      },
+    });
+  }
+
+  copyKey(row: LicenseRow): void {
+    navigator.clipboard?.writeText(row.key).then(() => {
+      this.copiedId.set(row.id);
+      setTimeout(() => this.copiedId() === row.id && this.copiedId.set(''), 1500);
+    }).catch(() => {});
+  }
+
+  // Display helpers
+
+  state(row: LicenseRow): LicenseState {
+    return licenseState(row);
+  }
+
+  badgeClass(row: LicenseRow): string {
+    return badgeClass(this.state(row).tone);
+  }
+
+  seats(row: LicenseRow) {
+    return seatSummary(row);
+  }
+
+  organizationLabel(row: LicenseRow): string {
+    return organizationLabel(row);
+  }
+
+  organizationOptionLabel(org: LicenseOrganization): string {
+    return org.name || org.legalName || org.id;
+  }
+
+  trackById(_index: number, row: LicenseRow): string {
+    return row.id;
+  }
+
+  private clearNotices(): void {
+    this.message.set('');
+    this.warnings.set([]);
+    this.error.set('');
+  }
+
+  private newCreateLicenseForm(): FormGroup {
+    const startsAt = toDateTimeLocal(new Date());
+    return createLicenseForm(this.fb, {
+      key: generateUuid(),
+      startsAt,
+      expiresAt: addMonthsLocal(startsAt, 12),
+      maxUsers: null,
+    });
   }
 
   private restoreTablePreferences(): void {
@@ -253,150 +406,6 @@ export class LicensesPageComponent {
       page: this.page,
       pageSize: this.pageSize,
       viewMode: this.viewMode,
-    });
-  }
-
-  trackById(_index: number, row: LicenseRow): string {
-    return row.id;
-  }
-
-  private newLicenseForm(): Record<string, unknown> {
-    return {
-      organizationId: '',
-      key: this.generateUuid(),
-      planName: '',
-      status: 'active',
-      startsAt: '',
-      expiresAt: '',
-      maxUsers: 0,
-      isActive: true,
-      notes: '',
-    };
-  }
-
-  private newCreateLicenseForm(): FormGroup {
-    const defaults = this.newLicenseForm();
-    return this.fb.group(
-      {
-        organizationId: [defaults['organizationId']],
-        key: [defaults['key'], [Validators.required]],
-        planName: [defaults['planName'], [Validators.required, Validators.maxLength(120)]],
-        status: [defaults['status'], [Validators.required, Validators.maxLength(50)]],
-        startsAt: [defaults['startsAt']],
-        expiresAt: [defaults['expiresAt']],
-        maxUsers: [defaults['maxUsers'], [Validators.required, Validators.min(0)]],
-        isActive: [defaults['isActive']],
-        notes: [defaults['notes'], [Validators.maxLength(1000)]],
-      },
-      { validators: [this.licenseDateRangeValidator] }
-    );
-  }
-
-  private buildPayload(form: Record<string, unknown>, includeKey: boolean): Record<string, unknown> {
-    const organizationId = this.optionalString(form['organizationId']);
-    const payload: Record<string, unknown> = {
-      organizationId: organizationId || null,
-      planName: this.optionalString(form['planName']),
-      status: this.optionalString(form['status']),
-      startsAt: this.optionalDate(form['startsAt']),
-      expiresAt: this.optionalDate(form['expiresAt']),
-      maxUsers: this.optionalNumber(form['maxUsers']),
-      isActive: Boolean(form['isActive']),
-      notes: this.optionalString(form['notes']),
-    };
-
-    if (includeKey) {
-      payload['key'] = this.asString(form['key']);
-    }
-
-    return payload;
-  }
-
-  generateKey(): void {
-    this.createLicenseForm.patchValue({ key: this.generateUuid() });
-  }
-
-  controlHasError(controlName: string, errorCode?: string): boolean {
-    const control = this.createLicenseForm.get(controlName);
-    if (!control || !(control.touched || control.dirty)) {
-      return false;
-    }
-    if (!errorCode) {
-      return control.invalid;
-    }
-    return !!control.errors?.[errorCode];
-  }
-
-  hasCreateFormError(errorCode: string): boolean {
-    return !!this.createLicenseForm.errors?.[errorCode];
-  }
-
-  private licenseDateRangeValidator(control: AbstractControl): ValidationErrors | null {
-    const startsAt = String(control.get('startsAt')?.value || '').trim();
-    const expiresAt = String(control.get('expiresAt')?.value || '').trim();
-    if (!startsAt || !expiresAt) {
-      return null;
-    }
-    if (new Date(expiresAt).getTime() < new Date(startsAt).getTime()) {
-      return { invalidDateRange: true };
-    }
-    return null;
-  }
-
-  organizationLabel(row: LicenseRow): string {
-    if (row.organization?.name) {
-      return row.organization.name;
-    }
-    if (row.organization?.legalName) {
-      return row.organization.legalName;
-    }
-    return row.organizationId ? row.organizationId : 'Unassigned';
-  }
-
-  organizationOptionLabel(org: OrganizationOption): string {
-    return org.name || org.legalName || org.id;
-  }
-
-  isExpired(row: LicenseRow): boolean {
-    const expiresAt = String(row.expiresAt || '').trim();
-    if (!expiresAt) return false;
-    const expiresTime = new Date(expiresAt).getTime();
-    if (Number.isNaN(expiresTime)) return false;
-    return expiresTime < Date.now();
-  }
-
-  private asString(value: unknown): string {
-    return String(value || '').trim();
-  }
-
-  private optionalString(value: unknown): string | undefined {
-    const cleaned = String(value || '').trim();
-    return cleaned ? cleaned : undefined;
-  }
-
-  private optionalNumber(value: unknown): number | undefined {
-    if (value === '' || value === null || value === undefined) {
-      return undefined;
-    }
-
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : undefined;
-  }
-
-  private optionalDate(value: unknown): string | undefined {
-    const cleaned = String(value || '').trim();
-    return cleaned ? cleaned : undefined;
-  }
-
-  private generateUuid(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
-      const random = Math.floor(Math.random() * 16);
-      const value = char === 'x' ? random : (random & 0x3) | 0x8;
-      return value.toString(16);
     });
   }
 }

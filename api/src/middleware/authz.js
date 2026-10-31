@@ -1,7 +1,7 @@
 const crypto = require('crypto');
-const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
 const { effectiveRoleAccess, resolveTokenOrganizationId } = require('../services/role-access');
+const { findActiveLicense } = require('../services/license-service');
 
 function extractBearerToken(req) {
   const authHeader = req.get('authorization') || '';
@@ -182,17 +182,7 @@ async function authenticateRequest(req, res, next) {
         });
       }
 
-      const now = new Date();
-      const activeLicense = await models.License.findOne({
-        where: {
-          organizationId,
-          isActive: true,
-          status: 'active',
-          revokedAt: null,
-          expiresAt: { [Op.gte]: now },
-        },
-        order: [['expiresAt', 'DESC']],
-      });
+      const activeLicense = await findActiveLicense(models, organizationId);
 
       if (!activeLicense) {
         return res.status(403).json({

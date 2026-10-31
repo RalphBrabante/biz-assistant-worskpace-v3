@@ -4,6 +4,7 @@ const {
   listLicenses,
   getLicenseById,
   updateLicense,
+  extendLicense,
   deleteLicense,
   revokeLicense,
 } = require('../controllers/licenses-controller');
@@ -17,6 +18,7 @@ router.get('/', authorize('licenses.read'), listLicenses);
 router.get('/:id', authorize('licenses.read'), getLicenseById);
 router.put('/:id', requireGlobalRoleAdministrator, authorize('licenses.manage'), updateLicense);
 router.patch('/:id', requireGlobalRoleAdministrator, authorize('licenses.manage'), updateLicense);
+router.post('/:id/extend', requireGlobalRoleAdministrator, authorize('licenses.manage'), extendLicense);
 router.post('/:id/revoke', requireGlobalRoleAdministrator, authorize('licenses.manage'), revokeLicense);
 router.delete('/:id', requireGlobalRoleAdministrator, authorize('licenses.manage'), deleteLicense);
 

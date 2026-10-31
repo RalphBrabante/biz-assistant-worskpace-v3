@@ -13,6 +13,7 @@ const {
 } = require('../services/organization-role-service');
 const { getSocketServer } = require('../services/socket-service');
 const { sendOrganizationUserInviteEmail } = require('../services/email-service');
+const { assertSeatAvailable } = require('../services/license-service');
 const {
   isPrivilegedRequest,
   getAuthenticatedOrganizationId,
@@ -614,6 +615,7 @@ async function inviteOrganizationUserWithRole(req, res, forcedRole) {
         ? (await memberAssignments(allModels,organization.id,user.id,transaction)).some(assignment => assignment.roleId === invitationRole.id)
         : existing.role === roleLabel);
       if (existing && !sameRole) throw fail(409,'This user already has another role in this organization. Manage their existing assignment first.');
+      if (!existing?.isActive) await assertSeatAvailable(allModels,organization.id,{userId:user.id,transaction});
       const hasPrimary = Boolean(user.organizationId) || await OrganizationUser.count({where:{userId:user.id,isPrimary:true,isActive:true},transaction});
       const isPrimary = user.organizationId === organization.id || !hasPrimary;
       const membership = existing || await OrganizationUser.create({organizationId:organization.id,userId:user.id,

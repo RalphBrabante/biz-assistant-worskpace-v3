@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
 const { effectiveRoleAccess, activeMember } = require('../services/role-access');
+const { activeLicenseWhere } = require('../services/license-service');
 const {
   sendPasswordResetEmail,
   sendEmailVerificationEmail,
@@ -157,10 +158,7 @@ async function mapOrganizationLicenseStatus(models, organizationIds, now = new D
   const activeLicenses = await models.License.findAll({
     where: {
       organizationId: organizationIds,
-      isActive: true,
-      status: 'active',
-      revokedAt: null,
-      expiresAt: { [Op.gte]: now },
+      ...activeLicenseWhere(now),
     },
     attributes: ['id', 'organizationId', 'expiresAt'],
     order: [['expiresAt', 'DESC']],

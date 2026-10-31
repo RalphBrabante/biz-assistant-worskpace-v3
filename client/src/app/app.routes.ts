@@ -11,8 +11,6 @@ import { CustomersPageComponent } from './pages/customers-page/customers-page.co
 import { ExpenseDetailPageComponent } from './pages/expense-detail-page/expense-detail-page.component';
 import { ExpensesPageComponent } from './pages/expenses-page/expenses-page.component';
 import { ItemsPageComponent } from './pages/items-page/items-page.component';
-import { LicensesPageComponent } from './pages/licenses-page/licenses-page.component';
-import { LicenseEditPageComponent } from './pages/license-edit-page/license-edit-page.component';
 import { LoginPageComponent } from './pages/login-page/login-page.component';
 import { ResetPasswordPageComponent } from './pages/reset-password-page/reset-password-page.component';
 import { OrganizationDetailPageComponent } from './pages/organization-detail-page/organization-detail-page.component';
@@ -83,8 +81,8 @@ export const routes: Routes = [
       { path: 'taxes', component: TaxTypesPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },
       { path: 'tax-types', pathMatch: 'full', redirectTo: 'taxes' },
       { path: 'vendors', component: VendorsPageComponent, canActivate: [permissionGuard], data: { permissions: ['vendors.read'] } },
-      { path: 'licenses', component: LicensesPageComponent, canActivate: [permissionGuard], data: { permissions: ['licenses.read'] } },
-      { path: 'license/:id', component: LicenseEditPageComponent, canActivate: [permissionGuard], data: { permissions: ['licenses.read'] } },
+      { path: 'licenses', loadComponent: () => import('./pages/licenses-page/licenses-page.component').then(m => m.LicensesPageComponent), canActivate: [permissionGuard], data: { permissions: ['licenses.read'] } },
+      { path: 'license/:id', loadComponent: () => import('./pages/license-edit-page/license-edit-page.component').then(m => m.LicenseEditPageComponent), canActivate: [permissionGuard], data: { permissions: ['licenses.read'] } },
       { path: 'sales-invoices', component: SalesInvoicesPageComponent, canActivate: [permissionGuard], data: { permissions: ['sales_invoices.read'] } },
       { path: 'sales-invoices/:id', component: SalesInvoiceDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['sales_invoices.read'] } },
       { path: '', pathMatch: 'full', component: HomeRedirectPageComponent },

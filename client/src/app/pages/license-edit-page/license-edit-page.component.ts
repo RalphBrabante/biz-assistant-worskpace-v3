@@ -1,54 +1,89 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Observable } from 'rxjs';
+import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { ConfirmDialogService } from '../../core/confirm-dialog.service';
+import { OrganizationContextService } from '../../core/organization-context.service';
 import { ApiResponse } from '../../core/types';
+import { TooltipDirective } from '../../shared/tooltip.directive';
+import { LicenseExtendDialogComponent, LicenseExtendedEvent } from '../../shared/license-extend-dialog.component';
+import {
+  LICENSE_PLANS,
+  LICENSE_STATUS_OPTIONS,
+  LicenseOrganization,
+  LicenseRow,
+  LicenseState,
+  badgeClass,
+  createLicenseForm,
+  licenseFieldError,
+  licensePayload,
+  licenseState,
+  organizationLabel,
+  planOptions,
+  seatSummary,
+  toDateTimeLocal,
+} from '../../shared/license-utils';
 
-interface LicenseRow {
-  id: string;
-  organizationId?: string | null;
-  key: string;
-  planName?: string;
-  status?: string;
-  startsAt?: string;
-  expiresAt?: string;
-  revokedAt?: string;
-  maxUsers?: number;
-  isActive?: boolean;
-  notes?: string;
-}
-
-interface OrganizationOption {
-  id: string;
-  name?: string;
-  legalName?: string;
-}
+type LicenseResponse = ApiResponse<LicenseRow> & { meta?: { warnings?: string[] } };
 
 @Component({
   selector: 'app-license-edit-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, TooltipDirective, LicenseExtendDialogComponent],
   templateUrl: './license-edit-page.component.html',
 })
 export class LicenseEditPageComponent {
+  private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly fb = inject(FormBuilder);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly organizationContext = inject(OrganizationContextService);
+
   readonly loading = signal(false);
   readonly submitting = signal(false);
   readonly error = signal('');
   readonly message = signal('');
-  readonly organizations = signal<OrganizationOption[]>([]);
+  readonly warnings = signal<string[]>([]);
+  readonly organizations = signal<LicenseOrganization[]>([]);
   readonly license = signal<LicenseRow | null>(null);
+  readonly extendOpen = signal(false);
+  readonly copied = signal(false);
 
+  readonly statusOptions = LICENSE_STATUS_OPTIONS;
   licenseId = '';
-  form: Record<string, unknown> = this.newForm();
+  form: FormGroup = createLicenseForm(this.fb);
 
-  constructor(
-    private readonly api: ApiService,
-    private readonly route: ActivatedRoute,
-    private readonly router: Router
-  ) {}
+  get canManage(): boolean {
+    return this.organizationContext.isSuperuser();
+  }
+
+  get state(): LicenseState {
+    return licenseState(this.license());
+  }
+
+  get badgeClass(): string {
+    return badgeClass(this.state.tone);
+  }
+
+  get seats() {
+    return seatSummary(this.license());
+  }
+
+  get organizationName(): string {
+    const row = this.license();
+    return row ? organizationLabel(row) : '';
+  }
+
+  get planOptions() {
+    return planOptions(this.form.get('planName')?.value);
+  }
+
+  get isRevoked(): boolean {
+    return this.license()?.status === 'revoked';
+  }
 
   ngOnInit(): void {
     this.licenseId = String(this.route.snapshot.paramMap.get('id') || '');
@@ -56,7 +91,9 @@ export class LicenseEditPageComponent {
       this.error.set('License ID is missing.');
       return;
     }
-    this.loadOrganizations();
+    if (this.canManage) {
+      this.loadOrganizations();
+    }
     this.loadLicense();
   }
 
@@ -65,23 +102,25 @@ export class LicenseEditPageComponent {
     this.error.set('');
 
     this.api.get<LicenseRow>(`/api/v1/licenses/${this.licenseId}`).subscribe({
-      next: (response: ApiResponse<LicenseRow>) => {
-        const row = response.data || null;
+      next: (response: LicenseResponse) => {
         this.loading.set(false);
+        const row = response.data || null;
         this.license.set(row);
+        if (response.meta?.warnings?.length && !this.warnings().length) {
+          this.warnings.set(response.meta.warnings);
+        }
         if (row) {
-          this.form = {
+          this.form = createLicenseForm(this.fb, {
             organizationId: row.organizationId || '',
             key: row.key || '',
             planName: row.planName || '',
             status: row.status || 'active',
-            startsAt: this.toDateTimeLocal(row.startsAt),
-            expiresAt: this.toDateTimeLocal(row.expiresAt),
-            revokedAt: this.toDateTimeLocal(row.revokedAt),
-            maxUsers: row.maxUsers ?? 0,
+            startsAt: toDateTimeLocal(row.startsAt),
+            expiresAt: toDateTimeLocal(row.expiresAt),
+            maxUsers: row.maxUsers ? row.maxUsers : null,
             isActive: row.isActive !== false,
             notes: row.notes || '',
-          };
+          });
         }
       },
       error: (err) => {
@@ -92,154 +131,124 @@ export class LicenseEditPageComponent {
   }
 
   loadOrganizations(): void {
-    this.api.list<OrganizationOption>('/api/v1/organizations?limit=200').subscribe({
-      next: (response: ApiResponse<OrganizationOption[]>) => {
-        this.organizations.set(response.data || []);
-      },
-      error: () => {
-        this.organizations.set([]);
-      },
+    this.api.list<LicenseOrganization>('/api/v1/organizations?limit=200').subscribe({
+      next: (response: ApiResponse<LicenseOrganization[]>) => this.organizations.set(response.data || []),
+      error: () => this.organizations.set([]),
     });
+  }
+
+  fieldError(name: string): string {
+    return licenseFieldError(this.form, name);
+  }
+
+  onPlanChange(): void {
+    const plan = LICENSE_PLANS.find((option) => option.name === this.form.get('planName')?.value);
+    if (plan && !this.form.get('maxUsers')?.dirty) {
+      this.form.patchValue({ maxUsers: plan.includedUsers });
+    }
+  }
+
+  /** Changes that take access away from an organization are confirmed first. */
+  private accessLossReason(): string {
+    const current = this.license();
+    const next = this.form.getRawValue();
+    if (!current) return '';
+    if (next.status === 'revoked' && current.status !== 'revoked') return 'Revoking this license signs out its members and emails them.';
+    if (next.status === 'suspended' && current.status !== 'suspended') return 'Suspending this license blocks its members from signing in.';
+    if (next.isActive === false && current.isActive !== false) return 'Disabling this license blocks its members from signing in.';
+    if ((next.organizationId || null) !== (current.organizationId || null) && current.organizationId) {
+      return `Moving this license away from ${organizationLabel(current)} removes their access unless they have another license.`;
+    }
+    return '';
   }
 
   async save(): Promise<void> {
-    if (!this.licenseId) {
+    if (!this.licenseId || this.submitting() || !this.canManage) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.error.set('Please fix the highlighted fields.');
       return;
     }
-    const confirmed = await this.confirmDialog.confirm({
-      title: 'Update License',
-      message: 'Save changes to this license?',
-      confirmText: 'Update License',
-      confirmButtonClass: 'ui-btn-primary',
-      iconClass: 'bi-pencil-square',
-    });
-    if (!confirmed) {
-      return;
+    const reason = this.accessLossReason();
+    if (reason) {
+      const confirmed = await this.confirmDialog.confirm({
+        title: 'Save License Changes',
+        message: reason,
+        confirmText: 'Save Changes',
+        confirmButtonClass: 'ui-btn-danger',
+        iconClass: 'bi-exclamation-triangle',
+      });
+      if (!confirmed) return;
     }
-
-    this.submitting.set(true);
-    this.error.set('');
-    this.message.set('');
-
-    const payload = this.buildPayload(this.form);
-
-    this.api.update<LicenseRow>('/api/v1/licenses', this.licenseId, payload).subscribe({
-      next: (response: ApiResponse<LicenseRow>) => {
-        this.submitting.set(false);
-        this.message.set(response.message || 'License updated successfully.');
-        this.loadLicense();
-      },
-      error: (err) => {
-        this.submitting.set(false);
-        this.error.set(err?.error?.message || 'Unable to update license.');
-      },
-    });
+    this.send(this.api.update<LicenseRow>('/api/v1/licenses', this.licenseId, licensePayload(this.form.getRawValue(), false)), 'License updated successfully.', 'Unable to update license.');
   }
 
   async revoke(): Promise<void> {
-    if (!this.licenseId || this.submitting()) {
-      return;
-    }
-
+    if (!this.licenseId || this.submitting()) return;
     const confirmed = await this.confirmDialog.confirm({
       title: 'Revoke License',
-      message: 'Revoke this license? This will mark it inactive.',
+      message: `Revoke this license? Members of ${this.organizationName} lose access immediately and are notified by email.`,
       confirmText: 'Revoke License',
       confirmButtonClass: 'ui-btn-danger',
       iconClass: 'bi-shield-x',
     });
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
+    this.send(this.api.create<LicenseRow>(`/api/v1/licenses/${this.licenseId}/revoke`, {}), 'License revoked successfully.', 'Unable to revoke license.');
+  }
 
-    this.submitting.set(true);
-    this.error.set('');
-    this.message.set('');
-
-    this.api.create<LicenseRow>(`/api/v1/licenses/${this.licenseId}/revoke`, {}).subscribe({
-      next: (response: ApiResponse<LicenseRow>) => {
-        this.submitting.set(false);
-        this.message.set(response.message || 'License revoked successfully.');
-        this.loadLicense();
-      },
-      error: (err) => {
-        this.submitting.set(false);
-        this.error.set(err?.error?.message || 'Unable to revoke license.');
-      },
+  async reinstate(): Promise<void> {
+    if (!this.licenseId || this.submitting()) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Reinstate License',
+      message: `Make this license active again? Members of ${this.organizationName} can sign in as long as it has not expired.`,
+      confirmText: 'Reinstate',
+      confirmButtonClass: 'ui-btn-primary',
+      iconClass: 'bi-arrow-counterclockwise',
     });
+    if (!confirmed) return;
+    this.send(this.api.update<LicenseRow>('/api/v1/licenses', this.licenseId, { status: 'active' }), 'License reinstated.', 'Unable to reinstate license.');
+  }
+
+  onExtended(event: LicenseExtendedEvent): void {
+    this.extendOpen.set(false);
+    this.message.set(event.message);
+    this.warnings.set(event.warnings);
+    this.loadLicense();
+  }
+
+  copyKey(): void {
+    const key = this.license()?.key;
+    if (!key) return;
+    navigator.clipboard?.writeText(key).then(() => {
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+    }).catch(() => {});
   }
 
   backToList(): void {
     void this.router.navigate(['/licenses']);
   }
 
-  organizationOptionLabel(org: OrganizationOption): string {
+  organizationOptionLabel(org: LicenseOrganization): string {
     return org.name || org.legalName || org.id;
   }
 
-  private newForm(): Record<string, unknown> {
-    return {
-      organizationId: '',
-      key: '',
-      planName: '',
-      status: 'active',
-      startsAt: '',
-      expiresAt: '',
-      revokedAt: '',
-      maxUsers: 0,
-      isActive: true,
-      notes: '',
-    };
-  }
-
-  private buildPayload(form: Record<string, unknown>): Record<string, unknown> {
-    const organizationId = this.optionalString(form['organizationId']);
-    return {
-      organizationId: organizationId || null,
-      planName: this.optionalString(form['planName']),
-      status: this.optionalString(form['status']),
-      startsAt: this.optionalDate(form['startsAt']),
-      expiresAt: this.optionalDate(form['expiresAt']),
-      maxUsers: this.optionalNumber(form['maxUsers']),
-      isActive: Boolean(form['isActive']),
-      notes: this.optionalString(form['notes']),
-    };
-  }
-
-  private optionalString(value: unknown): string | undefined {
-    const cleaned = String(value || '').trim();
-    return cleaned ? cleaned : undefined;
-  }
-
-  private optionalNumber(value: unknown): number | undefined {
-    if (value === '' || value === null || value === undefined) {
-      return undefined;
-    }
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : undefined;
-  }
-
-  private optionalDate(value: unknown): string | undefined {
-    const cleaned = String(value || '').trim();
-    return cleaned ? cleaned : undefined;
-  }
-
-  private toDateTimeLocal(value: unknown): string {
-    if (!value) {
-      return '';
-    }
-
-    const date = new Date(String(value));
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  private send(request: Observable<LicenseResponse>, success: string, failure: string): void {
+    this.submitting.set(true);
+    this.error.set('');
+    this.message.set('');
+    this.warnings.set([]);
+    request.subscribe({
+      next: (response: LicenseResponse) => {
+        this.submitting.set(false);
+        this.message.set(response.message || success);
+        this.warnings.set(response.meta?.warnings || []);
+        this.loadLicense();
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.error.set(err?.error?.message || failure);
+      },
+    });
   }
 }

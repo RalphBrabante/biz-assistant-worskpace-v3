@@ -708,7 +708,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"key\": \"LIC-1001\",\n  \"planName\": \"Enterprise\",\n  \"status\": \"active\",\n  \"startsAt\": \"2026-01-01T00:00:00.000Z\",\n  \"expiresAt\": \"2027-01-01T00:00:00.000Z\",\n  \"maxUsers\": 500\n}"
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"planName\": \"Silver\",\n  \"status\": \"active\",\n  \"startsAt\": \"2026-01-01T00:00:00.000Z\",\n  \"expiresAt\": \"2027-01-01T00:00:00.000Z\",\n  \"maxUsers\": 5\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/licenses",
@@ -759,6 +759,37 @@
               "raw": "{{baseUrl}}/api/v1/licenses/{{licenseId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "licenses", "{{licenseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Extend License",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"months\": 12\n}"
+            },
+            "description": "Adds time from the current expiry (or from now if it has lapsed). Send { \"expiresAt\": \"2028-01-01T00:00:00.000Z\" } instead to pick a date. Expired licenses become active again; revoked ones must be reinstated first.",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/licenses/{{licenseId}}/extend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "licenses", "{{licenseId}}", "extend"]
+            }
+          }
+        },
+        {
+          "name": "Revoke License",
+          "request": {
+            "method": "POST",
+            "description": "Revokes immediately and emails the organization's members. Reinstate with PATCH { \"status\": \"active\" }.",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/licenses/{{licenseId}}/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "licenses", "{{licenseId}}", "revoke"]
             }
           }
         },

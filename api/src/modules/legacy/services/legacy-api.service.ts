@@ -22,6 +22,7 @@ const { setSocketServer } = require('../../../services/socket-service');
 const { registerChatPresence } = require('../../../services/chat-presence');
 const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('../../../jobs/order-upload-cleanup-job');
 const { startLicenseExpiryJob, stopLicenseExpiryJob } = require('../../../jobs/license-expiry-job');
+const { findActiveLicense } = require('../../../services/license-service');
 
 const { installFrontend } = require('../../../middleware/frontend');
 const { serviceEnabled, servicesHealthy } = require('../../../services/runtime-services');
@@ -230,17 +231,7 @@ export class LegacyApiService {
             return next(new Error('This organization has been deactivated.'));
           }
 
-          const now = new Date();
-          const activeLicense = await models.License.findOne({
-            where: {
-              organizationId: effectiveOrganizationId,
-              isActive: true,
-              status: 'active',
-              revokedAt: null,
-              expiresAt: { [Op.gte]: now },
-            },
-            order: [['expiresAt', 'DESC']],
-          });
+          const activeLicense = await findActiveLicense(models, effectiveOrganizationId);
           if (!activeLicense) {
             return next(new Error('Organization license is missing, revoked, or expired.'));
           }

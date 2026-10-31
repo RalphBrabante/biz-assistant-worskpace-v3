@@ -13,7 +13,8 @@
     "test:messages": "node --test tests/organization-messages.test.cjs",
     "test:ui": "node --test tests/ui-interactions.test.cjs",
     "test:dashboard": "node --test tests/dashboard.test.cjs",
-    "test:banks": "node --test tests/banks.test.cjs"
+    "test:banks": "node --test tests/banks.test.cjs",
+    "test:licenses": "node --test tests/licenses.test.cjs"
   },
   "dependencies": {
     "@angular/animations": "^18.2.0",

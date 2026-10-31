@@ -4,122 +4,213 @@
       <div>
         <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Subscriptions</div>
         <h1 class="text-2xl font-semibold tracking-tight mb-2">Licenses</h1>
-        <p class="text-muted mb-0">Create and assign UUID license keys to organizations.</p>
+        <p class="text-muted mb-0">
+          {{ canManage
+            ? 'Issue, renew and revoke organization licenses. Members can sign in only while their organization has an active license.'
+            : 'Your organization’s subscription, renewal date and seats. Contact your provider to renew or add seats.' }}
+        </p>
       </div>
       <div class="flex gap-2">
-        <button class="ui-btn ui-btn-outline-dark" (click)="load()" [disabled]="loading()">
-          {{ loading() ? 'Refreshing...' : 'Refresh' }}
+        <button class="ui-btn ui-btn-outline-dark" type="button" (click)="load()" [disabled]="loading()">
+          <i class="bi bi-arrow-clockwise mr-1"></i>{{ loading() ? 'Refreshing...' : 'Refresh' }}
         </button>
-        <button class="ui-btn ui-btn-primary" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create License</button>
+        <button *ngIf="canManage" class="ui-btn ui-btn-primary" type="button" (click)="openCreateModal()"><i class="bi bi-plus-lg mr-1"></i>Create License</button>
       </div>
     </div>
   </div>
 </section>
 
-<section class="ui-card shadow-panel rounded-xl mb-6">
+<!-- Status overview: each tile filters the table -->
+<section *ngIf="summary() as s" class="ui-grid grid grid-cols-2 md:grid-cols-5 gap-4 mb-6" aria-label="License status overview">
+  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'active'" [attr.aria-pressed]="statusFilter === 'active'" (click)="toggleStatusFilter('active')">
+    <div class="stat-label"><i class="bi bi-check-circle text-success mr-1"></i>Active</div>
+    <div class="stat-value">{{ s.active }}</div>
+  </button>
+  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'expiring'" [attr.aria-pressed]="statusFilter === 'expiring'" (click)="toggleStatusFilter('expiring')">
+    <div class="stat-label"><i class="bi bi-hourglass-split text-warning mr-1"></i>Expiring in 30 days</div>
+    <div class="stat-value" [class.text-warning]="s.expiringSoon > 0">{{ s.expiringSoon }}</div>
+  </button>
+  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'expired'" [attr.aria-pressed]="statusFilter === 'expired'" (click)="toggleStatusFilter('expired')">
+    <div class="stat-label"><i class="bi bi-x-circle text-danger mr-1"></i>Expired</div>
+    <div class="stat-value">{{ s.expired }}</div>
+  </button>
+  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'suspended'" [attr.aria-pressed]="statusFilter === 'suspended'" (click)="toggleStatusFilter('suspended')">
+    <div class="stat-label"><i class="bi bi-pause-circle text-muted mr-1"></i>Suspended</div>
+    <div class="stat-value">{{ s.suspended }}</div>
+  </button>
+  <button type="button" class="stat-chip text-left col-span-2 md:col-span-1" [class.border-brand]="statusFilter === 'revoked'" [attr.aria-pressed]="statusFilter === 'revoked'" (click)="toggleStatusFilter('revoked')">
+    <div class="stat-label"><i class="bi bi-slash-circle text-danger mr-1"></i>Revoked</div>
+    <div class="stat-value">{{ s.revoked }}</div>
+  </button>
+</section>
+
+<section class="ui-card shadow-panel rounded-2xl mb-6">
   <div class="ui-card-body p-6">
-    <div class="ui-grid grid grid-cols-12 gap-4 items-center">
-      <div class="col-span-12 md:col-span-4">
-        <label class="ui-form-label font-semibold">Filter licenses</label>
-        <input
-          type="text"
-          class="ui-form-control"
-          placeholder="Search by key, plan, status, organization name"
-          [ngModel]="filter()"
-          (ngModelChange)="onFilterChange($event)"
-        />
+
+    <!-- Row 1: Primary filters -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-start">
+      <div class="col-span-12 md:col-span-5">
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="license-search">Search</label>
+        <div class="relative">
+          <i class="bi bi-search absolute text-muted left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+          <input
+            id="license-search"
+            type="text"
+            class="ui-form-control pl-10"
+            [class.pr-10]="filter()"
+            [placeholder]="canManage ? 'Organization, plan or license key...' : 'Plan or license key...'"
+            [ngModel]="filter()"
+            (ngModelChange)="onFilterChange($event)"
+          />
+          <button *ngIf="filter()" class="absolute p-0 border-0 bg-transparent text-muted right-3 top-1/2 -translate-y-1/2" type="button" (click)="clearSearch()" aria-label="Clear search">
+            <i class="bi bi-x-circle-fill"></i>
+          </button>
+        </div>
       </div>
       <div class="col-span-6 md:col-span-2">
-        <label class="ui-form-label font-semibold">Rows per page</label>
-        <select class="ui-form-select" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
-          <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="license-status-filter">Status</label>
+        <select id="license-status-filter" class="ui-form-select" [class.border-brand]="statusFilter" [ngModel]="statusFilter" (ngModelChange)="onStatusFilterChange($event)">
+          <option value="">All Statuses</option>
+          <option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option>
         </select>
       </div>
       <div class="col-span-6 md:col-span-2">
-        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
-          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view">
-            <i class="bi bi-table"></i>
-          </button>
-          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view">
-            <i class="bi bi-grid-3x2-gap"></i>
-          </button>
-        </div>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Total Licenses</div>
-          <div class="stat-value">{{ total }}</div>
-        </div>
-      </div>
-      <div class="col-span-6 md:col-span-2">
-        <div class="stat-chip">
-          <div class="stat-label">Page</div>
-          <div class="stat-value">{{ page }} / {{ totalPages }}</div>
-        </div>
+        <label class="ui-form-label text-xs font-semibold uppercase tracking-wider text-muted mb-1" for="license-plan-filter">Plan</label>
+        <select id="license-plan-filter" class="ui-form-select" [class.border-brand]="planFilter" [ngModel]="planFilter" (ngModelChange)="onPlanFilterChange($event)">
+          <option value="">All Plans</option>
+          <option *ngFor="let plan of planFilterOptions" [value]="plan.name">{{ plan.name }}</option>
+        </select>
       </div>
     </div>
 
+    <!-- Row 2: Secondary controls -->
+    <div class="ui-grid grid grid-cols-12 gap-4 items-center mt-1">
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-input-group">
+          <span class="ui-input-group-text border-r-0 text-muted text-xs px-2">Show</span>
+          <select class="ui-form-select border-l-0" aria-label="Rows per page" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+            <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-2">
+        <div class="ui-btn-group w-full view-toggle-group" role="group" aria-label="Toggle table or card view">
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'table'" (click)="setViewMode('table')" title="Table view" aria-label="Table view"><i class="bi bi-table"></i></button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" [class.active]="viewMode === 'card'" (click)="setViewMode('card')" title="Card view" aria-label="Card view"><i class="bi bi-grid-3x2-gap"></i></button>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-4 flex items-center justify-between md:justify-end gap-4">
+        <div class="text-xs text-muted leading-snug">
+          <span class="font-semibold text-ink">{{ total }}</span> licenses &nbsp;&middot;&nbsp;
+          Page <span class="font-semibold text-ink">{{ page }}</span> / <span class="font-semibold text-ink">{{ totalPages }}</span>
+        </div>
+        <button class="ui-btn ui-btn-sm flex items-center gap-2" [class.ui-btn-outline-secondary]="!hasActiveFilters" [class.ui-btn-outline-danger]="hasActiveFilters" type="button" (click)="clearFilters()" [disabled]="!hasActiveFilters">
+          <i class="bi bi-x-circle"></i> Clear
+          <span *ngIf="activeFilterCount > 0" class="ui-badge ui-badge-danger rounded-full leading-none">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active filter chips -->
+    <div *ngIf="hasActiveFilters" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+      <span class="text-xs text-muted font-semibold mr-1">Active:</span>
+      <span *ngIf="filter().trim()" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-search text-xs text-muted"></i> "{{ filter().trim() }}"
+        <button type="button" class="ui-btn-close ml-1" (click)="clearSearch()" aria-label="Remove filter"></button>
+      </span>
+      <span *ngIf="statusFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-funnel text-xs text-muted"></i> {{ statusFilterLabel(statusFilter) }}
+        <button type="button" class="ui-btn-close ml-1" (click)="onStatusFilterChange('')" aria-label="Remove filter"></button>
+      </span>
+      <span *ngIf="planFilter" class="ui-badge rounded-full border font-normal text-ink bg-surface inline-flex items-center gap-1 py-1 px-2">
+        <i class="bi bi-box text-xs text-muted"></i> {{ planFilter }}
+        <button type="button" class="ui-btn-close ml-1" (click)="onPlanFilterChange('')" aria-label="Remove filter"></button>
+      </span>
+    </div>
+
+    <!-- Alerts -->
     <div *ngIf="message()" class="ui-alert ui-alert-success mt-4 mb-0">{{ message() }}</div>
+    <div *ngFor="let warning of warnings()" class="ui-alert ui-alert-warning mt-4 mb-0"><i class="bi bi-exclamation-triangle-fill mr-1"></i>{{ warning }}</div>
     <div *ngIf="error()" class="ui-alert ui-alert-danger mt-4 mb-0">{{ error() }}</div>
   </div>
 </section>
 
 <section class="ui-card shadow-panel rounded-xl mb-6">
-  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }">
+  <div class="ui-table-responsive table-view-wrapper" [ngClass]="{ 'table-card-view': viewMode === 'card' }" role="region" aria-label="Licenses table" tabindex="0">
     <table class="ui-table ui-table-hover align-middle mb-0">
+      <caption class="sr-only">Licenses with their plan, status, expiry and seat usage</caption>
       <thead class="ui-table-light">
         <tr>
           <th class="row-actions-cell" scope="col">Actions</th>
-          <th *ngIf="isSuperuser">Organization</th>
-          <th>Key</th>
-          <th>Plan</th>
-          <th>Status</th>
-          <th>Expires At</th>
-          <th>Max Users</th>
-          <th>Active</th>
-
+          <th *ngIf="isSuperuser" scope="col">Organization</th>
+          <th scope="col">Plan</th>
+          <th scope="col">Status</th>
+          <th scope="col">Expires</th>
+          <th scope="col">Seats</th>
+          <th scope="col">License Key</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngIf="!loading() && filteredRows().length === 0">
-          <td [attr.colspan]="isSuperuser ? 8 : 7" class="text-center text-muted py-6">No licenses found.</td>
+        <tr *ngIf="loading() && rows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 7 : 6" class="text-center py-12 border-0">
+            <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>
+            <span class="text-muted text-xs">Loading...</span>
+          </td>
+        </tr>
+        <tr *ngIf="!loading() && rows().length === 0">
+          <td [attr.colspan]="isSuperuser ? 7 : 6" class="text-center text-muted py-6">
+            {{ hasActiveFilters ? 'No licenses match these filters.' : (canManage ? 'No licenses yet. Create one to give an organization access.' : 'Your organization has no license on record. Contact your provider.') }}
+          </td>
         </tr>
 
-        <tr *ngFor="let row of filteredRows(); trackBy: trackById">
-          <td class="row-actions-cell"><app-row-actions label="Licenses actions">
+        <tr *ngFor="let row of rows(); trackBy: trackById">
+          <td class="row-actions-cell card-actions-cell" data-label="Actions"><app-row-actions [label]="'Actions for ' + organizationLabel(row) + ' license'">
             <div class="row-action-items">
-              <a
-
-                [routerLink]="['/license', row.id]"
-
-                title="Edit"
-               class="ui-dropdown-item">
-                <i class="bi bi-pencil-square"></i>
-               Edit</a>
-              <button
-
-                type="button"
-                [disabled]="deletingId() === row.id"
-                (click)="removeLicense(row.id)"
-
-                title="Delete"
-               class="ui-dropdown-item text-danger">
-                <i class="bi bi-trash3"></i>
-               Delete</button>
+              <a [routerLink]="['/license', row.id]" class="ui-dropdown-item">
+                <i class="bi" [ngClass]="canManage ? 'bi-pencil-square' : 'bi-eye'"></i>
+                {{ canManage ? 'Edit' : 'View' }}</a>
+              <ng-container *ngIf="canManage">
+                <button *ngIf="row.status !== 'revoked'" type="button" class="ui-dropdown-item" [disabled]="busyId() === row.id" (click)="openExtend(row)">
+                  <i class="bi bi-calendar-plus"></i>
+                  Extend</button>
+                <button *ngIf="row.status !== 'revoked'" type="button" class="ui-dropdown-item text-danger" [disabled]="busyId() === row.id" (click)="revokeLicense(row)">
+                  <i class="bi bi-slash-circle"></i>
+                  Revoke</button>
+                <button type="button" class="ui-dropdown-item text-danger" [disabled]="busyId() === row.id" (click)="removeLicense(row)">
+                  <i class="bi bi-trash3"></i>
+                  Delete</button>
+              </ng-container>
             </div>
           </app-row-actions></td>
-        <td *ngIf="isSuperuser" class="text-xs">{{ organizationLabel(row) }}</td>
-          <td class="font-semibold">{{ row.key }}</td>
-          <td>{{ row.planName || '-' }}</td>
-          <td>
-            <span class="ui-badge" [class.ui-badge-danger]="isExpired(row)" [class.ui-badge-success]="!isExpired(row)">
-              {{ row.status || (isExpired(row) ? 'expired' : 'active') }}
+          <td *ngIf="isSuperuser" class="text-xs" data-label="Organization">
+            <span [class.text-muted]="!row.organizationId">{{ organizationLabel(row) }}</span>
+          </td>
+          <td data-label="Plan">{{ row.planName || '—' }}</td>
+          <td data-label="Status">
+            <span class="rounded-full inline-flex items-center gap-1" [ngClass]="badgeClass(row)">
+              <i class="bi" [ngClass]="state(row).icon" aria-hidden="true"></i>{{ state(row).label }}
             </span>
           </td>
-          <td>{{ row.expiresAt ? (row.expiresAt | date: 'medium') : '-' }}</td>
-          <td>{{ row.maxUsers ?? '-' }}</td>
-          <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
-
+          <td data-label="Expires">
+            <div>{{ row.expiresAt ? (row.expiresAt | date: 'mediumDate') : '—' }}</div>
+            <div class="text-xs" [class.text-warning]="state(row).tone === 'warning'" [class.text-danger]="state(row).tone === 'danger'" [class.text-muted]="state(row).tone !== 'warning' && state(row).tone !== 'danger'">
+              {{ row.status === 'revoked' ? ('Revoked ' + ((row.revokedAt | date: 'mediumDate') || '')) : state(row).detail }}
+            </div>
+          </td>
+          <td data-label="Seats">
+            <span [class.text-danger]="seats(row).over" [class.text-warning]="seats(row).full && !seats(row).over" [class.font-semibold]="seats(row).full">{{ seats(row).label }}</span>
+            <i *ngIf="seats(row).full" class="bi bi-exclamation-triangle-fill text-warning ml-1" appTooltip tabindex="0"
+              [title]="seats(row).over ? 'More active users than this license allows. No one new can be added.' : 'All seats are in use. No one new can be added.'"
+              aria-label="Seat limit reached"></i>
+          </td>
+          <td data-label="License Key">
+            <div class="flex items-center gap-1">
+              <code class="text-xs text-muted" [title]="row.key">{{ row.key.slice(0, 8) }}…{{ row.key.slice(-4) }}</code>
+              <button type="button" class="ui-btn ui-btn-sm p-1 border-0 bg-transparent text-muted" (click)="copyKey(row)" [attr.aria-label]="'Copy license key'" appTooltip [title]="copiedId() === row.id ? 'Copied' : 'Copy key'">
+                <i class="bi" [ngClass]="copiedId() === row.id ? 'bi-check2 text-success' : 'bi-clipboard'"></i>
+              </button>
+            </div>
+          </td>
         </tr>
       </tbody>
     </table>
@@ -135,6 +226,13 @@
   </div>
 </section>
 
+<app-license-extend-dialog
+  *ngIf="extendTarget() as target"
+  [license]="target"
+  (closed)="extendTarget.set(null)"
+  (extended)="onExtended($event)"
+/>
+
 <div class="ui-modal-backdrop" *ngIf="isCreateModalOpen()"></div>
 <div
   appModal class="ui-modal"
@@ -147,69 +245,98 @@
     <div class="ui-modal-content border-0 shadow-dialog">
       <div class="ui-modal-header border-0 pb-0">
         <h5 class="ui-modal-title">Create New License</h5>
-        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" aria-label="Close dialog"></button>
+        <button type="button" class="ui-btn-close" (click)="closeCreateModal()" [disabled]="submitting()" aria-label="Close dialog"></button>
       </div>
       <div class="ui-modal-body pt-4 relative">
         <div *ngIf="submitting()" class="modal-loading-overlay">
           <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
         </div>
         <div *ngIf="createModalError()" class="ui-alert ui-alert-danger">{{ createModalError() }}</div>
+        <div *ngIf="createOverlapWarning()" class="ui-alert ui-alert-warning"><i class="bi bi-exclamation-triangle-fill mr-1"></i>{{ createOverlapWarning() }}</div>
+
         <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="createLicenseForm" (ngSubmit)="createLicense()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
           <div class="col-span-12 md:col-span-6">
-            <label class="ui-form-label font-semibold">Assign Organization</label>
-            <select class="ui-form-select" formControlName="organizationId">
-              <option value="">Unassigned</option>
+            <label class="ui-form-label font-semibold" for="create-license-organization">Organization</label>
+            <select id="create-license-organization" class="ui-form-select" formControlName="organizationId" (change)="onCreateOrganizationChange()">
+              <option value="">Unassigned (assign later)</option>
               <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
             </select>
           </div>
           <div class="col-span-12 md:col-span-6">
-            <label class="ui-form-label font-semibold">License Key</label>
+            <label class="ui-form-label font-semibold" for="create-license-key">License Key</label>
             <div class="ui-input-group">
-              <input class="ui-form-control" formControlName="key" readonly />
+              <input id="create-license-key" class="ui-form-control font-mono text-xs" formControlName="key" readonly />
               <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="generateKey()">
-                <i class="bi bi-arrow-clockwise mr-1"></i>Generate UUID
+                <i class="bi bi-arrow-clockwise mr-1"></i>New Key
               </button>
             </div>
           </div>
+
           <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Plan</label>
-            <input class="ui-form-control" formControlName="planName" />
-            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('planName', 'required')">Plan is required.</div>
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Status</label>
-            <input class="ui-form-control" formControlName="status" />
-            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('status', 'required')">Status is required.</div>
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label class="ui-form-label font-semibold">Max Users</label>
-            <input type="number" class="ui-form-control" formControlName="maxUsers" />
-            <div class="text-danger text-xs mt-1" *ngIf="controlHasError('maxUsers', 'min')">Max users cannot be negative.</div>
-          </div>
-          <div class="col-span-12 md:col-span-6">
-            <label class="ui-form-label font-semibold">Starts At</label>
-            <input type="datetime-local" class="ui-form-control" formControlName="startsAt" />
-          </div>
-          <div class="col-span-12 md:col-span-6">
-            <label class="ui-form-label font-semibold">Expires At</label>
-            <input type="datetime-local" class="ui-form-control" formControlName="expiresAt" />
-            <div class="text-danger text-xs mt-1" *ngIf="hasCreateFormError('invalidDateRange')">Expires At must be after Starts At.</div>
-          </div>
-          <div class="col-span-12">
-            <label class="ui-form-label font-semibold">Notes</label>
-            <textarea rows="2" class="ui-form-control" formControlName="notes"></textarea>
-          </div>
-          <div class="col-span-12 md:col-span-4 flex items-end">
-            <div class="ui-form-check">
-              <input class="ui-form-check-input" type="checkbox" formControlName="isActive" />
-              <label class="ui-form-check-label">Active</label>
+            <label class="ui-form-label font-semibold" for="create-license-plan">Plan</label>
+            <div class="relative">
+              <select id="create-license-plan" class="ui-form-select" formControlName="planName" [class.is-invalid]="createFieldError('planName')" (change)="onCreatePlanChange()">
+                <option value="" disabled>Choose a plan</option>
+                <option *ngFor="let plan of createPlanOptions" [value]="plan.name">{{ plan.label }}</option>
+              </select>
+              <span *ngIf="createFieldError('planName')" class="field-validation-icon-select" appTooltip tabindex="0" [title]="createFieldError('planName')" aria-label="Show plan error">
+                <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+              </span>
             </div>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold" for="create-license-status">Status</label>
+            <select id="create-license-status" class="ui-form-select" formControlName="status">
+              <option value="active">Active</option>
+              <option value="suspended">Suspended (issue now, enable later)</option>
+            </select>
+          </div>
+          <div class="col-span-12 md:col-span-4">
+            <label class="ui-form-label font-semibold" for="create-license-seats">Max Users</label>
+            <div class="relative">
+              <input id="create-license-seats" type="number" min="1" step="1" class="ui-form-control pr-10" formControlName="maxUsers" placeholder="Unlimited" [class.is-invalid]="createFieldError('maxUsers')" />
+              <span *ngIf="createFieldError('maxUsers')" class="field-validation-icon" appTooltip tabindex="0" [title]="createFieldError('maxUsers')" aria-label="Show max users error">
+                <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="ui-form-text">Defaults to the plan's included users. Leave blank for no limit.</div>
+          </div>
+
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold" for="create-license-start">Starts At</label>
+            <div class="relative">
+              <input id="create-license-start" type="datetime-local" class="ui-form-control pr-10" formControlName="startsAt" [class.is-invalid]="createFieldError('startsAt')" />
+              <span *ngIf="createFieldError('startsAt')" class="field-validation-icon" appTooltip tabindex="0" [title]="createFieldError('startsAt')" aria-label="Show start date error">
+                <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+              </span>
+            </div>
+          </div>
+          <div class="col-span-12 md:col-span-6">
+            <label class="ui-form-label font-semibold" for="create-license-expiry">Expires At</label>
+            <div class="relative">
+              <input id="create-license-expiry" type="datetime-local" class="ui-form-control pr-10" formControlName="expiresAt" [class.is-invalid]="createFieldError('expiresAt')" />
+              <span *ngIf="createFieldError('expiresAt')" class="field-validation-icon" appTooltip tabindex="0" [title]="createFieldError('expiresAt')" aria-label="Show expiry date error">
+                <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-2" aria-label="Set term from start date">
+              <span class="text-xs text-muted mr-1 self-center">Term:</span>
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="setCreateTerm(1)">1 month</button>
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="setCreateTerm(3)">3 months</button>
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="setCreateTerm(12)">1 year</button>
+              <button type="button" class="ui-btn ui-btn-sm ui-btn-outline-secondary" (click)="setCreateTerm(24)">2 years</button>
+            </div>
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold" for="create-license-notes">Notes</label>
+            <textarea id="create-license-notes" rows="2" class="ui-form-control" formControlName="notes" placeholder="Invoice or order reference, contact, special terms..."></textarea>
           </div>
         </form>
       </div>
       <div class="ui-modal-footer border-0 pt-0">
-        <button class="ui-btn ui-btn-outline-secondary" (click)="closeCreateModal()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
-        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="createLicense()">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="closeCreateModal()" [disabled]="submitting()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" type="button" [disabled]="submitting()" (click)="createLicense()">
           {{ submitting() ? 'Creating...' : 'Create License' }}
         </button>
       </div>

@@ -1,5 +1,6 @@
 const { isAccountant } = require('./services/accountant-access');
 const { effectiveRoleAccess, resolveTokenOrganizationId } = require('./services/role-access');
+const { findActiveLicense } = require('./services/license-service');
 const vouchersRoutes = require('./routes/vouchers-routes');
 const chequesRoutes = require('./routes/cheques-routes');
 const organizationRolesRoutes=require('./routes/organization-roles-routes');
@@ -13,7 +14,6 @@ const express = require('express');
 const { startOrderUploadCleanupJob, stopOrderUploadCleanupJob } = require('./jobs/order-upload-cleanup-job');
 const http = require('http');
 const crypto = require('crypto');
-const { Op } = require('sequelize');
 const Redis = require('ioredis');
 const amqp = require('amqplib');
 const { Server } = require('socket.io');
@@ -203,17 +203,7 @@ io.use(async (socket, next) => {
         return next(new Error('Organization has no active license.'));
       }
 
-      const now = new Date();
-      const activeLicense = await models.License.findOne({
-        where: {
-          organizationId: effectiveOrganizationId,
-          isActive: true,
-          status: 'active',
-          revokedAt: null,
-          expiresAt: { [Op.gte]: now },
-        },
-        order: [['expiresAt', 'DESC']],
-      });
+      const activeLicense = await findActiveLicense(models, effectiveOrganizationId);
       if (!activeLicense) {
         return next(new Error('Organization license is missing, revoked, or expired.'));
       }

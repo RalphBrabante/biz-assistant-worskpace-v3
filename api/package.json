@@ -22,6 +22,7 @@
     "test:banks": "node --test tests/banks-routes.test.js",
     "test:banks:mysql": "node scripts/verify-banks.js",
     "test:roles": "node --test tests/organization-roles.test.js tests/accountant-access.test.js",
+    "test:licenses": "node --test tests/licenses.test.js",
     "test:roles:mysql": "node scripts/verify-organization-roles.js"
   },
   "dependencies": {

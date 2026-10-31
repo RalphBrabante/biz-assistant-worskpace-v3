@@ -52,6 +52,7 @@ function setup() {
     '../sequelize': { getModels: () => models },
     '../services/role-access': { effectiveRoleAccess: async () => ({ roleCodes: ['superuser'], permissions: new Set() }), activeMember: async () => false },
     '../services/email-service': { sendPasswordResetEmail: async () => {}, sendEmailVerificationEmail: async () => {} },
+    '../services/license-service': require('../src/services/license-service'),
   };
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/controllers/auth-controller.js'), 'utf8'), {

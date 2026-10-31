@@ -3,8 +3,10 @@
     <div class="flex flex-wrap justify-between items-end gap-4">
       <div>
         <div class="uppercase tracking-wider text-xs font-semibold text-muted mb-2">Subscriptions</div>
-        <h1 class="text-2xl font-semibold tracking-tight mb-2">Edit License</h1>
-        <p class="text-muted mb-0">Update assignment and subscription details. License key is immutable.</p>
+        <h1 class="text-2xl font-semibold tracking-tight mb-2">{{ canManage ? 'Edit License' : 'License' }}</h1>
+        <p class="text-muted mb-0">
+          {{ canManage ? 'Renew, reassign or change this license. The key never changes.' : 'Your organization\'s license details. Contact your provider to renew or add seats.' }}
+        </p>
       </div>
       <div class="flex gap-2">
         <a class="ui-btn ui-btn-outline-dark" routerLink="/licenses"><i class="bi bi-arrow-left mr-1"></i>Back to Licenses</a>
@@ -14,74 +16,164 @@
 </section>
 
 <div *ngIf="message()" class="ui-alert ui-alert-success">{{ message() }}</div>
+<div *ngFor="let warning of warnings()" class="ui-alert ui-alert-warning"><i class="bi bi-exclamation-triangle-fill mr-1"></i>{{ warning }}</div>
 <div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
 
-<section class="ui-card shadow-panel rounded-xl">
-  <div class="ui-card-body p-6">
-    <div *ngIf="loading()" class="text-muted">Loading license...</div>
-
-    <div class="ui-grid grid grid-cols-12 gap-4" *ngIf="!loading() && license()">
-      <div class="col-span-12 md:col-span-6">
-        <label class="ui-form-label">Assign Organization</label>
-        <select class="ui-form-select" [(ngModel)]="form['organizationId']">
-          <option value="">Unassigned</option>
-          <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
-        </select>
-      </div>
-      <div class="col-span-12 md:col-span-6">
-        <label class="ui-form-label">License Key</label>
-        <input class="ui-form-control" [ngModel]="form['key']" readonly />
-      </div>
-      <div class="col-span-12 md:col-span-4">
-        <label class="ui-form-label">Plan</label>
-        <input class="ui-form-control" [(ngModel)]="form['planName']" />
-      </div>
-      <div class="col-span-12 md:col-span-4">
-        <label class="ui-form-label">Status</label>
-        <input class="ui-form-control" [(ngModel)]="form['status']" />
-      </div>
-      <div class="col-span-12 md:col-span-4">
-        <label class="ui-form-label">Max Users</label>
-        <input type="number" class="ui-form-control" [(ngModel)]="form['maxUsers']" />
-      </div>
-      <div class="col-span-12 md:col-span-6">
-        <label class="ui-form-label">Starts At</label>
-        <input type="datetime-local" class="ui-form-control" [(ngModel)]="form['startsAt']" />
-      </div>
-      <div class="col-span-12 md:col-span-6">
-        <label class="ui-form-label">Expires At</label>
-        <input type="datetime-local" class="ui-form-control" [(ngModel)]="form['expiresAt']" />
-      </div>
-      <div class="col-span-12 md:col-span-6">
-        <label class="ui-form-label">Revoked At</label>
-        <input type="datetime-local" class="ui-form-control" [ngModel]="form['revokedAt']" readonly />
-      </div>
-      <div class="col-span-12">
-        <label class="ui-form-label">Notes</label>
-        <textarea rows="2" class="ui-form-control" [(ngModel)]="form['notes']"></textarea>
-      </div>
-      <div class="col-span-12 md:col-span-4 flex items-end">
-        <div class="ui-form-check">
-          <input class="ui-form-check-input" type="checkbox" [(ngModel)]="form['isActive']" />
-          <label class="ui-form-check-label">Active</label>
-        </div>
-      </div>
-      <div class="col-span-12 flex flex-wrap gap-2">
-        <button class="ui-btn ui-btn-primary" [disabled]="submitting()" (click)="save()">
-          {{ submitting() ? 'Saving...' : 'Save License' }}
-        </button>
-        <button
-          class="ui-btn ui-btn-outline-danger"
-          type="button"
-          [disabled]="submitting() || form['status'] === 'revoked'"
-          (click)="revoke()"
-        >
-          <i class="bi bi-slash-circle mr-1"></i>Revoke License
-        </button>
-        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="backToList()">
-          Cancel
-        </button>
-      </div>
-    </div>
+<section *ngIf="loading() && !license()" class="ui-card shadow-panel rounded-xl mb-6">
+  <div class="ui-card-body p-6 text-muted">
+    <span class="ui-spinner-border ui-spinner-border-sm text-brand mr-2" role="status"><span class="sr-only">Loading...</span></span>Loading license...
   </div>
 </section>
+
+<ng-container *ngIf="license() as row">
+  <!-- Summary -->
+  <section class="ui-card shadow-panel rounded-xl mb-6">
+    <div class="ui-card-body p-6">
+      <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div>
+          <div class="text-xs text-muted uppercase tracking-wider font-semibold mb-1">{{ organizationName }}</div>
+          <div class="text-xl font-semibold text-ink">{{ row.planName || 'No plan' }}</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full inline-flex items-center gap-1" [ngClass]="badgeClass">
+            <i class="bi" [ngClass]="state.icon" aria-hidden="true"></i>{{ state.label }}
+          </span>
+          <ng-container *ngIf="canManage">
+            <button *ngIf="!isRevoked" class="ui-btn ui-btn-sm ui-btn-primary" type="button" [disabled]="submitting()" (click)="extendOpen.set(true)">
+              <i class="bi bi-calendar-plus mr-1"></i>Extend
+            </button>
+            <button *ngIf="isRevoked" class="ui-btn ui-btn-sm ui-btn-outline-primary" type="button" [disabled]="submitting()" (click)="reinstate()">
+              <i class="bi bi-arrow-counterclockwise mr-1"></i>Reinstate
+            </button>
+            <button *ngIf="!isRevoked" class="ui-btn ui-btn-sm ui-btn-outline-danger" type="button" [disabled]="submitting()" (click)="revoke()">
+              <i class="bi bi-slash-circle mr-1"></i>Revoke
+            </button>
+          </ng-container>
+        </div>
+      </div>
+
+      <div class="ui-grid grid grid-cols-12 gap-4">
+        <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+          <div class="text-xs text-muted mb-1">Term</div>
+          <div class="font-semibold">{{ row.startsAt | date: 'mediumDate' }} – {{ row.expiresAt | date: 'mediumDate' }}</div>
+          <div class="text-xs" [class.text-warning]="state.tone === 'warning'" [class.text-danger]="state.tone === 'danger'" [class.text-muted]="state.tone !== 'warning' && state.tone !== 'danger'">{{ state.detail }}</div>
+        </div>
+        <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+          <div class="text-xs text-muted mb-1">Seats in use</div>
+          <div class="font-semibold" [class.text-danger]="seats.over" [class.text-warning]="seats.full && !seats.over">{{ seats.label }}</div>
+          <div *ngIf="seats.full" class="text-xs text-warning">{{ seats.over ? 'Over the limit. No one new can be added.' : 'All seats used. No one new can be added.' }}</div>
+        </div>
+        <div class="col-span-12 sm:col-span-6 lg:col-span-4">
+          <div class="text-xs text-muted mb-1">License key</div>
+          <div class="flex items-center gap-1">
+            <code class="text-xs break-all">{{ row.key }}</code>
+            <button type="button" class="ui-btn ui-btn-sm p-1 border-0 bg-transparent text-muted" (click)="copyKey()" aria-label="Copy license key" appTooltip [title]="copied() ? 'Copied' : 'Copy key'">
+              <i class="bi" [ngClass]="copied() ? 'bi-check2 text-success' : 'bi-clipboard'"></i>
+            </button>
+          </div>
+        </div>
+        <div class="col-span-12 sm:col-span-6 lg:col-span-2">
+          <div class="text-xs text-muted mb-1">{{ row.revokedAt ? 'Revoked' : 'Access' }}</div>
+          <div class="font-semibold">{{ row.revokedAt ? (row.revokedAt | date: 'medium') : (state.grantsAccess ? 'Members can sign in' : 'Sign-in blocked') }}</div>
+        </div>
+        <div *ngIf="!canManage && row.notes" class="col-span-12">
+          <div class="text-xs text-muted mb-1">Notes</div>
+          <div class="text-sm whitespace-pre-line">{{ row.notes }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Edit form (platform staff only) -->
+  <section *ngIf="canManage" class="ui-card shadow-panel rounded-xl relative">
+    <div *ngIf="submitting()" class="modal-loading-overlay">
+      <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Saving...</span></div>
+    </div>
+    <div class="ui-card-body p-6">
+      <form class="ui-grid grid grid-cols-12 gap-4" [formGroup]="form" (ngSubmit)="save()" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-organization">Organization</label>
+          <select id="license-organization" class="ui-form-select" formControlName="organizationId">
+            <option value="">Unassigned</option>
+            <option *ngFor="let org of organizations()" [value]="org.id">{{ organizationOptionLabel(org) }}</option>
+          </select>
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-status">Status</label>
+          <select id="license-status" class="ui-form-select" formControlName="status">
+            <option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option>
+          </select>
+          <div class="ui-form-text">Only Active licenses let members sign in. Use Revoke above to notify members.</div>
+        </div>
+
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-plan">Plan</label>
+          <div class="relative">
+            <select id="license-plan" class="ui-form-select" formControlName="planName" [class.is-invalid]="fieldError('planName')" (change)="onPlanChange()">
+              <option value="" disabled>Choose a plan</option>
+              <option *ngFor="let plan of planOptions" [value]="plan.name">{{ plan.label }}</option>
+            </select>
+            <span *ngIf="fieldError('planName')" class="field-validation-icon-select" appTooltip tabindex="0" [title]="fieldError('planName')" aria-label="Show plan error">
+              <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+            </span>
+          </div>
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-seats">Max Users</label>
+          <div class="relative">
+            <input id="license-seats" type="number" min="1" step="1" class="ui-form-control pr-10" formControlName="maxUsers" placeholder="Unlimited" [class.is-invalid]="fieldError('maxUsers')" />
+            <span *ngIf="fieldError('maxUsers')" class="field-validation-icon" appTooltip tabindex="0" [title]="fieldError('maxUsers')" aria-label="Show max users error">
+              <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+            </span>
+          </div>
+          <div class="ui-form-text">Leave blank for no limit. Lowering it never removes existing members; it only stops new ones.</div>
+        </div>
+
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-start">Starts At</label>
+          <div class="relative">
+            <input id="license-start" type="datetime-local" class="ui-form-control pr-10" formControlName="startsAt" [class.is-invalid]="fieldError('startsAt')" />
+            <span *ngIf="fieldError('startsAt')" class="field-validation-icon" appTooltip tabindex="0" [title]="fieldError('startsAt')" aria-label="Show start date error">
+              <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+            </span>
+          </div>
+        </div>
+        <div class="col-span-12 md:col-span-6">
+          <label class="ui-form-label font-semibold" for="license-expiry">Expires At</label>
+          <div class="relative">
+            <input id="license-expiry" type="datetime-local" class="ui-form-control pr-10" formControlName="expiresAt" [class.is-invalid]="fieldError('expiresAt')" />
+            <span *ngIf="fieldError('expiresAt')" class="field-validation-icon" appTooltip tabindex="0" [title]="fieldError('expiresAt')" aria-label="Show expiry date error">
+              <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+            </span>
+          </div>
+          <div class="ui-form-text">To renew, use Extend: it adds time without losing any that's left.</div>
+        </div>
+
+        <div class="col-span-12">
+          <label class="ui-form-label font-semibold" for="license-notes">Notes</label>
+          <textarea id="license-notes" rows="2" class="ui-form-control" formControlName="notes"></textarea>
+        </div>
+        <div class="col-span-12">
+          <div class="ui-form-check">
+            <input id="license-enabled" class="ui-form-check-input" type="checkbox" formControlName="isActive" />
+            <label class="ui-form-check-label" for="license-enabled">Enabled <span class="text-muted">(turn off to block access without changing the status)</span></label>
+          </div>
+        </div>
+
+        <div class="col-span-12 flex flex-wrap gap-2">
+          <button class="ui-btn ui-btn-primary" type="submit" [disabled]="submitting()">
+            {{ submitting() ? 'Saving...' : 'Save License' }}
+          </button>
+          <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="backToList()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <app-license-extend-dialog
+    *ngIf="extendOpen()"
+    [license]="row"
+    (closed)="extendOpen.set(false)"
+    (extended)="onExtended($event)"
+  />
+</ng-container>

@@ -1,0 +1,86 @@
+<div class="ui-modal-backdrop"></div>
+<div appModal class="ui-modal" tabindex="-1" [style.display]="'block'">
+  <div class="ui-modal-dialog ui-modal-dialog-centered">
+    <div class="ui-modal-content border-0 shadow-dialog">
+      <div class="ui-modal-header border-0 pb-0">
+        <h5 class="ui-modal-title">Extend License</h5>
+        <button type="button" class="ui-btn-close" (click)="close()" [disabled]="submitting()" aria-label="Close dialog"></button>
+      </div>
+      <div class="ui-modal-body pt-4 relative">
+        <div *ngIf="submitting()" class="modal-loading-overlay">
+          <div class="ui-spinner-border text-brand" role="status"><span class="sr-only">Loading...</span></div>
+        </div>
+        <div *ngIf="error()" class="ui-alert ui-alert-danger">{{ error() }}</div>
+
+        <div class="ui-grid grid grid-cols-12 gap-4" [class.pointer-events-none]="submitting()" [class.opacity-50]="submitting()">
+          <div class="col-span-12 text-sm">
+            <div class="font-semibold text-ink">{{ organizationName }} · {{ license.planName || 'No plan' }}</div>
+            <div class="text-muted">
+              Currently {{ license.expiresAt ? (license.expiresAt | date: 'mediumDate') : 'no expiry date' }}
+              <span *ngIf="state.detail">({{ state.detail }})</span>
+            </div>
+          </div>
+
+          <div class="col-span-12">
+            <label class="ui-form-label font-semibold">Extend by</label>
+            <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Extension term">
+              <button
+                *ngFor="let preset of presets"
+                type="button"
+                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
+                role="radio"
+                [attr.aria-checked]="mode === preset.id"
+                [class.active]="mode === preset.id"
+                (click)="setMode(preset.id)"
+              >{{ preset.label }}</button>
+              <button
+                type="button"
+                class="ui-btn ui-btn-sm ui-btn-outline-secondary"
+                role="radio"
+                [attr.aria-checked]="mode === 'custom'"
+                [class.active]="mode === 'custom'"
+                (click)="setMode('custom')"
+              ><i class="bi bi-calendar-event mr-1"></i>Pick a date</button>
+            </div>
+          </div>
+
+          <div *ngIf="mode === 'custom'" class="col-span-12 md:col-span-7">
+            <label class="ui-form-label font-semibold" for="license-extend-date">New expiry date</label>
+            <div class="relative">
+              <input
+                id="license-extend-date"
+                type="datetime-local"
+                class="ui-form-control pr-10"
+                [class.is-invalid]="customError"
+                [(ngModel)]="customDate"
+                (blur)="customTouched = true"
+              />
+              <span *ngIf="customError" class="field-validation-icon" appTooltip tabindex="0" [title]="customError" aria-label="Show date error">
+                <i class="bi bi-exclamation-circle-fill text-danger" aria-hidden="true"></i>
+              </span>
+            </div>
+          </div>
+
+          <div class="col-span-12">
+            <div class="ui-alert ui-alert-info mb-0 text-sm">
+              <div>
+                New expiry: <strong>{{ newExpiry ? (newExpiry | date: 'mediumDate') : '—' }}</strong>
+              </div>
+              <div *ngIf="mode !== 'custom'" class="text-muted">
+                {{ lapsed ? 'The license has lapsed, so the term starts today.' : 'Added to the current expiry date, so no paid time is lost.' }}
+              </div>
+              <div *ngIf="license.status === 'expired'" class="text-muted">Members can sign in again as soon as it is extended.</div>
+              <div *ngIf="license.status === 'suspended'" class="text-muted">The license stays suspended. Change its status to restore access.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-modal-footer border-0 pt-0">
+        <button class="ui-btn ui-btn-outline-secondary" type="button" (click)="close()" [disabled]="submitting()"><i class="bi bi-x-lg mr-1"></i>Cancel</button>
+        <button class="ui-btn ui-btn-primary" type="button" [disabled]="submitting() || (mode === 'custom' && !!customError)" (click)="submit()">
+          <i class="bi bi-calendar-plus mr-1"></i>{{ submitting() ? 'Extending...' : 'Extend License' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -6,6 +6,9 @@ const {
 const {
   buildLicenseRevokedTemplate,
 } = require('../templates/emails/license-revoked-template');
+const {
+  buildLicenseExpiryTemplate,
+} = require('../templates/emails/license-expiry-template');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -283,6 +286,33 @@ async function sendLicenseRevokedEmail({
   });
 }
 
+async function sendLicenseExpiryEmail({
+  toEmail,
+  toName,
+  organizationName,
+  planName,
+  expiresOn,
+  daysRemaining,
+  licensesUrl,
+}) {
+  const template = buildLicenseExpiryTemplate({
+    brandName: String(process.env.APP_NAME || 'Biz Assistant').trim(),
+    recipientName: toName,
+    organizationName,
+    planName,
+    expiresOn,
+    daysRemaining,
+    licensesUrl,
+  });
+
+  return sendMail({
+    toEmail,
+    subject: template.subject,
+    html: template.html,
+    text: template.text,
+  });
+}
+
 async function sendUserCreatedAdminNotificationEmail({
   toEmail,
   toName,
@@ -343,5 +373,6 @@ module.exports = {
   sendQuarterlyExpenseReportReadyEmail,
   sendOrderCreatedEmail,
   sendLicenseRevokedEmail,
+  sendLicenseExpiryEmail,
   sendUserCreatedAdminNotificationEmail,
 };

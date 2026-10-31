@@ -90,7 +90,7 @@ Browser → Nginx (80/443)
 API connects to:
   MySQL  :3306  — primary data store (Sequelize)
   Redis  :6379  — response caching, session-adjacent storage
-  RabbitMQ :5672 — background jobs (license expiry checks, email dispatch)
+  RabbitMQ :5672 — background jobs (email dispatch). The license expiry job runs in-process on an hourly timer
 ```
 
 **Networks (Production):**
@@ -118,7 +118,7 @@ API connects to:
 | RolePermission | roleId, permissionId | Permissions of a global role or template |
 | Token | userId, token (sha256), type, expiresAt | Password reset, email verification |
 | InvalidLoginAttempt | userId, ip, count, lockedUntil | Brute-force protection |
-| License | organizationId, planType, expiresAt, isActive | Drives feature availability |
+| License | organizationId, key (UUID, immutable), planName, status, startsAt, expiresAt, revokedAt, maxUsers, isActive, expiryNoticeStage | Gates sign-in for its organization. Statuses: active, expired, revoked, suspended |
 
 ### Sales & Invoicing
 | Model | Key Fields | Notes |
@@ -200,8 +200,10 @@ POST   /auth/verify-email
 /organization-roles/:id/permissions/:permissionId   DELETE
 /organization-roles/:id/members       POST
 /organization-roles/:id/members/:userId   DELETE
-/licenses             GET, POST
-/license/:id          GET, PUT
+/licenses             GET, POST           (GET: ?q, status incl. `expiring`, planName; meta.summary)
+/licenses/:id         GET, PUT, PATCH, DELETE
+/licenses/:id/extend  POST                ({ months } or { expiresAt })
+/licenses/:id/revoke  POST
 ```
 
 ### Reporting
@@ -331,9 +333,16 @@ Rules the service and database enforce:
 - Linked to a Vendor (with TIN and category for tax classification).
 
 ### Licenses
-- Each organization has a License record with `expiresAt` and `isActive`.
-- A background job (via RabbitMQ) checks for expiring/expired licenses and sends notifications.
-- License expiry triggers real-time Socket.io notifications and email via SMTP2GO.
+All license rules live in `api/src/services/license-service.js`; login, API requests, sockets and seat checks all use it.
+- An organization's members (not superusers) can sign in only while it has a license that is `status = active`, `isActive`, not revoked and not past `expiresAt` (`activeLicenseWhere`). Overlapping active licenses are allowed: create, update and extend return `meta.warnings` instead of refusing.
+- Only superusers create, edit, extend, revoke or delete licenses. Organization administrators see their own organization's licenses read-only.
+- Plans are picked from the pricing catalogue (`api/src/modules/pricing/pricing-domain.ts`). Plan names entered before that are kept as-is.
+- **Seats:** `maxUsers` caps active members. Blank or 0 means unlimited (older licenses default to 0). A seat is an active account that is an active member, or one linked only by `users.organization_id`; superusers never take one. `assertSeatAvailable` runs before a member is activated (user create, invite, assign existing user, add organization to user, reactivating a user or changing their primary organization) and returns 409 when full. Lowering the limit never removes anyone.
+- **Extend** adds time from the current expiry, or from now if it has lapsed, so renewing early loses nothing. It turns `expired` back to `active`, keeps `suspended`, and refuses `revoked`.
+- **Revoke** sets `revokedAt`, disables the license and emails members. Setting a revoked license back to another status reinstates it: `revokedAt` is cleared and `isActive` restored.
+- An `active` license saved with a past expiry is stored as `expired`.
+- **Expiry job** (`api/src/jobs/license-expiry-job.js`, hourly in-process): marks lapsed licenses `expired`, then sends notices 30, 7 and 1 day(s) ahead and once on expiry (if it expired within the last 7 days). Each notice goes once per license per stage (`expiryNoticeStage`, row-locked across replicas) by email to the organization's administrators (or its contact email if it has none) and as an in-app `license` message. A later-expiring active license silences the warnings. Changing the expiry or organization restarts the notices.
+- **Verifying:** `npm run test:licenses` in `api/` and in `client/`.
 
 ### File Storage
 - Configurable provider per org: Local FS, Google Drive (OAuth2), or DigitalOcean Spaces.
@@ -363,7 +372,7 @@ Rules the service and database enforce:
 | Google Drive | File storage (OAuth2) | `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET` |
 | DigitalOcean Spaces | Alternative file storage (S3-compatible) | `DO_SPACES_KEY`, `DO_SPACES_SECRET`, `DO_SPACES_BUCKET` |
 
-Email templates cover: password reset, email verification, organization invite, license revocation.
+Email templates cover: password reset, email verification, organization invite, license revocation, license expiry warnings.
 
 ---
 

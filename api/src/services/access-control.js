@@ -1,5 +1,5 @@
-const { Op } = require('sequelize');
 const { getModels } = require('../sequelize');
+const { findActiveLicense } = require('./license-service');
 
 async function organizationHasActiveLicense(organizationId, now = new Date()) {
   const models = getModels();
@@ -7,18 +7,7 @@ async function organizationHasActiveLicense(organizationId, now = new Date()) {
     throw new Error('Models are not initialized');
   }
 
-  const license = await models.License.findOne({
-    where: {
-      organizationId,
-      isActive: true,
-      status: 'active',
-      expiresAt: { [Op.gte]: now },
-      revokedAt: null,
-    },
-    order: [['expiresAt', 'DESC']],
-  });
-
-  return Boolean(license);
+  return Boolean(await findActiveLicense(models, organizationId, { now }));
 }
 
 async function userHasAccess(userId, now = new Date()) {

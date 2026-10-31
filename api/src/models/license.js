@@ -56,6 +56,15 @@ function initLicenseModel(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Smallest expiry notice already sent (30, 7, 1 days ahead, or 0 for expired). Reset when the term changes.
+      expiryNoticeStage: {
+        type: DataTypes.TINYINT.UNSIGNED,
+        allowNull: true,
+      },
+      expiryNoticeSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
@@ -74,6 +83,7 @@ function initLicenseModel(sequelize) {
         { fields: ['organization_id'] },
         { fields: ['expires_at'] },
         { fields: ['revoked_at'] },
+        { name: 'licenses_status_expires_at', fields: ['status', 'expires_at'] },
         { unique: true, fields: ['key'] },
       ],
     }

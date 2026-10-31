@@ -26,6 +26,7 @@ const {
   getAuthenticatedOrganizationId,
   applyOrganizationWhereScope,
 } = require('../services/request-scope');
+const { assertSeatAvailable } = require('../services/license-service');
 
 function getUserModel() {
   const models = getModels();
@@ -438,6 +439,10 @@ async function createUser(req, res) {
     // an orphan account that makes every retry fail on the unique email index.
     const user = await User.sequelize.transaction(async transaction => {
       const created = await User.create(payload, { transaction });
+      // Platform superusers never take one of an organization's licensed seats.
+      if (created.organizationId && created.isActive !== false && !resolvedCodes.includes('superuser')) {
+        await assertSeatAvailable(models, created.organizationId, { userId: created.id, transaction });
+      }
       if (OrganizationUser && created.organizationId) {
         await OrganizationUser.findOrCreate({
           where: { organizationId: created.organizationId, userId: created.id },
@@ -714,6 +719,7 @@ async function assignExistingUser(req, res) {
       const membership = await models.OrganizationUser.findOne({ where, transaction });
       if (membership?.isActive || (!membership && user.organizationId === organization.id)) return { alreadyAssigned: true, userId: user.id };
       if (membership && membership.role !== roleLabel) throw fail(409, 'Reactivate this membership with its existing role, or manage its organization assignment separately.');
+      await assertSeatAvailable(models, organization.id, { userId: user.id, transaction });
       const hasPrimary = Boolean(user.organizationId) || await models.OrganizationUser.count({ where: { userId: user.id, isPrimary: true, isActive: true }, transaction });
       if (membership) await membership.update({ isActive: true, isPrimary: user.organizationId === organization.id || !hasPrimary }, { transaction });
       else await models.OrganizationUser.create({ ...where, role: roleLabel, isActive: true, isPrimary: !hasPrimary }, { transaction });
@@ -932,6 +938,21 @@ async function updateUser(req, res) {
       }
     }
 
+    // Reactivating an account, or moving it into an organization it is not active in, takes a seat there.
+    const seatOrganizationIds = new Set();
+    if (payload.isActive === true && user.isActive === false && models.OrganizationUser) {
+      const memberships = await models.OrganizationUser.findAll({ where: { userId: user.id, isActive: true }, attributes: ['organizationId'] });
+      memberships.forEach((membership) => seatOrganizationIds.add(membership.organizationId));
+      if (user.organizationId) seatOrganizationIds.add(user.organizationId);
+    }
+    if (payload.organizationId && payload.organizationId !== user.organizationId && models.OrganizationUser) {
+      const membership = await models.OrganizationUser.findOne({ where: { userId: user.id, organizationId: payload.organizationId, isActive: true } });
+      if (!membership) seatOrganizationIds.add(payload.organizationId);
+    }
+    for (const organizationId of seatOrganizationIds) {
+      await assertSeatAvailable(models, organizationId, { userId: user.id });
+    }
+
     await user.update(payload);
 
     // A credential change by someone else ends the account's existing sessions and lifts any lockout
@@ -968,6 +989,7 @@ async function updateUser(req, res) {
 
     return res.status(200).json({ ok: true, data: sanitizeUser(user) });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, message: err.message });
     console.error('Update user error:', err);
     return res.status(500).json({ ok: false, message: 'Unable to update user.' });
   }
@@ -1313,6 +1335,11 @@ async function addOrganizationToUser(req, res) {
       },
     });
     const shouldSetPrimary = requestedIsPrimary === true || hasExistingPrimary === 0;
+
+    const activeMembership = await OrganizationUser.findOne({ where: { userId: user.id, organizationId: organization.id, isActive: true } });
+    if (!activeMembership) {
+      await assertSeatAvailable(getModels(), organization.id, { userId: user.id });
+    }
 
     const [membership, created] = await OrganizationUser.findOrCreate({
       where: {
