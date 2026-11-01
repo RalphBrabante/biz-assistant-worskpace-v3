@@ -21,26 +21,25 @@
 </section>
 
 <!-- Status overview: each tile filters the table -->
-<section *ngIf="summary() as s" class="ui-grid grid grid-cols-2 md:grid-cols-5 gap-4 mb-6" aria-label="License status overview">
-  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'active'" [attr.aria-pressed]="statusFilter === 'active'" (click)="toggleStatusFilter('active')">
-    <div class="stat-label"><i class="bi bi-check-circle text-success mr-1"></i>Active</div>
-    <div class="stat-value">{{ s.active }}</div>
-  </button>
-  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'expiring'" [attr.aria-pressed]="statusFilter === 'expiring'" (click)="toggleStatusFilter('expiring')">
-    <div class="stat-label"><i class="bi bi-hourglass-split text-warning mr-1"></i>Expiring in 30 days</div>
-    <div class="stat-value" [class.text-warning]="s.expiringSoon > 0">{{ s.expiringSoon }}</div>
-  </button>
-  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'expired'" [attr.aria-pressed]="statusFilter === 'expired'" (click)="toggleStatusFilter('expired')">
-    <div class="stat-label"><i class="bi bi-x-circle text-danger mr-1"></i>Expired</div>
-    <div class="stat-value">{{ s.expired }}</div>
-  </button>
-  <button type="button" class="stat-chip text-left" [class.border-brand]="statusFilter === 'suspended'" [attr.aria-pressed]="statusFilter === 'suspended'" (click)="toggleStatusFilter('suspended')">
-    <div class="stat-label"><i class="bi bi-pause-circle text-muted mr-1"></i>Suspended</div>
-    <div class="stat-value">{{ s.suspended }}</div>
-  </button>
-  <button type="button" class="stat-chip text-left col-span-2 md:col-span-1" [class.border-brand]="statusFilter === 'revoked'" [attr.aria-pressed]="statusFilter === 'revoked'" (click)="toggleStatusFilter('revoked')">
-    <div class="stat-label"><i class="bi bi-slash-circle text-danger mr-1"></i>Revoked</div>
-    <div class="stat-value">{{ s.revoked }}</div>
+<section *ngIf="summary() as s" class="flex flex-wrap items-center gap-2 mb-6" aria-label="License status overview">
+  <button
+    *ngFor="let tile of [
+      { value: 'active', label: 'Active', icon: 'bi-check-circle text-success', count: s.active },
+      { value: 'expiring', label: 'Expiring in 30 days', icon: 'bi-hourglass-split text-warning', count: s.expiringSoon },
+      { value: 'expired', label: 'Expired', icon: 'bi-x-circle text-danger', count: s.expired },
+      { value: 'suspended', label: 'Suspended', icon: 'bi-pause-circle text-muted', count: s.suspended },
+      { value: 'revoked', label: 'Revoked', icon: 'bi-slash-circle text-danger', count: s.revoked }
+    ]"
+    type="button"
+    class="inline-flex items-center gap-2 rounded-full border bg-surface px-3 py-1.5 text-sm shadow-panel"
+    [class.border-brand]="statusFilter === tile.value"
+    [attr.aria-pressed]="statusFilter === tile.value"
+    [title]="statusFilter === tile.value ? 'Show all licenses' : 'Show only ' + tile.label.toLowerCase()"
+    (click)="toggleStatusFilter(tile.value)"
+  >
+    <i class="bi" [ngClass]="tile.icon" aria-hidden="true"></i>
+    <span class="text-muted">{{ tile.label }}</span>
+    <span class="font-semibold tabular-nums text-ink" [class.text-warning]="tile.value === 'expiring' && tile.count > 0">{{ tile.count }}</span>
   </button>
 </section>
 
