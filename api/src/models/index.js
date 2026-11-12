@@ -37,6 +37,7 @@ const { initOrderModel, Order } = require('./order');
 const { initOrderDocumentModel, OrderDocument } = require('./order-document');
 const { initOrderDocumentUploadModel, OrderDocumentUpload } = require('./order-document-upload');
 const { initSalesInvoiceModel, SalesInvoice } = require('./sales-invoice');
+const { initDeliveryReceiptModel, DeliveryReceipt } = require('./delivery-receipt');
 const { initExpenseModel, Expense } = require('./expense');
 const { initCustomerModel, Customer } = require('./customer');
 const {
@@ -104,6 +105,7 @@ function initModels(sequelize) {
   initOrderDocumentModel(sequelize);
   initOrderDocumentUploadModel(sequelize);
   initSalesInvoiceModel(sequelize);
+  initDeliveryReceiptModel(sequelize);
   initExpenseModel(sequelize);
   initCustomerModel(sequelize);
   initWithholdingTaxTypeModel(sequelize);
@@ -907,6 +909,9 @@ function initModels(sequelize) {
     as: 'organization',
   });
 
+  Order.hasMany(DeliveryReceipt, { foreignKey: { name: 'orderId', allowNull: false }, onUpdate: 'CASCADE', onDelete: 'CASCADE', as: 'deliveryReceipts' });
+  DeliveryReceipt.belongsTo(Order, { foreignKey: { name: 'orderId', allowNull: false }, onUpdate: 'CASCADE', onDelete: 'CASCADE', as: 'order' });
+
   Order.hasMany(SalesInvoice, {
     foreignKey: {
       name: 'orderId',
@@ -1446,6 +1451,7 @@ function initModels(sequelize) {
     OrderDocument,
     OrderDocumentUpload,
     SalesInvoice,
+    DeliveryReceipt,
     Expense,
     Customer,
     WithholdingTaxType,

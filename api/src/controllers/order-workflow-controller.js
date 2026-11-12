@@ -6,9 +6,10 @@ const { getScopedOrganizationId, applyOrganizationWhereScope, isPrivilegedReques
 const { createOrganizationMessage } = require('../services/message-service');
 const W = require('../services/order-workflow');
 const { buildInvoiceDocument } = require('../services/sales-invoice-document');
+const { buildDeliveryReceiptDocument } = require('../services/delivery-receipt-document');
 const { paidInvoice, invoicePaymentSummary } = require('../services/order-invoice-payment');
 
-const actions = { start_processing: 'orders.update', return_to_draft: 'orders.update', submit: 'orders.update', approve: 'orders.approve', reject: 'orders.approve', verify_po: 'orders.verify_po', confirm: 'orders.update', fulfill: 'orders.update', invoice: 'sales_invoices.create', void_invoice: 'sales_invoices.update', payment: 'sales_invoices.update', refund: 'orders.refund', complete: 'orders.update', cancel: 'orders.update', reconcile: 'orders.reconcile' };
+const actions = { start_processing: 'orders.update', return_to_draft: 'orders.update', submit: 'orders.update', approve: 'orders.approve', reject: 'orders.approve', verify_po: 'orders.verify_po', confirm: 'orders.update', fulfill: 'orders.update', invoice: 'sales_invoices.create', void_invoice: 'sales_invoices.update', delivery_receipt: 'orders.update', void_delivery_receipt: 'orders.update', payment: 'sales_invoices.update', refund: 'orders.refund', complete: 'orders.update', cancel: 'orders.update', reconcile: 'orders.reconcile' };
 const endpoint = fn => async (req, res) => {
   try { await fn(req, res); } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ ok: false, message: 'This document or request already exists. Reload before retrying.' });
@@ -88,15 +89,16 @@ const discardUpload = endpoint(async (req, res) => {
 });
 async function detail(order) {
   const m = models();
-  const [lines, customer, invoices, activities, documents, withholdingTaxType] = await Promise.all([
+  const [lines, customer, invoices, activities, documents, withholdingTaxType, deliveryReceipts] = await Promise.all([
     m.OrderItemSnapshot.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC'], ['id', 'ASC']] }),
     order.customerId ? m.Customer.findByPk(order.customerId, { attributes: ['id', 'name', 'legalName', 'taxId', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country', 'requiresPurchaseOrder'] }) : null,
     m.SalesInvoice.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC']] }),
     m.OrderActivity.findAll({ where: { orderId: order.id }, include: [{ association: 'actor', attributes: ['id', 'firstName', 'lastName'] }], order: [['createdAt', 'DESC'], ['id', 'DESC']] }),
     m.OrderDocument.findAll({ where: { orderId: order.id }, order: [['createdAt', 'DESC']] }),
     order.withholdingTaxTypeId && m.WithholdingTaxType ? m.WithholdingTaxType.findOne({ where: { id: order.withholdingTaxTypeId, organizationId: order.organizationId }, attributes: ['id', 'code', 'name', 'percentage', 'isActive'] }) : null,
+    m.DeliveryReceipt ? m.DeliveryReceipt.findAll({ where: { orderId: order.id }, order: [['createdAt', 'ASC'], ['id', 'ASC']] }) : [],
   ]);
-  return { ...order.toJSON(), customer, withholdingTaxType, orderedItemSnapshots: lines.sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0)), salesInvoices: invoices, activities, documents, balances: W.balances(order, invoices) };
+  return { ...order.toJSON(), customer, withholdingTaxType, orderedItemSnapshots: lines.sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0)), salesInvoices: invoices, deliveryReceipts, activities, documents, balances: W.balances(order, invoices) };
 }
 async function getOrganization(req, transaction, id) {
   const organizationId = id || getScopedOrganizationId(req);
@@ -272,6 +274,35 @@ const previewInvoice = endpoint(async (req, res) => {
   ]);
   res.json({ ok: true, data: await prepareInvoice(req, order, invoices, lines) });
 });
+function applyFulfillment(order, lines, workflow, values, submitted) {
+  if (!['confirmed', 'processing'].includes(order.status)) W.fail('Confirm the order before recording fulfillment.');
+  if (!Array.isArray(submitted) || !submitted.length) W.fail('Enter quantities delivered or services completed.');
+  const seen = new Set();
+  for (const entry of submitted) {
+    const line = lines.find(l => l.id === entry.id);
+    if (!line || seen.has(entry.id)) W.fail('Invalid or duplicate fulfillment line.');
+    seen.add(entry.id);
+    const qty = W.number(entry.quantity, 'Fulfillment quantity', { min: 0.001, max: 999999, decimals: 3 });
+    const total = W.quantity(Number(workflow.fulfilled[line.id] || 0) + qty);
+    if (total > Number(line.quantity)) W.fail(`Fulfillment exceeds the ordered quantity for ${line.name}.`);
+    workflow.fulfilled[line.id] = total;
+  }
+  values.fulfillmentStatus = W.fulfillmentStatus(lines, workflow.fulfilled); values.status = 'processing';
+}
+// Typed numbers match the printed booklet; blank numbers continue DR-000001, DR-000002, ...
+async function receiptNumber(organizationId, requested, transaction) {
+  const where = number => ({ where: { organizationId, receiptNumber: number }, transaction });
+  if (requested) {
+    if (await models().DeliveryReceipt.findOne(where(requested))) W.fail(`Delivery receipt number ${requested} is already used.`, 409);
+    return requested;
+  }
+  let next = await models().DeliveryReceipt.count({ where: { organizationId }, transaction }) + 1;
+  for (let attempt = 0; attempt < 50; attempt++, next++) {
+    const candidate = `DR-${String(next).padStart(6, '0')}`;
+    if (!(await models().DeliveryReceipt.findOne(where(candidate)))) return candidate;
+  }
+  W.fail('Enter a delivery receipt number.');
+}
 const performAction = endpoint(async (req, res) => {
   const m = models(); const action = req.body.action;
   if (!actions[action]) W.fail('Unknown order action.');
@@ -285,7 +316,7 @@ const performAction = endpoint(async (req, res) => {
     let workflow = order.workflow ? JSON.parse(JSON.stringify(order.workflow)) : null;
     const values = { revision: order.revision + 1, updatedBy: actor(req) };
     const note = W.text(req.body.note, 'Note', 2000);
-    let event = {};
+    let event = {}; let summary = null;
     if (action === 'reconcile') {
       if (workflow) W.fail('This order already uses the current workflow.');
       if (['cancelled', 'refunded'].includes(order.status)) W.fail('Cancelled or refunded legacy orders cannot be adopted.');
@@ -336,20 +367,8 @@ const performAction = endpoint(async (req, res) => {
       if (workflow.settings.inventoryEnabled) { workflow.stockCommitted = W.demand(lines); await stock(order, workflow.stockCommitted, -1, transaction); }
       values.status = 'confirmed';
     } else if (action === 'fulfill') {
-      if (!['confirmed', 'processing'].includes(order.status)) W.fail('Confirm the order before recording fulfillment.');
       const submitted = req.body.lines;
-      if (!Array.isArray(submitted) || !submitted.length) W.fail('Enter quantities delivered or services completed.');
-      const seen = new Set();
-      for (const entry of submitted) {
-        const line = lines.find(l => l.id === entry.id);
-        if (!line || seen.has(entry.id)) W.fail('Invalid or duplicate fulfillment line.');
-        seen.add(entry.id);
-        const qty = W.number(entry.quantity, 'Fulfillment quantity', { min: 0.001, max: 999999, decimals: 3 });
-        const total = W.quantity(Number(workflow.fulfilled[line.id] || 0) + qty);
-        if (total > Number(line.quantity)) W.fail(`Fulfillment exceeds the ordered quantity for ${line.name}.`);
-        workflow.fulfilled[line.id] = total;
-      }
-      values.fulfillmentStatus = W.fulfillmentStatus(lines, workflow.fulfilled); values.status = 'processing';
+      applyFulfillment(order, lines, workflow, values, submitted);
       workflow.receipts.push({ id: randomUUID(), date: new Date().toISOString(), userId: actor(req), note, lines: submitted });
       event = { lines: submitted };
     } else if (action === 'invoice') {
@@ -362,6 +381,32 @@ const performAction = endpoint(async (req, res) => {
       if (!note) W.fail('Provide a reason for voiding the invoice.');
       if (workflow.payments.some(p => p.invoiceId === invoice.id)) W.fail('Invoices with payment history cannot be voided.');
       await invoice.update({ status: 'void', updatedBy: actor(req) }, { transaction, orderWorkflow: true }); event = { invoiceId: invoice.id };
+    } else if (action === 'delivery_receipt') {
+      if (!['confirmed', 'processing', 'completed'].includes(order.status)) W.fail('Confirm the order before issuing a delivery receipt.');
+      const receipts = await m.DeliveryReceipt.findAll({ where: { orderId: order.id }, transaction, lock: transaction.LOCK.UPDATE });
+      const [organization, customer] = await Promise.all([
+        m.Organization.findByPk(order.organizationId, { include: [{ association: 'taxType' }], transaction }),
+        order.customerId ? m.Customer.findByPk(order.customerId, { transaction }) : null,
+      ]);
+      const receiptDocument = buildDeliveryReceiptDocument({ order, organization, customer, lines, receipts, requested: req.body.lines, details: req.body.receiptDetails });
+      const deliveryDate = W.date(req.body.date || new Date().toISOString().slice(0, 10), 'Delivery date');
+      const number = await receiptNumber(order.organizationId, W.text(req.body.receiptNumber, 'Delivery receipt number', 50), transaction);
+      const recordFulfillment = req.body.recordFulfillment === true;
+      if (recordFulfillment) {
+        const delivered = receiptDocument.items.map(item => ({ id: item.lineId, quantity: item.quantity }));
+        applyFulfillment(order, lines, workflow, values, delivered);
+        (workflow.receipts ||= []).push({ id: randomUUID(), date: new Date().toISOString(), userId: actor(req), note: `Delivery receipt ${number}`, lines: delivered });
+      }
+      const receipt = await m.DeliveryReceipt.create({ organizationId: order.organizationId, orderId: order.id, receiptNumber: number, deliveryDate, status: 'issued', receiptDocument, createdBy: actor(req), updatedBy: actor(req) }, { transaction });
+      summary = `Delivery receipt ${number} issued${recordFulfillment ? ' and its quantities recorded as delivered' : ''}.`;
+      event = { receiptId: receipt.id, receiptNumber: number, recordFulfillment, items: receiptDocument.items.map(item => ({ lineId: item.lineId, quantity: item.quantity })) };
+    } else if (action === 'void_delivery_receipt') {
+      const receipt = await m.DeliveryReceipt.findOne({ where: { id: req.body.receiptId || null, orderId: order.id }, transaction, lock: transaction.LOCK.UPDATE });
+      if (!receipt || receipt.status === 'void') W.fail('Choose an active delivery receipt.');
+      if (!note) W.fail('Provide a reason for voiding the delivery receipt.');
+      await receipt.update({ status: 'void', voidReason: note, voidedAt: new Date(), voidedBy: actor(req), updatedBy: actor(req) }, { transaction });
+      summary = `Delivery receipt ${receipt.receiptNumber} voided: ${note}`;
+      event = { receiptId: receipt.id, receiptNumber: receipt.receiptNumber };
     } else if (action === 'payment' || action === 'refund') {
       if (['draft', 'pending', 'cancelled', 'refunded'].includes(order.status)) W.fail('Payments require an active, confirmed order.');
       const invoice = invoices.find(i => i.id === req.body.invoiceId && i.status !== 'void');
@@ -391,7 +436,7 @@ const performAction = endpoint(async (req, res) => {
     values.paymentStatus = balance.paid > 0 && balance.paid >= Number(order.totalAmount) ? 'paid' : balance.paid > 0 ? 'partially_paid' : workflow.payments.some(p => p.kind === 'refund') ? 'refunded' : 'unpaid';
     values.paidAt = values.paymentStatus === 'paid' ? order.paidAt || invoicePaymentSummary(order, invoices).paidAt || new Date() : null;
     await order.update({ ...values, workflow }, { transaction });
-    await activity(order, req, transaction, action, note || `Order action: ${action.replace(/_/g, ' ')}.`, event);
+    await activity(order, req, transaction, action, summary || note || `Order action: ${action.replace(/_/g, ' ')}.`, event);
     return order;
   });
   res.json({ ok: true, data: await detail(order) });

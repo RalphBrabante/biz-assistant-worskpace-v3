@@ -123,6 +123,7 @@ API connects to:
 | OrderItemSnapshot | orderId, itemId, name, qty, unitPrice, taxAmount | Immutable snapshot at order time for auditing |
 | OrderActivity | orderId, userId, action, metadata | Full audit trail |
 | SalesInvoice | id, orderId, orgId, status, dueDate, total | Statuses: draft→issued→sent→paid/partially_paid/overdue/void |
+| DeliveryReceipt | id, orderId, organizationId, receiptNumber, deliveryDate, status, receiptDocument | Optional DR for a workflow order. Statuses: issued, void. `receiptNumber` unique per organization |
 | Customer | id, orgId, name, email, address, tin | TIN for tax compliance |
 | Item | id, orgId, name, sku, price, cost, unit, taxTypeId | Links to TaxType for VAT rate |
 | PurchaseOrder | id, orgId, vendorId, status, total | Vendor purchase tracking |
@@ -244,6 +245,7 @@ POST /messages
 /orders                [orders.read]
 /orders/create         [orders.create]
 /orders/:id            [orders.read]
+/orders/:id/delivery-receipts/:receiptId   [orders.read]  (printable DR)
 /sales-invoices        [sales-invoices.read]
 /sales-invoices/:id    [sales-invoices.read]
 /customers             [customers.read]
@@ -287,6 +289,8 @@ Guards: `authGuard` (JWT validation) + `permissionGuard` (resource.action checks
 5. Invoice statuses: `draft → issued → sent → paid | partially_paid | overdue | void`.
 6. VAT and withholding tax are calculated and stored as separate columns on each invoice/expense.
 7. An order's `totalAmount` is net of withholding tax. Customers usually raise their PO for the full amount and deduct EWT when paying, so PO verification (`poAmountMatches` in `api/src/services/order-workflow.js`) accepts a PO amount equal to either the total before withholding (`totalAmount + withHoldingTaxAmount`) or the net total. Any other amount needs a verifier note.
+8. Invoices of a workflow-managed order are paid and voided only through the order (`/orders/:id/actions`); the invoice page links there with `?payInvoice=<id>` or `?voidInvoice=<id>`. Voiding needs a reason and is refused for invoices with payment history (refund instead). A voided invoice keeps its number, drops out of the invoiced balance, and the order page goes straight to issuing a replacement invoice for the remaining amount.
+9. Delivery receipts (DR) are optional. A confirmed, processing or completed workflow order issues one from the Fulfillment tab (`delivery_receipt` action, `orders.update`). The DR number is typed to match the paper booklet or left blank for the next `DR-000001`-style number, and is unique per organization, voided ones included. Customer, PO and article details are frozen in `receiptDocument`. Quantities on active DRs cannot exceed the ordered quantity. "Also record as delivered" applies the same rules as recording fulfillment. Voiding (`void_delivery_receipt`) needs a reason, frees the DR's quantities, and leaves recorded fulfillment unchanged. A DR carries no amounts and is not valid for claiming input tax.
 
 ### Tax Calculations (Philippine BIR Compliance)
 - `TaxType` stores VAT rates; items reference a `taxTypeId`.

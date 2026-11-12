@@ -26,6 +26,7 @@ import { RolesPageComponent } from './pages/roles-page/roles-page.component';
 import { RoleDetailPageComponent } from './pages/role-detail-page/role-detail-page.component';
 import { SalesInvoicesPageComponent } from './pages/sales-invoices-page/sales-invoices-page.component';
 import { SalesInvoiceDetailPageComponent } from './pages/sales-invoice-detail-page/sales-invoice-detail-page.component';
+import { DeliveryReceiptPageComponent } from './pages/delivery-receipt-page/delivery-receipt-page.component';
 import { SettingsPageComponent } from './pages/settings-page/settings-page.component';
 import { UsersPageComponent } from './pages/users-page/users-page.component';
 import { VendorsPageComponent } from './pages/vendors-page/vendors-page.component';
@@ -74,6 +75,7 @@ export const routes: Routes = [
       { path: 'items', component: ItemsPageComponent, canActivate: [permissionGuard], data: { permissions: ['items.read'] } },
       { path: 'orders', component: OrdersPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
       { path: 'orders/create', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.create'] } },
+      { path: 'orders/:id/delivery-receipts/:receiptId', component: DeliveryReceiptPageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
       { path: 'orders/:id', component: OrderWorkspacePageComponent, canActivate: [permissionGuard], data: { permissions: ['orders.read'] } },
       { path: 'customers', component: CustomersPageComponent, canActivate: [permissionGuard], data: { permissions: ['customers.read', 'organizations.read'] } },
       { path: 'expenses/:id', component: ExpenseDetailPageComponent, canActivate: [permissionGuard], data: { permissions: ['expenses.read'] } },

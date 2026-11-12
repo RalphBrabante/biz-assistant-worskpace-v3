@@ -119,3 +119,60 @@ test('a customer PO matches the order total before or after withholding tax', ()
   e.page.accept({ ...e.order, totalAmount: 100, withHoldingTaxAmount: 0, workflow: { po: { status: 'unverified', amount: 100 }, poRequired: false } });
   assert.equal(e.page.poMismatch, false); assert.equal(e.page.poMatchesGross, false);
 });
+test('recording a payment pre-fills the first unpaid invoice and its remaining balance', () => {
+  const e = setup(['orders.update', 'sales_invoices.update']);
+  const invoices = [{ id: 'inv-1', invoiceNumber: 'SI-1', status: 'paid', paymentStatus: 'paid', totalAmount: 50 }, { id: 'inv-2', invoiceNumber: 'SI-2', status: 'partially_paid', paymentStatus: 'partially_paid', totalAmount: 48 }];
+  const payments = [{ id: 'p1', invoiceId: 'inv-1', kind: 'payment', amount: 50 }, { id: 'p2', invoiceId: 'inv-2', kind: 'payment', amount: 20 }];
+  e.page.accept({ ...e.order, status: 'confirmed', totalAmount: 98, withHoldingTaxAmount: 2, salesInvoices: invoices, workflow: { po: {}, payments, fulfilled: {} } });
+  assert.equal(e.page.canPayInvoice(invoices[0]), false); assert.equal(e.page.canPayInvoice(invoices[1]), true);
+  e.page.openPayment(); assert.equal(e.page.actionModal, 'payment'); assert.equal(e.page.actionInvoiceId, 'inv-2'); assert.equal(e.page.actionAmount, 28);
+  e.page.selectPaymentInvoice('inv-1'); assert.equal(e.page.actionAmount, 0);
+});
+test('a payment link from an invoice opens the payment form for that invoice', () => {
+  const e = setup(['orders.update', 'sales_invoices.update']); const query = { tab: null, payInvoice: 'inv-1' };
+  e.page.route.snapshot.queryParamMap = { get: key => query[key] ?? null };
+  e.page.routeId = 'order-a'; e.page.load();
+  e.requests[0].stream.next({ data: { ...e.order, status: 'confirmed', totalAmount: 100, salesInvoices: [{ id: 'inv-1', invoiceNumber: 'SI-1', status: 'issued', paymentStatus: 'unpaid', totalAmount: 100 }], workflow: { po: {}, payments: [], fulfilled: {} } } });
+  assert.equal(e.page.tab, 'payments'); assert.equal(e.page.actionModal, 'payment'); assert.equal(e.page.actionInvoiceId, 'inv-1'); assert.equal(e.page.actionAmount, 100);
+});
+test('voiding is offered only for unpaid invoices and leads straight to a replacement invoice', () => {
+  const e = setup(['orders.update', 'sales_invoices.update', 'sales_invoices.create']);
+  const unpaid = { id: 'inv-1', invoiceNumber: 'SI-1', status: 'issued', paymentStatus: 'unpaid', totalAmount: 100 };
+  const paid = { id: 'inv-2', invoiceNumber: 'SI-2', status: 'paid', paymentStatus: 'paid', totalAmount: 50 };
+  const confirmed = { ...e.order, status: 'confirmed', totalAmount: 150, salesInvoices: [unpaid, paid], balances: { invoiced: 150, paid: 50, toInvoice: 0, outstanding: 100, orderBalance: 100 }, workflow: { po: {}, payments: [{ id: 'p', invoiceId: 'inv-2', kind: 'payment', amount: 50 }], fulfilled: {} } };
+  e.page.accept(confirmed);
+  assert.equal(e.page.canVoidInvoice(unpaid), true); assert.equal(e.page.canVoidInvoice(paid), false);
+  e.page.openVoid('inv-1'); e.page.actionNote = 'Wrong customer TIN'; e.page.runAction('void_invoice');
+  const request = e.requests.at(-1); assert.equal(request.body.action, 'void_invoice'); assert.equal(request.body.invoiceId, 'inv-1');
+  request.stream.next({ data: { ...confirmed, revision: 2, salesInvoices: [{ ...unpaid, status: 'void' }, paid], balances: { ...confirmed.balances, invoiced: 50, toInvoice: 100 } } });
+  assert.equal(e.page.tab, 'invoices'); assert.equal(e.page.actionModal, 'invoice'); assert.equal(e.page.actionAmount, 100);
+  assert.match(e.page.success, /SI-1 voided\. Issue a replacement invoice/);
+});
+test('a void link from an invoice opens the void form, and paid invoices explain the refund route', () => {
+  const e = setup(['orders.update', 'sales_invoices.update']); const query = { voidInvoice: 'inv-1' };
+  e.page.route.snapshot.queryParamMap = { get: key => query[key] ?? null };
+  const order = { ...e.order, status: 'confirmed', totalAmount: 100, salesInvoices: [{ id: 'inv-1', invoiceNumber: 'SI-1', status: 'issued', paymentStatus: 'unpaid', totalAmount: 100 }], workflow: { po: {}, payments: [], fulfilled: {} } };
+  e.page.routeId = 'order-a'; e.page.load(); e.requests[0].stream.next({ data: order });
+  assert.equal(e.page.tab, 'invoices'); assert.equal(e.page.actionModal, 'void_invoice'); assert.equal(e.page.actionInvoiceId, 'inv-1');
+  const f = setup(['orders.update', 'sales_invoices.update']); f.page.route.snapshot.queryParamMap = { get: key => query[key] ?? null };
+  f.page.routeId = 'order-a'; f.page.load(); f.requests[0].stream.next({ data: { ...order, workflow: { po: {}, payments: [{ id: 'p', invoiceId: 'inv-1', kind: 'payment', amount: 10 }], fulfilled: {} } } });
+  assert.equal(f.page.actionModal, ''); assert.match(f.page.error, /cannot be voided\. Record a refund instead/);
+});
+test('issuing a delivery receipt defaults to quantities not yet on a DR and sends them with the printed details', () => {
+  const e = setup(['orders.update']);
+  const lines = [{ id: 'l1', name: 'Fabric', quantity: 10, unitPrice: 100, unit: 'm', type: 'product', itemId: null }, { id: 'l2', name: 'Thread', quantity: 4, unitPrice: 20, unit: 'cone', type: 'product', itemId: null }];
+  const receipts = [{ id: 'dr-1', receiptNumber: '0115', deliveryDate: '2026-11-10', status: 'issued', receiptDocument: { items: [{ lineId: 'l1', quantity: 6 }] } }, { id: 'dr-0', receiptNumber: '0114', deliveryDate: '2026-11-09', status: 'void', receiptDocument: { items: [{ lineId: 'l2', quantity: 4 }] } }];
+  const order = { ...e.order, status: 'processing', customerPoNumber: 'PO-77', shippingAddress: 'Site 2', customer: { id: 'c', name: 'Acme', taxId: '123', requiresPurchaseOrder: false }, orderedItemSnapshots: lines, deliveryReceipts: receipts, salesInvoices: [], workflow: { po: {}, payments: [], fulfilled: { l1: 6 } } };
+  e.page.accept(order);
+  assert.equal(e.page.receiptRemaining(lines[0]), 4); assert.equal(e.page.receiptRemaining(lines[1]), 4);
+  e.page.openReceipt();
+  assert.equal(e.page.actionModal, 'delivery_receipt'); assert.deepEqual({ ...e.page.receiptQuantities }, { l1: 4, l2: 4 }); assert.equal(e.page.recordFulfillment, true);
+  assert.equal(e.page.receiptDetails.deliveredTo, 'Acme'); assert.equal(e.page.receiptDetails.poNumber, 'PO-77'); assert.equal(e.page.receiptDetails.address, 'Site 2');
+  e.page.receiptQuantities.l1 = 5; assert.match(e.page.receiptError, /Only 4 m of Fabric are not yet on a delivery receipt/);
+  e.page.receiptQuantities.l1 = 4; e.page.receiptNumber = '0116'; e.page.runAction('delivery_receipt');
+  const request = e.requests.at(-1);
+  assert.equal(request.body.action, 'delivery_receipt'); assert.equal(request.body.receiptNumber, '0116'); assert.equal(request.body.recordFulfillment, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(request.body.lines)), [{ id: 'l1', quantity: 4 }, { id: 'l2', quantity: 4 }]);
+  request.stream.next({ data: { ...order, revision: 2, deliveryReceipts: [...receipts, { id: 'dr-2', receiptNumber: '0116', deliveryDate: '2026-11-12', status: 'issued', receiptDocument: { items: [] } }] } });
+  assert.match(e.page.success, /0116 issued/); assert.deepEqual(JSON.parse(JSON.stringify(e.navigations.at(-1))), [['/orders', 'order-a', 'delivery-receipts', 'dr-2']]);
+});

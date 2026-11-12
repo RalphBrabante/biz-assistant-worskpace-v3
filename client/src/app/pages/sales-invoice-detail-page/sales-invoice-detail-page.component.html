@@ -21,7 +21,8 @@
 
 <section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="canEdit && invoice() && !isPaid && !isManaged">
   <div class="ui-card-body p-6">
-    <h2 class="text-base font-semibold mb-4">Status Update</h2>
+    <h2 class="text-base font-semibold mb-1">Status Update</h2>
+    <p class="text-muted mb-4">To mark this invoice paid, choose Paid and save.<span *ngIf="invoice()?.orderId"> The linked order's payment status updates to match.</span></p>
     <div class="ui-grid grid grid-cols-12 gap-4">
       <div class="col-span-12 md:col-span-6">
         <label class="ui-form-label font-semibold">Status</label>
@@ -34,14 +35,27 @@
           {{ submitting() ? 'Saving...' : 'Save Status' }}
         </button>
         <button class="ui-btn ui-btn-outline-danger" type="button" [disabled]="submitting()" (click)="markCancelled()">
-          <i class="bi bi-x-octagon mr-1"></i>Mark Cancelled
+          <i class="bi bi-x-octagon mr-1"></i>Void Invoice
         </button>
       </div>
     </div>
   </div>
 </section>
 
-<p *ngIf="canViewOrder && invoice()?.orderId" class="no-print mb-4"><a class="ui-btn ui-btn-outline-dark" [routerLink]="['/orders', invoice()!.orderId]">Back to order</a><span *ngIf="isManaged" class="text-muted ml-3">Manage payments and voiding from the order workspace.</span></p>
+<section class="ui-card shadow-panel rounded-xl mb-6 no-print" *ngIf="isManaged && canViewOrder && !isVoid">
+  <div class="ui-card-body p-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-base font-semibold mb-1">Payment and voiding</h2>
+      <p class="text-muted mb-0">This invoice is managed on order {{ invoice()?.order?.orderNumber || '' }}. A payment that covers the balance marks this invoice paid, and the order is marked paid once its total is covered. Voiding cancels this invoice so a replacement can be issued; invoices with payments must be refunded instead.</p>
+    </div>
+    <div *ngIf="canEdit" class="flex flex-wrap gap-2">
+      <a *ngIf="!isPaid" class="ui-btn ui-btn-primary" [routerLink]="['/orders', invoice()!.orderId]" [queryParams]="{ payInvoice: invoice()!.id }"><i class="bi bi-cash-coin mr-1"></i>Record payment</a>
+      <a *ngIf="!hasPayments" class="ui-btn ui-btn-outline-danger" [routerLink]="['/orders', invoice()!.orderId]" [queryParams]="{ voidInvoice: invoice()!.id }"><i class="bi bi-x-octagon mr-1"></i>Void invoice</a>
+    </div>
+  </div>
+</section>
+
+<p *ngIf="canViewOrder && invoice()?.orderId" class="no-print mb-4"><a class="ui-btn ui-btn-outline-dark" [routerLink]="['/orders', invoice()!.orderId]">Back to order</a><span *ngIf="isManaged" class="text-muted ml-3">Payments and voiding for this invoice are managed on its order.</span></p>
 <p *ngIf="loading()" class="no-print">Loading invoice…</p>
 <app-sales-invoice-sheet *ngIf="invoice()?.invoiceDocument" [invoice]="invoice()!"></app-sales-invoice-sheet>
 <ng-container *ngIf="!invoice()?.invoiceDocument">

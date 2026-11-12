@@ -106,6 +106,17 @@ export class SalesInvoiceDetailPageComponent {
     return String(this.invoice()?.status || '').toLowerCase() === 'paid';
   }
 
+  // Paid or partly paid invoices hold payment history and are refunded, not voided.
+  get hasPayments(): boolean {
+    const row = this.invoice();
+    return ['paid', 'partially_paid'].includes(String(row?.status || '').toLowerCase())
+      || ['paid', 'partially_paid', 'refunded'].includes(String(row?.paymentStatus || '').toLowerCase());
+  }
+
+  get isVoid(): boolean {
+    return ['void', 'cancelled'].includes(String(this.invoice()?.status || '').toLowerCase());
+  }
+
   get printableStatus(): string {
     const current = String(this.invoice()?.status || '').toLowerCase();
     return current === 'void' ? 'cancelled' : current || '-';

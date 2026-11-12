@@ -1,0 +1,35 @@
+<article class="receipt-paper" *ngIf="receipt.receiptDocument as doc" aria-label="Delivery receipt">
+  <header class="seller">
+    <h2>{{ doc.seller.name }}</h2>
+    <p>{{ doc.seller.address }}</p>
+    <p *ngIf="doc.seller.phone">Tel. No.: {{ doc.seller.phone }}</p>
+    <p>{{ doc.seller.vatRegistered ? 'VAT REG TIN' : 'TIN' }} : {{ doc.seller.taxId || '____________________' }}</p>
+  </header>
+  <div class="receipt-title"><h3>DELIVERY RECEIPT</h3><strong>No. {{ receipt.receiptNumber }}</strong></div>
+  <p *ngIf="receipt.status === 'void'" class="watermark">VOID</p>
+  <div class="customer-fields">
+    <div><b>Delivered to:</b><span>{{ doc.deliveredTo }}</span></div>
+    <div><b>Date:</b><span>{{ receipt.deliveryDate | date:'MMM d, y' }}</span></div>
+    <div><b>Address:</b><span>{{ doc.address }}</span></div>
+    <div><b>TIN:</b><span>{{ doc.taxId }}</span></div>
+    <div><b>Bus. Style:</b><span>{{ doc.businessStyle }}</span></div>
+    <div><b>Terms:</b><span>{{ doc.terms }}</span></div>
+    <div class="order-reference">Order: {{ doc.orderNumber }}</div>
+    <div><b>P.O No.:</b><span>{{ doc.poNumber }}</span></div>
+  </div>
+  <table class="articles">
+    <colgroup><col class="qty"><col class="unit"><col></colgroup>
+    <thead><tr><th>QTY.</th><th>UNIT</th><th>ARTICLES</th></tr></thead>
+    <tbody>
+      <tr *ngFor="let item of doc.items"><td class="number">{{ quantity(item.quantity) }}</td><td>{{ item.unit }}</td><td>{{ item.name }}<small *ngIf="item.description">{{ item.description }}</small></td></tr>
+      <tr *ngFor="let row of blankRows" class="blank-row" aria-hidden="true"><td>&nbsp;</td><td></td><td></td></tr>
+      <tr class="delivered-by"><td colspan="3"><b>DELIVERED BY:</b> {{ doc.deliveredBy }}</td></tr>
+    </tbody>
+  </table>
+  <footer>
+    <div class="signature"><span>{{ doc.preparedBy }}</span><b>Prepared By</b></div>
+    <div class="signature wide"><em>Received the above articles in good order and condition</em><span>&nbsp;</span><b>Customer's Print Name &amp; Signature</b></div>
+  </footer>
+  <p *ngIf="receipt.status === 'void' && receipt.voidReason" class="void-reason">Voided: {{ receipt.voidReason }}</p>
+  <p class="disclaimer">THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAXES</p>
+</article>

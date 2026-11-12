@@ -1,6 +1,7 @@
 import { SalesInvoiceSheetComponent, PrintableInvoice } from '../../shared/sales-invoice-sheet/sales-invoice-sheet.component';
 import {MoneyInputDirective} from '../../shared/money-input.directive';
 import {RowActionsComponent} from '../../shared/row-actions.component';
+import { DeliveryReceipt } from '../../shared/delivery-receipt-sheet/delivery-receipt-sheet.component';
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, ViewChild, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -22,7 +23,7 @@ interface Payment { source?: string; id: string; kind: string; amount: number; r
 interface Document { id: string; name: string; size: number; createdAt: string; }
 interface Activity { id: string; title: string; description: string; createdAt: string; actor?: { firstName: string; lastName: string }; }
 interface Workflow { settings: Settings; approval: string; poRequired: boolean; po: { status?: string; date?: string; amount?: number | null; documentId?: string; verifiedAt?: string; verificationNote?: string }; paymentTermsDays: number; fulfilled: Record<string, number>; payments: Payment[]; }
-interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; withholdingTaxType?: { name: string; percentage: number }; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
+interface Order { id: string; organizationId: string; orderNumber: string; revision: number; status: string; paymentStatus: string; fulfillmentStatus: string; invoicingStatus: string; customerId: string | null; customer?: Customer; customerPoNumber?: string; promisedDate?: string; dueDate?: string; billingAddress?: string; shippingAddress?: string; notes?: string; currency: string; shippingAmount: number; withholdingTaxTypeId?: string; withholdingTaxType?: { name: string; percentage: number }; totalAmount: number; taxAmount: number; withHoldingTaxAmount: number; workflow: Workflow | null; orderedItemSnapshots: Line[]; salesInvoices: Invoice[]; deliveryReceipts?: DeliveryReceipt[]; documents: Document[]; activities: Activity[]; balances: { invoiced: number; paid: number; toInvoice: number; outstanding: number; orderBalance: number }; }
 @Component({ selector: 'app-order-workspace-page', standalone: true, imports: [SalesInvoiceSheetComponent, MoneyInputDirective, RowActionsComponent, CommonModule, FormsModule, RouterLink, ModalDirective, OrderProofUploadComponent], templateUrl: './order-workspace-page.component.html', styleUrl: './order-workspace-page.component.scss' })
 export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
@@ -51,6 +52,8 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   actionModal = ''; actionNote = ''; actionAmount = 0; actionInvoiceId = ''; actionInvoiceNumber = ''; actionDate = new Date().toISOString().slice(0, 10); actionDueDate = ''; inventoryDecision = '';
   invoicePreview: PrintableInvoice | null = null;
   invoiceDetails = { soldTo: '', address: '', taxId: '', businessStyle: '', terms: '', oscaPwdId: '' };
+  receiptNumber = ''; receiptQuantities: Record<string, number> = {}; recordFulfillment = false; actionReceiptId = '';
+  receiptDetails = { deliveredTo: '', address: '', taxId: '', businessStyle: '', terms: '', poNumber: '', deliveredBy: '', preparedBy: '' };
   private requestKey = crypto.randomUUID();
   private org = '';
   private routeId = '';
@@ -150,7 +153,7 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
     return po !== this.poNetTotal && po !== this.poGrossTotal;
   }
   can(permission: string): boolean { return this.auth.hasPermission(permission); }
-  actionLabel(value: string): string { return ({ submit: 'Submit for approval', approve: 'Approve order', reject: 'Return to draft', confirm: 'Confirm order', cancel: 'Cancel order', complete: 'Complete order', verify_po: 'Verify customer PO', fulfill: 'Record fulfillment', invoice: 'Issue invoice', void_invoice: 'Void invoice', payment: 'Record payment', refund: 'Record refund', reconcile: 'Enable reviewed workflow' } as Record<string, string>)[value] || value; }
+  actionLabel(value: string): string { return ({ submit: 'Submit for approval', approve: 'Approve order', reject: 'Return to draft', confirm: 'Confirm order', cancel: 'Cancel order', complete: 'Complete order', verify_po: 'Verify customer PO', fulfill: 'Record fulfillment', invoice: 'Issue invoice', void_invoice: 'Void invoice', delivery_receipt: 'Issue delivery receipt', void_delivery_receipt: 'Void delivery receipt', payment: 'Record payment', refund: 'Record refund', reconcile: 'Enable reviewed workflow' } as Record<string, string>)[value] || value; }
   label(value: string | undefined): string { return (value || '').replace(/_/g, ' '); }
   money(value: unknown): string { return new Intl.NumberFormat('en', { style: 'currency', currency: this.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0)); }
   changed(): void { this.dirty = true; this.success = ''; }
@@ -165,7 +168,7 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
       if (generation !== this.loadGeneration) return;
       try {
         if (!response.data) throw new Error('The order could not be loaded. Please reload.');
-        this.accept(response.data); this.loading = false; this.loadLookups();
+        this.accept(response.data); this.loading = false; this.loadLookups(); this.applyLinkedAction();
       } catch (error) { this.loading = false; this.error = error instanceof Error ? error.message : 'Unable to read this order. Please reload.'; }
     }, error: e => { if (generation === this.loadGeneration) { this.loading = false; this.fail(e); } } }));
   }
@@ -241,15 +244,118 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
     this.shippingAmount = Number(order.shippingAmount); this.withholdingTaxTypeId = order.withholdingTaxTypeId || ''; this.billingAddress = order.billingAddress || ''; this.shippingAddress = order.shippingAddress || ''; this.notes = order.notes || ''; this.dirty = false;
     this.fulfillment = Object.fromEntries(this.lines.map(l => [l.id!, 0]));
   }
+  // Amount still owed on one invoice after payments and refunds recorded in this order.
+  invoiceBalance(invoice: Invoice): number {
+    const received = (this.order?.workflow?.payments || []).filter(p => p.invoiceId === invoice.id).reduce((sum, p) => sum + (p.kind === 'refund' ? -Number(p.amount) : Number(p.amount)), 0);
+    return Math.max(0, this.round(Number(invoice.totalAmount) - received));
+  }
+  get canRecordPayment(): boolean { return this.active && this.can('sales_invoices.update'); }
+  canPayInvoice(invoice: Invoice): boolean { return this.canRecordPayment && invoice.status !== 'void' && this.invoiceBalance(invoice) > 0; }
+  openPayment(invoiceId = ''): void {
+    this.openAction('payment');
+    if (this.actionModal !== 'payment') return;
+    const invoice = this.order?.salesInvoices.find(i => i.id === invoiceId && i.status !== 'void');
+    if (invoice) this.selectPaymentInvoice(invoice.id);
+  }
+  selectPaymentInvoice(invoiceId: string): void {
+    this.actionInvoiceId = invoiceId;
+    const invoice = this.order?.salesInvoices.find(i => i.id === invoiceId);
+    if (this.actionModal === 'payment' && invoice) this.actionAmount = this.invoiceBalance(invoice);
+  }
+  // Payments are the order's record of money received, so a paid invoice is refunded rather than voided.
+  invoiceHasPayments(invoice: Invoice): boolean { return (this.order?.workflow?.payments || []).some(p => p.invoiceId === invoice.id); }
+  canVoidInvoice(invoice: Invoice): boolean { return !!this.order?.workflow && invoice.status !== 'void' && this.can('sales_invoices.update') && !this.invoiceHasPayments(invoice); }
+  get canIssueInvoice(): boolean { return this.active && this.can('sales_invoices.create'); }
+  openVoid(invoiceId: string): void {
+    this.openAction('void_invoice');
+    if (this.actionModal === 'void_invoice') this.actionInvoiceId = invoiceId;
+  }
+  // A voided invoice leaves part of the order uninvoiced; go straight to issuing its replacement.
+  private afterVoid(voided?: Invoice): void {
+    this.tab = 'invoices';
+    const remaining = Number(this.order?.balances?.toInvoice || 0);
+    const label = voided ? `Invoice ${voided.invoiceNumber} voided.` : 'Invoice voided.';
+    if (this.canIssueInvoice && remaining > 0) { this.openAction('invoice'); this.success = `${label} Issue a replacement invoice for the remaining ${this.money(remaining)}.`; }
+    else this.success = remaining > 0 ? `${label} ${this.money(remaining)} of this order now needs a replacement invoice.` : label;
+  }
+  private afterReceipt(action: string, previousIds: Set<string>): void {
+    this.tab = 'fulfillment';
+    if (action === 'void_delivery_receipt') { this.success = 'Delivery receipt voided. Recorded fulfillment is unchanged.'; return; }
+    const issued = this.deliveryReceipts.find(receipt => !previousIds.has(receipt.id));
+    this.success = issued ? `Delivery receipt ${issued.receiptNumber} issued.` : 'Delivery receipt issued.';
+    if (issued) this.router.navigate(['/orders', this.order!.id, 'delivery-receipts', issued.id]);
+  }
+  private applyLinkedAction(): void {
+    const query = this.route.snapshot.queryParamMap;
+    const tab = query?.get('tab'); const voidId = query?.get('voidInvoice');
+    if (tab && this.tabs.includes(tab)) this.tab = tab;
+    if (voidId) {
+      this.tab = 'invoices';
+      const invoice = this.order?.salesInvoices.find(i => i.id === voidId);
+      if (invoice && this.canVoidInvoice(invoice)) this.openVoid(voidId);
+      else if (invoice?.status === 'void') this.success = `Invoice ${invoice.invoiceNumber} is already void.`;
+      else if (invoice && this.invoiceHasPayments(invoice)) this.error = `Invoice ${invoice.invoiceNumber} has recorded payments and cannot be voided. Record a refund instead.`;
+      return;
+    }
+    const invoiceId = query?.get('payInvoice');
+    if (!invoiceId) return;
+    this.tab = 'payments';
+    const invoice = this.order?.salesInvoices.find(i => i.id === invoiceId);
+    if (invoice && this.canPayInvoice(invoice)) this.openPayment(invoiceId);
+    else if (invoice && invoice.status !== 'void' && this.invoiceBalance(invoice) <= 0) this.success = `Invoice ${invoice.invoiceNumber} is already paid.`;
+    else if (invoice && !this.active) this.error = 'Confirm this order before recording payments.';
+  }
+  // Delivery receipts are optional printed documents; quantities are capped by what is not yet on an active receipt.
+  get deliveryReceipts(): DeliveryReceipt[] { return this.order?.deliveryReceipts || []; }
+  get canIssueReceipt(): boolean { return !!this.order?.workflow && ['confirmed', 'processing', 'completed'].includes(this.order.status) && this.can('orders.update'); }
+  canVoidReceipt(receipt: DeliveryReceipt): boolean { return !!this.order?.workflow && receipt.status !== 'void' && this.can('orders.update'); }
+  onReceipts(line: Line): number {
+    return this.round3(this.deliveryReceipts.filter(r => r.status !== 'void').reduce((sum, r) => sum + (r.receiptDocument?.items || []).filter(i => i.lineId === line.id).reduce((s, i) => s + Number(i.quantity), 0), 0));
+  }
+  receiptRemaining(line: Line): number { return Math.max(0, this.round3(Number(line.quantity) - this.onReceipts(line))); }
+  get receiptAvailable(): boolean { return this.lines.some(line => line.id && this.receiptRemaining(line) > 0); }
+  get receiptSelection(): { id: string; quantity: number }[] {
+    return this.lines.filter(line => line.id && Number(this.receiptQuantities[line.id]) > 0).map(line => ({ id: line.id!, quantity: Number(this.receiptQuantities[line.id!]) }));
+  }
+  get receiptError(): string {
+    for (const line of this.lines) {
+      const amount = Number(this.receiptQuantities[line.id!] ?? 0);
+      if (!Number.isFinite(amount) || amount < 0 || Math.abs(amount * 1000 - Math.round(amount * 1000)) > 0.00001) return `Enter a nonnegative quantity with up to 3 decimal places for ${line.name}.`;
+      if (amount > this.receiptRemaining(line)) return `Only ${this.receiptRemaining(line)} ${line.unit} of ${line.name} are not yet on a delivery receipt.`;
+      if (this.recordFulfillment && amount > this.remaining(line)) return `Only ${this.remaining(line)} ${line.unit} of ${line.name} remain to be delivered. Clear "Also record as delivered" if this delivery was already recorded.`;
+    }
+    return this.receiptSelection.length ? '' : 'Enter the quantities on this delivery receipt.';
+  }
+  openReceipt(): void {
+    this.openAction('delivery_receipt');
+    if (this.actionModal !== 'delivery_receipt') return;
+    // Start from quantities typed in "Fulfill now", otherwise everything not yet on a receipt.
+    const typed = this.fulfillmentSelection;
+    this.receiptQuantities = Object.fromEntries(this.lines.filter(line => line.id).map(line => {
+      const entered = typed.find(entry => entry.id === line.id)?.quantity;
+      return [line.id!, typed.length ? Math.min(entered || 0, this.receiptRemaining(line)) : this.receiptRemaining(line)];
+    }));
+    this.recordFulfillment = this.canFulfill && this.receiptSelection.every(entry => entry.quantity <= this.remaining(this.lines.find(line => line.id === entry.id)!));
+  }
+  openVoidReceipt(receiptId: string): void {
+    this.openAction('void_delivery_receipt');
+    if (this.actionModal === 'void_delivery_receipt') this.actionReceiptId = receiptId;
+  }
+  private round3(value: number): number { return Math.round((value + Number.EPSILON) * 1000) / 1000; }
   openAction(action: string): void {
     if (this.hasUnsavedChanges) { this.error = 'Save the draft and selected attachment before taking this action.'; return; }
     if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
     this.invoicePreview = null;
     const customer = this.order?.customer;
     this.invoiceDetails = { soldTo: customer?.legalName || customer?.name || '', address: this.order?.billingAddress || [customer?.addressLine1, customer?.addressLine2, customer?.city, customer?.state, customer?.postalCode, customer?.country].filter(Boolean).join(', '), taxId: customer?.taxId || '', businessStyle: customer?.legalName || customer?.name || '', terms: this.paymentTermsDays === 0 ? 'Cash' : `${this.paymentTermsDays} days`, oscaPwdId: '' };
+    const address = this.order?.shippingAddress || this.order?.billingAddress || [customer?.addressLine1, customer?.addressLine2, customer?.city, customer?.state, customer?.postalCode, customer?.country].filter(Boolean).join(', ');
+    this.receiptDetails = { deliveredTo: customer?.legalName || customer?.name || '', address, taxId: customer?.taxId || '', businessStyle: customer?.legalName || customer?.name || '', terms: this.invoiceDetails.terms, poNumber: this.order?.customerPoNumber || '', deliveredBy: '', preparedBy: '' };
+    this.receiptNumber = ''; this.receiptQuantities = {}; this.recordFulfillment = false; this.actionReceiptId = this.deliveryReceipts.find(r => r.status !== 'void')?.id || '';
     this.actionModal = action; this.actionNote = ''; this.actionInvoiceNumber = ''; this.actionDueDate = ''; this.inventoryDecision = '';
-    this.actionInvoiceId = this.order?.salesInvoices.find(i => i.status !== 'void')?.id || '';
-    this.actionAmount = action === 'invoice' ? this.order?.balances.toInvoice || 0 : 0;
+    const invoices = (this.order?.salesInvoices || []).filter(i => i.status !== 'void');
+    const unpaid = action === 'payment' ? invoices.find(i => this.invoiceBalance(i) > 0) : undefined;
+    this.actionInvoiceId = (unpaid || invoices[0])?.id || '';
+    this.actionAmount = action === 'invoice' ? this.order?.balances.toInvoice || 0 : unpaid ? this.invoiceBalance(unpaid) : 0;
     const now = new Date(); this.actionDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; this.error = '';
   }
   reviewInvoice(): void {
@@ -267,12 +373,16 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
     if (!this.order || this.busy || this.hasUnsavedChanges) return;
     if (action === 'fulfill' && this.fulfillmentError) { this.error = this.fulfillmentError; return; }
     if (action === 'invoice' && !this.invoicePreview) { this.reviewInvoice(); return; }
+    if (action === 'delivery_receipt' && this.receiptError) { this.error = this.receiptError; return; }
     this.busy = true; this.error = '';
     const previousInvoiceIds = new Set(this.order.salesInvoices.map(invoice => invoice.id));
-    const lines = this.lines.filter(l => Number(this.fulfillment[l.id!]) > 0).map(l => ({ id: l.id, quantity: Number(this.fulfillment[l.id!]) }));
+    const voidedInvoice = action === 'void_invoice' ? this.order.salesInvoices.find(invoice => invoice.id === this.actionInvoiceId) : undefined;
+    const previousReceiptIds = new Set(this.deliveryReceipts.map(receipt => receipt.id));
+    const lines = action === 'delivery_receipt' ? this.receiptSelection : this.lines.filter(l => Number(this.fulfillment[l.id!]) > 0).map(l => ({ id: l.id, quantity: Number(this.fulfillment[l.id!]) }));
     this.subscriptions.add(this.api.create<Order>(`/api/v1/orders/${this.order.id}/actions`, { action, revision: this.order.revision, note: this.actionNote,
       amount: this.actionAmount, invoiceId: this.actionInvoiceId, invoiceNumber: this.actionInvoiceNumber, date: this.actionDate, issueDate: this.actionDate, dueDate: this.actionDueDate,
-      invoiceDetails: this.invoiceDetails, inventoryDecision: this.inventoryDecision, lines }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; if (action === 'invoice') { this.tab = 'invoices'; const issued = this.order?.salesInvoices.find(invoice => !previousInvoiceIds.has(invoice.id)); if (issued && this.can('sales_invoices.read')) this.router.navigate(['/sales-invoices', issued.id]); } this.success = action === 'fulfill' ? 'Fulfillment recorded successfully.' : 'Order updated.'; }, error: e => this.fail(e) }));
+      invoiceDetails: this.invoiceDetails, inventoryDecision: this.inventoryDecision, lines,
+      receiptNumber: this.receiptNumber, receiptDetails: this.receiptDetails, recordFulfillment: this.recordFulfillment, receiptId: this.actionReceiptId }).subscribe({ next: response => { this.busy = false; if (response.data) this.accept(response.data); this.actionModal = ''; if (action === 'invoice') { this.tab = 'invoices'; const issued = this.order?.salesInvoices.find(invoice => !previousInvoiceIds.has(invoice.id)); if (issued && this.can('sales_invoices.read')) this.router.navigate(['/sales-invoices', issued.id]); } this.success = action === 'fulfill' ? 'Fulfillment recorded successfully.' : 'Order updated.'; if (action === 'void_invoice') this.afterVoid(voidedInvoice); if (action === 'delivery_receipt' || action === 'void_delivery_receipt') this.afterReceipt(action, previousReceiptIds); }, error: e => this.fail(e) }));
   }
   fileSize(bytes: number): string { return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
   download(doc: Document): void {
