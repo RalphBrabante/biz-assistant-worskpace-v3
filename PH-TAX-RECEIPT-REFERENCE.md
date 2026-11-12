@@ -204,6 +204,25 @@ Section: Auto-Computed Breakdown (read-only display)
   Total Amount Due                     = Taxable Amount + VAT - Withholding Tax
 ```
 
+### 6.1.1 Printed Sales Invoice Totals
+
+The printed invoice (`client/src/app/shared/sales-invoice-sheet`) follows the standard BIR sales invoice order. VAT is backed out, added back, and withholding is deducted last, so every line foots to the grand total:
+
+```
+TOTAL SALES (VAT Inclusive)
+LESS: VAT
+AMOUNT: Net of VAT
+LESS: SC/PWD Discount      (only when present)
+AMOUNT DUE                 = Net of VAT - SC/PWD Discount
+ADD: VAT
+ADD: Shipping              (only when present)
+Rounding adjustment        (only when present)
+LESS: WHT (Withholding Tax)
+TOTAL AMOUNT DUE           = invoice totalAmount
+```
+
+"AMOUNT DUE" is the net-of-VAT subtotal, not the amount payable; "ADD: VAT" restores the VAT removed above and is not charged twice.
+
 ### 6.2 Expense Create/Edit
 
 Enter the final invoice total, the exempt portion, and supplier VAT shown on the invoice. A blank supplier VAT field uses the selected organization's VAT rate as a calculation aid; non-VAT organizations default to zero. Enter zero explicitly for a non-VAT invoice. Enter actual supplier VAT for a VAT invoice received by a non-VAT company. Always compare against the invoice.
