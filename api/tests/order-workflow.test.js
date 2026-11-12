@@ -84,3 +84,10 @@ test('an explicitly requested approval cannot be bypassed even below the configu
   order.workflow.approval = 'pending'; assert.throws(() => W.confirmationChecks(order), /approval/);
   order.workflow.approval = 'approved'; W.confirmationChecks(order);
 });
+test('a customer PO matches the order total before or after withholding tax', () => {
+  const order = { totalAmount: 133.75, withHoldingTaxAmount: 2.25 };
+  assert.equal(W.poAmountMatches(order, 136), true); assert.equal(W.poAmountMatches(order, '133.75'), true);
+  assert.equal(W.poAmountMatches(order, null), true); assert.equal(W.poAmountMatches(order, 135), false);
+  assert.equal(W.poAmountMatches({ totalAmount: '100.00', withHoldingTaxAmount: null }, 100), true);
+  assert.equal(W.poAmountMatches({ totalAmount: '100.00', withHoldingTaxAmount: null }, 101), false);
+});

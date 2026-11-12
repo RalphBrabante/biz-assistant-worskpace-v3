@@ -111,3 +111,11 @@ test('unavailable selected rates do not silently become zero WHT while editing',
   assert.equal(e.page.estimatedWithholding, null); assert.equal(e.page.estimate, null);
   assert.equal(e.page.lineAmounts[0].withholding, null); assert.equal(e.page.lineAmounts[0].due, null);
 });
+test('a customer PO matches the order total before or after withholding tax', () => {
+  const e = setup(); e.page.accept({ ...e.order, totalAmount: 98, withHoldingTaxAmount: 2, workflow: { po: { status: 'unverified', amount: 100 }, poRequired: false } });
+  assert.equal(e.page.poMismatch, false); assert.equal(e.page.poMatchesGross, true);
+  e.page.customerPoAmount = 98; assert.equal(e.page.poMismatch, false); assert.equal(e.page.poMatchesGross, false);
+  e.page.customerPoAmount = 99; assert.equal(e.page.poMismatch, true);
+  e.page.accept({ ...e.order, totalAmount: 100, withHoldingTaxAmount: 0, workflow: { po: { status: 'unverified', amount: 100 }, poRequired: false } });
+  assert.equal(e.page.poMismatch, false); assert.equal(e.page.poMatchesGross, false);
+});

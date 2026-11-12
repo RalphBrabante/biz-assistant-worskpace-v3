@@ -138,7 +138,17 @@ export class OrderWorkspacePageComponent implements OnInit, OnDestroy {
   }
   fillRemaining(): void { if (!this.canFulfill || this.busy || this.hasUnsavedChanges) return; this.fulfillment = Object.fromEntries(this.lines.filter(line => line.id).map(line => [line.id!, this.remaining(line)])); this.error = ''; }
 
-  get poMismatch(): boolean { return this.customerPoAmount !== null && Number(this.customerPoAmount) !== Number(this.order?.totalAmount ?? this.estimate); }
+  // The order total is net of withholding tax, but customers usually raise the PO
+  // for the full amount and deduct EWT when paying. Either amount matches the PO.
+  get poNetTotal(): number | null { return this.dirty || !this.order ? this.estimate : Number(this.order.totalAmount); }
+  get poWithholding(): number | null { return this.dirty || !this.order ? this.estimatedWithholding : Number(this.order.withHoldingTaxAmount || 0); }
+  get poGrossTotal(): number | null { const net = this.poNetTotal, withholding = this.poWithholding; return net === null || withholding === null ? null : this.round(net + withholding); }
+  get poMatchesGross(): boolean { return this.customerPoAmount !== null && !!this.poWithholding && this.round(Number(this.customerPoAmount)) === this.poGrossTotal; }
+  get poMismatch(): boolean {
+    if (this.customerPoAmount === null || this.poNetTotal === null) return false;
+    const po = this.round(Number(this.customerPoAmount));
+    return po !== this.poNetTotal && po !== this.poGrossTotal;
+  }
   can(permission: string): boolean { return this.auth.hasPermission(permission); }
   actionLabel(value: string): string { return ({ submit: 'Submit for approval', approve: 'Approve order', reject: 'Return to draft', confirm: 'Confirm order', cancel: 'Cancel order', complete: 'Complete order', verify_po: 'Verify customer PO', fulfill: 'Record fulfillment', invoice: 'Issue invoice', void_invoice: 'Void invoice', payment: 'Record payment', refund: 'Record refund', reconcile: 'Enable reviewed workflow' } as Record<string, string>)[value] || value; }
   label(value: string | undefined): string { return (value || '').replace(/_/g, ' '); }

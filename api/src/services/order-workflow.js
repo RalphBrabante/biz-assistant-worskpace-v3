@@ -73,6 +73,14 @@ function totals(lines, shipping, withholdingRate = 0) {
   if (totalAmount < 0 || totalAmount > 999999999) fail('Order total is out of range.');
   return { subtotalAmount, taxAmount, withHoldingTaxAmount, shippingAmount, totalAmount, discountAmount: money(lines.reduce((sum, line) => sum + Number(line.lineDiscount || 0), 0)) };
 }
+// A customer PO is usually raised for the full amount; the customer deducts
+// EWT only when paying. Accept the PO when it matches either the amount before
+// withholding (gross) or the stored order total (net of withholding).
+function poAmountMatches(order, amount) {
+  if (amount === null || amount === undefined || amount === '') return true;
+  const po = money(amount); const net = money(order.totalAmount);
+  return po === net || po === money(net + Number(order.withHoldingTaxAmount || 0));
+}
 function demand(lines) {
   const result = {};
   for (const line of lines) if (line.itemId && line.type === 'product') result[line.itemId] = quantity((result[line.itemId] || 0) + Number(line.quantity));
@@ -113,4 +121,4 @@ function verifyFile(file) {
   if (!mime) fail('Only PDF, PNG, and JPEG documents are supported.');
   return { name: String(file.originalname || 'purchase-order').replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 180), mimeType: mime, size: b.length, content: b };
 }
-module.exports = { DEFAULT_SETTINGS, PRESETS, fail, money, quantity, number, text, date, settings, permitted, requirePermission, assertRevision, editable, assertManaged, newWorkflow, buildLines, totals, demand, approvalNeeded, confirmationChecks, balances, invoiceAllocation, fulfillmentStatus, verifyFile };
+module.exports = { DEFAULT_SETTINGS, PRESETS, fail, money, quantity, number, text, date, settings, permitted, requirePermission, assertRevision, editable, assertManaged, newWorkflow, buildLines, totals, poAmountMatches, demand, approvalNeeded, confirmationChecks, balances, invoiceAllocation, fulfillmentStatus, verifyFile };

@@ -286,6 +286,7 @@ Guards: `authGuard` (JWT validation) + `permissionGuard` (resource.action checks
 4. `SalesInvoice` is generated from a completed or confirmed order.
 5. Invoice statuses: `draft → issued → sent → paid | partially_paid | overdue | void`.
 6. VAT and withholding tax are calculated and stored as separate columns on each invoice/expense.
+7. An order's `totalAmount` is net of withholding tax. Customers usually raise their PO for the full amount and deduct EWT when paying, so PO verification (`poAmountMatches` in `api/src/services/order-workflow.js`) accepts a PO amount equal to either the total before withholding (`totalAmount + withHoldingTaxAmount`) or the net total. Any other amount needs a verifier note.
 
 ### Tax Calculations (Philippine BIR Compliance)
 - `TaxType` stores VAT rates; items reference a `taxTypeId`.

@@ -327,9 +327,9 @@ const performAction = endpoint(async (req, res) => {
       if (!W.editable(order)) W.fail('PO verification is only available before confirmation.');
       if (!order.customerId || !order.customerPoNumber) W.fail('A customer and PO reference are required.');
       if (!workflow.po.documentId && !note) W.fail('Attach the customer PO or record how it was verified.');
-      if (workflow.po.amount !== null && W.money(workflow.po.amount) !== W.money(order.totalAmount) && !note) W.fail('The PO amount differs from the order total. Explain the accepted difference.');
+      if (!W.poAmountMatches(order, workflow.po.amount) && !note) W.fail('The PO amount differs from the order total before and after withholding tax. Explain the accepted difference.');
       workflow.po = { ...workflow.po, status: 'verified', verifiedBy: actor(req), verifiedAt: new Date().toISOString(), verificationNote: note };
-      event = { customerId: order.customerId, poNumber: order.customerPoNumber, documentId: workflow.po.documentId || null, poAmount: workflow.po.amount, orderTotal: order.totalAmount, revision: order.revision };
+      event = { customerId: order.customerId, poNumber: order.customerPoNumber, documentId: workflow.po.documentId || null, poAmount: workflow.po.amount, orderTotal: order.totalAmount, orderTotalBeforeWithholding: W.money(Number(order.totalAmount) + Number(order.withHoldingTaxAmount || 0)), revision: order.revision };
     } else if (action === 'confirm') {
       const customer = order.customerId ? await m.Customer.findByPk(order.customerId, { transaction, lock: transaction.LOCK.SHARE }) : null;
       W.confirmationChecks(order, !!customer?.requiresPurchaseOrder);
